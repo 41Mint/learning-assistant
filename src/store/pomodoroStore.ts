@@ -1,5 +1,14 @@
 import { create } from 'zustand';
-import { PomodoroState } from '../types';
+
+// 直接在这里定义类型，避免导入问题
+interface PomodoroState {
+  isRunning: boolean;
+  timeLeft: number; // 剩余时间（秒）
+  mode: 'study' | 'break'; // 学习或休息模式
+  studyDuration: number; // 学习时长（秒）
+  breakDuration: number; // 休息时长（秒）
+  completedPomodoros: number; // 今日完成的番茄钟数
+}
 
 interface PomodoroStore extends PomodoroState {
   startTimer: () => void;
