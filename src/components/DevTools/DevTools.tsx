@@ -99,9 +99,38 @@ export default function DevTools() {
     window.location.reload();
   };
 
+  // 查看所有学习数据（调试用）
+  const debugAllData = () => {
+    console.clear();
+    console.log('=== 🔍 Learning Assistant 数据调试 ===\n');
+
+    const allKeys = Object.keys(localStorage).filter(k => k.startsWith('learning-assistant:log:'));
+    console.log(`📦 总共 ${allKeys.length} 条学习记录\n`);
+
+    allKeys.sort().forEach(key => {
+      const data = JSON.parse(localStorage.getItem(key) || '{}');
+      console.log(`${key.replace('learning-assistant:log:', '')} → ${data.duration || 0} 分钟`);
+    });
+
+    // 检查本周数据
+    console.log('\n📅 本周数据（最近7天）:');
+    const today = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      const key = `learning-assistant:log:${dateStr}`;
+      const data = localStorage.getItem(key);
+      const duration = data ? JSON.parse(data).duration : 0;
+      console.log(`  ${dateStr} → ${duration} 分钟 ${duration === 0 ? '❌' : '✅'}`);
+    }
+
+    alert('📊 调试数据已输出到控制台（按 F12 查看）');
+  };
+
   return (
     <>
-      {/* 浮动按钮 - 放大到 80px */}
+      {/* 浮动按钮 - 放大到 96px */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         style={{
@@ -110,7 +139,7 @@ export default function DevTools() {
           right: '32px',
           zIndex: 999999
         }}
-        className="w-20 h-20 bg-gradient-to-br from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 text-white rounded-full shadow-2xl flex items-center justify-center text-5xl transition-all hover:scale-110 border-4 border-purple-300"
+        className="w-24 h-24 bg-gradient-to-br from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 text-white rounded-full shadow-2xl flex items-center justify-center text-6xl transition-all hover:scale-110 border-4 border-purple-300"
         title="开发者工具 (可拖动)"
       >
         🛠️
@@ -128,7 +157,7 @@ export default function DevTools() {
             cursor: isDragging ? 'grabbing' : 'default'
           }}
           onMouseDown={handleMouseDown}
-          className="w-[400px] bg-white dark:bg-gray-800 rounded-xl shadow-2xl border-2 border-purple-500 overflow-hidden"
+          className="w-[400px] rounded-xl shadow-2xl border-2 border-purple-500 overflow-hidden bg-white dark:bg-gray-800"
         >
           {/* 标题栏 - 可拖动区域，更大字体 */}
           <div className="drag-handle bg-gradient-to-r from-purple-600 to-purple-700 p-4 cursor-grab active:cursor-grabbing select-none">
@@ -155,19 +184,19 @@ export default function DevTools() {
               <div className="flex gap-3">
                 <button
                   onClick={() => generateMockData(7)}
-                  className="flex-1 px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white text-base rounded-lg transition font-medium"
+                  className="flex-1 px-5 py-4 bg-blue-500 hover:bg-blue-600 text-white text-lg rounded-lg transition font-medium"
                 >
                   7天
                 </button>
                 <button
                   onClick={() => generateMockData(14)}
-                  className="flex-1 px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white text-base rounded-lg transition font-medium"
+                  className="flex-1 px-5 py-4 bg-blue-500 hover:bg-blue-600 text-white text-lg rounded-lg transition font-medium"
                 >
                   14天
                 </button>
                 <button
                   onClick={() => generateMockData(30)}
-                  className="flex-1 px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white text-base rounded-lg transition font-medium"
+                  className="flex-1 px-5 py-4 bg-blue-500 hover:bg-blue-600 text-white text-lg rounded-lg transition font-medium"
                 >
                   30天
                 </button>
@@ -182,29 +211,42 @@ export default function DevTools() {
               <div className="flex gap-3">
                 <button
                   onClick={() => addTodayDuration(25)}
-                  className="flex-1 px-4 py-3 bg-green-500 hover:bg-green-600 text-white text-base rounded-lg transition font-medium"
+                  className="flex-1 px-5 py-4 bg-green-500 hover:bg-green-600 text-white text-lg rounded-lg transition font-medium"
                 >
                   +25分钟
                 </button>
                 <button
                   onClick={() => addTodayDuration(50)}
-                  className="flex-1 px-4 py-3 bg-green-500 hover:bg-green-600 text-white text-base rounded-lg transition font-medium"
+                  className="flex-1 px-5 py-4 bg-green-500 hover:bg-green-600 text-white text-lg rounded-lg transition font-medium"
                 >
                   +50分钟
                 </button>
                 <button
                   onClick={() => addTodayDuration(100)}
-                  className="flex-1 px-4 py-3 bg-green-500 hover:bg-green-600 text-white text-base rounded-lg transition font-medium"
+                  className="flex-1 px-5 py-4 bg-green-500 hover:bg-green-600 text-white text-lg rounded-lg transition font-medium"
                 >
                   +100分钟
                 </button>
               </div>
             </div>
 
+            {/* 调试工具 */}
+            <div className="border-b border-gray-200 dark:border-gray-700 pb-4">
+              <p className="text-base font-medium text-gray-700 dark:text-gray-300 mb-3">
+                🔍 调试工具
+              </p>
+              <button
+                onClick={debugAllData}
+                className="w-full px-6 py-4 bg-yellow-500 hover:bg-yellow-600 text-white text-lg rounded-lg transition font-medium"
+              >
+                📊 查看所有数据 (控制台)
+              </button>
+            </div>
+
             {/* 清空数据 */}
             <button
               onClick={clearAllData}
-              className="w-full px-5 py-3 bg-red-500 hover:bg-red-600 text-white text-base rounded-lg transition font-medium"
+              className="w-full px-6 py-4 bg-red-500 hover:bg-red-600 text-white text-lg rounded-lg transition font-medium"
             >
               🗑️ 清空所有数据
             </button>

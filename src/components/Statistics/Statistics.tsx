@@ -7,7 +7,7 @@ interface DayData {
 }
 
 export default function Statistics() {
-  const { currentLog, getTodayLog } = useStudyLogStore();
+  const { getTodayLog } = useStudyLogStore();
   const [weekData, setWeekData] = useState<DayData[]>([]);
   const [monthData, setMonthData] = useState<DayData[]>([]);
   const [todayDuration, setTodayDuration] = useState(0);
@@ -30,12 +30,12 @@ export default function Statistics() {
     loadMonthData();
     loadTodayDuration();
 
-    // 每秒检查一次数据更新（用于实时显示开发者工具添加的数据）
+    // 每5秒检查一次数据更新（用于实时显示开发者工具添加的数据）
     const interval = setInterval(() => {
       loadWeekData();
       loadMonthData();
       loadTodayDuration();
-    }, 1000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [getTodayLog]);
@@ -106,26 +106,37 @@ export default function Statistics() {
 
   // 渲染柱状图
   const renderBarChart = (data: DayData[], type: 'week' | 'month') => {
-    const maxMinutes = Math.max(...data.map(d => d.minutes), 1);
+    if (data.length === 0) {
+      return (
+        <div className="flex items-center justify-center h-32 bg-gray-100 dark:bg-gray-700/20 rounded-lg">
+          <p className="text-gray-500 dark:text-gray-400 text-sm">暂无数据</p>
+        </div>
+      );
+    }
+
+    const maxMinutes = Math.max(...data.map(d => d.minutes), 60); // 最小基准60分钟，确保图表比例合理
 
     return (
       <div className="flex items-end justify-between gap-1 h-32">
         {data.map((day) => {
-          const heightPercent = (day.minutes / maxMinutes) * 100;
+          const heightPercent = Math.max((day.minutes / maxMinutes) * 100, 0);
           const isToday = day.date === new Date().toISOString().split('T')[0];
 
           return (
             <div key={day.date} className="flex-1 flex flex-col items-center gap-1">
-              {/* 柱子 */}
-              <div className="w-full flex flex-col justify-end h-24 bg-gray-100 dark:bg-gray-700/20 rounded">
+              {/* 柱子容器 */}
+              <div className="w-full flex flex-col justify-end h-24 bg-gray-100 dark:bg-gray-700/30 rounded relative overflow-hidden">
                 {day.minutes > 0 && (
                   <div
-                    className={`w-full rounded-t transition-all ${
+                    className={`w-full rounded-t transition-all duration-300 ${
                       isToday
                         ? 'bg-gradient-to-t from-blue-500 to-blue-400'
-                        : 'bg-gradient-to-t from-gray-400 to-gray-300 dark:from-gray-600 dark:to-gray-500'
+                        : 'bg-gradient-to-t from-gray-400 to-gray-300 dark:from-gray-500 dark:to-gray-400'
                     }`}
-                    style={{ height: `${heightPercent}%`, minHeight: day.minutes > 0 ? '4px' : '0' }}
+                    style={{
+                      height: `${heightPercent}%`,
+                      minHeight: day.minutes > 0 ? '6px' : '0'
+                    }}
                     title={`${day.minutes}分钟`}
                   />
                 )}
@@ -133,7 +144,7 @@ export default function Statistics() {
 
               {/* 日期标签 */}
               <div
-                className={`text-xs ${
+                className={`text-xs transition-colors ${
                   isToday
                     ? 'text-blue-600 dark:text-blue-400 font-semibold'
                     : 'text-gray-500 dark:text-gray-400'

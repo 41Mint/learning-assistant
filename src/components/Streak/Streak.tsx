@@ -7,7 +7,6 @@ export default function Streak() {
     longestStreak,
     totalDays,
     loadStreak,
-    updateStreak,
     hasStudiedToday,
   } = useStreakStore();
 
