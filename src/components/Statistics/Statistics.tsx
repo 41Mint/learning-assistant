@@ -7,15 +7,15 @@ interface DayData {
 }
 
 export default function Statistics() {
-  const { todayLog, loadTodayLog } = useStudyLogStore();
+  const { currentLog, getTodayLog } = useStudyLogStore();
   const [weekData, setWeekData] = useState<DayData[]>([]);
   const [monthData, setMonthData] = useState<DayData[]>([]);
 
   useEffect(() => {
-    loadTodayLog();
+    getTodayLog();
     loadWeekData();
     loadMonthData();
-  }, []);
+  }, [getTodayLog]);
 
   // 加载本周数据
   const loadWeekData = () => {
@@ -138,7 +138,7 @@ export default function Statistics() {
           今日学习时长
         </div>
         <div className="text-4xl font-bold text-blue-600 dark:text-blue-400">
-          {todayLog?.duration || 0}
+          {currentLog?.duration || 0}
           <span className="text-lg ml-2">分钟</span>
         </div>
       </div>
