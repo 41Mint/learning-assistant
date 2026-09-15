@@ -101,22 +101,22 @@ export default function DevTools() {
 
   return (
     <>
-      {/* 浮动按钮 - 使用内联样式确保可见 */}
+      {/* 浮动按钮 - 放大到 80px */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         style={{
           position: 'fixed',
-          bottom: '24px',
-          right: '24px',
+          bottom: '32px',
+          right: '32px',
           zIndex: 999999
         }}
-        className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 text-white rounded-full shadow-2xl flex items-center justify-center text-3xl transition-all hover:scale-110 border-4 border-purple-300"
+        className="w-20 h-20 bg-gradient-to-br from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 text-white rounded-full shadow-2xl flex items-center justify-center text-5xl transition-all hover:scale-110 border-4 border-purple-300"
         title="开发者工具 (可拖动)"
       >
         🛠️
       </button>
 
-      {/* 可拖动的工具面板 */}
+      {/* 可拖动的工具面板 - 放大到 400px */}
       {isOpen && (
         <div
           ref={panelRef}
@@ -128,46 +128,46 @@ export default function DevTools() {
             cursor: isDragging ? 'grabbing' : 'default'
           }}
           onMouseDown={handleMouseDown}
-          className="w-80 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border-2 border-purple-500 overflow-hidden"
+          className="w-[400px] bg-white dark:bg-gray-800 rounded-xl shadow-2xl border-2 border-purple-500 overflow-hidden"
         >
-          {/* 标题栏 - 可拖动区域 */}
-          <div className="drag-handle bg-gradient-to-r from-purple-600 to-purple-700 p-3 cursor-grab active:cursor-grabbing select-none">
+          {/* 标题栏 - 可拖动区域，更大字体 */}
+          <div className="drag-handle bg-gradient-to-r from-purple-600 to-purple-700 p-4 cursor-grab active:cursor-grabbing select-none">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
                 🛠️ 开发者工具
               </h3>
               <button
                 onClick={() => setIsOpen(false)}
-                className="text-white hover:bg-white/20 w-7 h-7 rounded-full flex items-center justify-center transition"
+                className="text-white hover:bg-white/20 w-9 h-9 rounded-full flex items-center justify-center transition text-xl"
               >
                 ✕
               </button>
             </div>
           </div>
 
-          {/* 面板内容 */}
-          <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
+          {/* 面板内容 - 更大的字体和按钮 */}
+          <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
             {/* 生成模拟数据 */}
-            <div className="border-b border-gray-200 dark:border-gray-700 pb-3">
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <div className="border-b border-gray-200 dark:border-gray-700 pb-4">
+              <p className="text-base font-medium text-gray-700 dark:text-gray-300 mb-3">
                 📊 生成模拟数据
               </p>
-              <div className="flex gap-2">
+              <div className="flex gap-3">
                 <button
                   onClick={() => generateMockData(7)}
-                  className="flex-1 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-lg transition font-medium"
+                  className="flex-1 px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white text-base rounded-lg transition font-medium"
                 >
                   7天
                 </button>
                 <button
                   onClick={() => generateMockData(14)}
-                  className="flex-1 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-lg transition font-medium"
+                  className="flex-1 px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white text-base rounded-lg transition font-medium"
                 >
                   14天
                 </button>
                 <button
                   onClick={() => generateMockData(30)}
-                  className="flex-1 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-lg transition font-medium"
+                  className="flex-1 px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white text-base rounded-lg transition font-medium"
                 >
                   30天
                 </button>
@@ -175,26 +175,26 @@ export default function DevTools() {
             </div>
 
             {/* 添加今日学习时长 */}
-            <div className="border-b border-gray-200 dark:border-gray-700 pb-3">
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <div className="border-b border-gray-200 dark:border-gray-700 pb-4">
+              <p className="text-base font-medium text-gray-700 dark:text-gray-300 mb-3">
                 ⏱️ 添加今日学习时长
               </p>
-              <div className="flex gap-2">
+              <div className="flex gap-3">
                 <button
                   onClick={() => addTodayDuration(25)}
-                  className="flex-1 px-3 py-2 bg-green-500 hover:bg-green-600 text-white text-sm rounded-lg transition font-medium"
+                  className="flex-1 px-4 py-3 bg-green-500 hover:bg-green-600 text-white text-base rounded-lg transition font-medium"
                 >
                   +25分钟
                 </button>
                 <button
                   onClick={() => addTodayDuration(50)}
-                  className="flex-1 px-3 py-2 bg-green-500 hover:bg-green-600 text-white text-sm rounded-lg transition font-medium"
+                  className="flex-1 px-4 py-3 bg-green-500 hover:bg-green-600 text-white text-base rounded-lg transition font-medium"
                 >
                   +50分钟
                 </button>
                 <button
                   onClick={() => addTodayDuration(100)}
-                  className="flex-1 px-3 py-2 bg-green-500 hover:bg-green-600 text-white text-sm rounded-lg transition font-medium"
+                  className="flex-1 px-4 py-3 bg-green-500 hover:bg-green-600 text-white text-base rounded-lg transition font-medium"
                 >
                   +100分钟
                 </button>
@@ -204,12 +204,12 @@ export default function DevTools() {
             {/* 清空数据 */}
             <button
               onClick={clearAllData}
-              className="w-full px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm rounded-lg transition font-medium"
+              className="w-full px-5 py-3 bg-red-500 hover:bg-red-600 text-white text-base rounded-lg transition font-medium"
             >
               🗑️ 清空所有数据
             </button>
 
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-3 text-center">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-4 text-center">
               💡 仅开发环境 | 抓住标题栏拖动面板
             </p>
           </div>

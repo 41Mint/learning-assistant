@@ -10,11 +10,34 @@ export default function Statistics() {
   const { currentLog, getTodayLog } = useStudyLogStore();
   const [weekData, setWeekData] = useState<DayData[]>([]);
   const [monthData, setMonthData] = useState<DayData[]>([]);
+  const [todayDuration, setTodayDuration] = useState(0);
+
+  // 加载今日学习时长（从 localStorage 直接读取）
+  const loadTodayDuration = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const logData = localStorage.getItem(`learning-assistant:log:${today}`);
+    if (logData) {
+      const { duration } = JSON.parse(logData);
+      setTodayDuration(duration);
+    } else {
+      setTodayDuration(0);
+    }
+  };
 
   useEffect(() => {
     getTodayLog();
     loadWeekData();
     loadMonthData();
+    loadTodayDuration();
+
+    // 每秒检查一次数据更新（用于实时显示开发者工具添加的数据）
+    const interval = setInterval(() => {
+      loadWeekData();
+      loadMonthData();
+      loadTodayDuration();
+    }, 1000);
+
+    return () => clearInterval(interval);
   }, [getTodayLog]);
 
   // 加载本周数据
@@ -94,16 +117,18 @@ export default function Statistics() {
           return (
             <div key={day.date} className="flex-1 flex flex-col items-center gap-1">
               {/* 柱子 */}
-              <div className="w-full flex flex-col justify-end h-24">
-                <div
-                  className={`w-full rounded-t transition-all ${
-                    isToday
-                      ? 'bg-gradient-to-t from-blue-500 to-blue-400'
-                      : 'bg-gradient-to-t from-gray-400 to-gray-300 dark:from-gray-600 dark:to-gray-500'
-                  }`}
-                  style={{ height: `${heightPercent}%` }}
-                  title={`${day.minutes}分钟`}
-                />
+              <div className="w-full flex flex-col justify-end h-24 bg-gray-100 dark:bg-gray-700/20 rounded">
+                {day.minutes > 0 && (
+                  <div
+                    className={`w-full rounded-t transition-all ${
+                      isToday
+                        ? 'bg-gradient-to-t from-blue-500 to-blue-400'
+                        : 'bg-gradient-to-t from-gray-400 to-gray-300 dark:from-gray-600 dark:to-gray-500'
+                    }`}
+                    style={{ height: `${heightPercent}%`, minHeight: day.minutes > 0 ? '4px' : '0' }}
+                    title={`${day.minutes}分钟`}
+                  />
+                )}
               </div>
 
               {/* 日期标签 */}
@@ -138,7 +163,7 @@ export default function Statistics() {
           今日学习时长
         </div>
         <div className="text-4xl font-bold text-blue-600 dark:text-blue-400">
-          {currentLog?.duration || 0}
+          {todayDuration}
           <span className="text-lg ml-2">分钟</span>
         </div>
       </div>
