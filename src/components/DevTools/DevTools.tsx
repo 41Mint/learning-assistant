@@ -4,7 +4,16 @@ export default function DevTools() {
   const [isOpen, setIsOpen] = useState(false);
 
   // 只在开发环境显示
-  if (import.meta.env.PROD) return null;
+  const isDev = import.meta.env.DEV;
+
+  console.log('DevTools 环境检测:', {
+    DEV: import.meta.env.DEV,
+    PROD: import.meta.env.PROD,
+    MODE: import.meta.env.MODE,
+    shouldShow: isDev
+  });
+
+  if (!isDev) return null;
 
   // 生成随机学习数据（过去7天）
   const generateMockData = (days: number) => {
