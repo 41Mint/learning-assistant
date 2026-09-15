@@ -1,28 +1,60 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 export default function DevTools() {
   const [isOpen, setIsOpen] = useState(false);
+  const [position, setPosition] = useState({ x: window.innerWidth - 350, y: 100 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const panelRef = useRef<HTMLDivElement>(null);
 
   // 只在开发环境显示
   const isDev = import.meta.env.DEV;
 
-  console.log('DevTools 环境检测:', {
-    DEV: import.meta.env.DEV,
-    PROD: import.meta.env.PROD,
-    MODE: import.meta.env.MODE,
-    shouldShow: isDev
-  });
-
   if (!isDev) return null;
 
-  // 生成随机学习数据（过去7天）
+  // 鼠标按下开始拖动
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('.drag-handle')) {
+      setIsDragging(true);
+      setDragOffset({
+        x: e.clientX - position.x,
+        y: e.clientY - position.y
+      });
+    }
+  };
+
+  // 鼠标移动
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDragging) {
+        const newX = Math.max(0, Math.min(e.clientX - dragOffset.x, window.innerWidth - 320));
+        const newY = Math.max(0, Math.min(e.clientY - dragOffset.y, window.innerHeight - 100));
+        setPosition({ x: newX, y: newY });
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, dragOffset]);
+
+  // 生成随机学习数据
   const generateMockData = (days: number) => {
     for (let i = 0; i < days; i++) {
       const date = new Date();
       date.setDate(date.getDate() - i);
       const dateStr = date.toISOString().split('T')[0];
 
-      // 随机生成 25-150 分钟的学习时长
       const duration = Math.floor(Math.random() * 126) + 25;
 
       localStorage.setItem(
@@ -39,7 +71,6 @@ export default function DevTools() {
   const clearAllData = () => {
     if (!confirm('⚠️ 确定要清空所有数据吗？此操作不可恢复！')) return;
 
-    // 清空所有 learning-assistant 相关的数据
     Object.keys(localStorage).forEach(key => {
       if (key.startsWith('learning-assistant:')) {
         localStorage.removeItem(key);
@@ -70,52 +101,73 @@ export default function DevTools() {
 
   return (
     <>
-      {/* 浮动按钮 */}
+      {/* 浮动按钮 - 使用内联样式确保可见 */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 z-[9999] w-14 h-14 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-xl flex items-center justify-center text-2xl transition-transform hover:scale-110 border-2 border-purple-400"
-        title="开发者工具 (仅开发环境)"
+        style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          zIndex: 999999
+        }}
+        className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 text-white rounded-full shadow-2xl flex items-center justify-center text-3xl transition-all hover:scale-110 border-4 border-purple-300"
+        title="开发者工具 (可拖动)"
       >
         🛠️
       </button>
 
-      {/* 工具面板 */}
+      {/* 可拖动的工具面板 */}
       {isOpen && (
-        <div className="fixed bottom-24 right-6 z-[9999] w-80 bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-4 border-2 border-purple-500">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-purple-600 dark:text-purple-400">
-              🛠️ 开发者工具
-            </h3>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-xl"
-            >
-              ✕
-            </button>
+        <div
+          ref={panelRef}
+          style={{
+            position: 'fixed',
+            left: `${position.x}px`,
+            top: `${position.y}px`,
+            zIndex: 999998,
+            cursor: isDragging ? 'grabbing' : 'default'
+          }}
+          onMouseDown={handleMouseDown}
+          className="w-80 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border-2 border-purple-500 overflow-hidden"
+        >
+          {/* 标题栏 - 可拖动区域 */}
+          <div className="drag-handle bg-gradient-to-r from-purple-600 to-purple-700 p-3 cursor-grab active:cursor-grabbing select-none">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                🛠️ 开发者工具
+              </h3>
+              <button
+                onClick={() => setIsOpen(false)}
+                className="text-white hover:bg-white/20 w-7 h-7 rounded-full flex items-center justify-center transition"
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
-          <div className="space-y-3">
+          {/* 面板内容 */}
+          <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
             {/* 生成模拟数据 */}
             <div className="border-b border-gray-200 dark:border-gray-700 pb-3">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                生成模拟数据
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                📊 生成模拟数据
               </p>
               <div className="flex gap-2">
                 <button
                   onClick={() => generateMockData(7)}
-                  className="flex-1 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded transition"
+                  className="flex-1 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-lg transition font-medium"
                 >
                   7天
                 </button>
                 <button
                   onClick={() => generateMockData(14)}
-                  className="flex-1 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded transition"
+                  className="flex-1 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-lg transition font-medium"
                 >
                   14天
                 </button>
                 <button
                   onClick={() => generateMockData(30)}
-                  className="flex-1 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded transition"
+                  className="flex-1 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-lg transition font-medium"
                 >
                   30天
                 </button>
@@ -124,25 +176,25 @@ export default function DevTools() {
 
             {/* 添加今日学习时长 */}
             <div className="border-b border-gray-200 dark:border-gray-700 pb-3">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                添加今日学习时长
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                ⏱️ 添加今日学习时长
               </p>
               <div className="flex gap-2">
                 <button
                   onClick={() => addTodayDuration(25)}
-                  className="flex-1 px-3 py-2 bg-green-500 hover:bg-green-600 text-white text-sm rounded transition"
+                  className="flex-1 px-3 py-2 bg-green-500 hover:bg-green-600 text-white text-sm rounded-lg transition font-medium"
                 >
                   +25分钟
                 </button>
                 <button
                   onClick={() => addTodayDuration(50)}
-                  className="flex-1 px-3 py-2 bg-green-500 hover:bg-green-600 text-white text-sm rounded transition"
+                  className="flex-1 px-3 py-2 bg-green-500 hover:bg-green-600 text-white text-sm rounded-lg transition font-medium"
                 >
                   +50分钟
                 </button>
                 <button
                   onClick={() => addTodayDuration(100)}
-                  className="flex-1 px-3 py-2 bg-green-500 hover:bg-green-600 text-white text-sm rounded transition"
+                  className="flex-1 px-3 py-2 bg-green-500 hover:bg-green-600 text-white text-sm rounded-lg transition font-medium"
                 >
                   +100分钟
                 </button>
@@ -152,15 +204,15 @@ export default function DevTools() {
             {/* 清空数据 */}
             <button
               onClick={clearAllData}
-              className="w-full px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm rounded transition"
+              className="w-full px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm rounded-lg transition font-medium"
             >
               🗑️ 清空所有数据
             </button>
-          </div>
 
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
-            💡 此面板仅在开发环境显示
-          </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-3 text-center">
+              💡 仅开发环境 | 抓住标题栏拖动面板
+            </p>
+          </div>
         </div>
       )}
     </>
