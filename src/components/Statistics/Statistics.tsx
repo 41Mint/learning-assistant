@@ -104,36 +104,80 @@ export default function Statistics() {
     return Math.round(total / validDays.length);
   };
 
-  // 渲染柱状图
+  // 渲染柱状图 - 使用内联样式
   const renderBarChart = (data: DayData[], type: 'week' | 'month') => {
+    console.log(`🎨 renderBarChart 被调用 - type: ${type}, data.length: ${data.length}`);
+
     if (data.length === 0) {
+      console.log('⚠️ 数据长度为0，显示暂无数据');
       return (
-        <div className="flex items-center justify-center h-32 bg-gray-100 dark:bg-gray-700/20 rounded-lg">
-          <p className="text-gray-500 dark:text-gray-400 text-sm">暂无数据</p>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '128px',
+          backgroundColor: '#f3f4f6',
+          borderRadius: '8px',
+          border: '2px solid #eab308'
+        }}>
+          <p style={{ color: '#111827', fontSize: '18px', fontWeight: 'bold' }}>📭 暂无数据</p>
         </div>
       );
     }
 
-    const maxMinutes = Math.max(...data.map(d => d.minutes), 60); // 最小基准60分钟，确保图表比例合理
+    const maxMinutes = Math.max(...data.map(d => d.minutes), 60);
+    console.log(`📊 maxMinutes: ${maxMinutes}`);
+    console.log(`📊 数据预览:`, data.slice(0, 3));
 
     return (
-      <div className="flex items-end justify-between gap-1 h-32">
-        {data.map((day) => {
+      <div style={{
+        display: 'flex',
+        alignItems: 'flex-end',
+        justifyContent: 'space-between',
+        gap: '4px',
+        height: '128px',
+        border: '2px solid #22c55e',
+        padding: '8px',
+        borderRadius: '8px'
+      }}>
+        {data.map((day, index) => {
           const heightPercent = Math.max((day.minutes / maxMinutes) * 100, 0);
           const isToday = day.date === new Date().toISOString().split('T')[0];
 
+          if (index < 3) {
+            console.log(`柱子 ${index}: ${day.date}, ${day.minutes}分钟, 高度${heightPercent}%`);
+          }
+
           return (
-            <div key={day.date} className="flex-1 flex flex-col items-center gap-1">
+            <div key={day.date} style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '4px'
+            }}>
               {/* 柱子容器 */}
-              <div className="w-full flex flex-col justify-end h-24 bg-gray-100 dark:bg-gray-700/30 rounded relative overflow-hidden">
+              <div style={{
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'flex-end',
+                height: '96px',
+                backgroundColor: '#f3f4f6',
+                borderRadius: '4px',
+                position: 'relative',
+                overflow: 'hidden',
+                border: '1px solid #e5e7eb'
+              }}>
                 {day.minutes > 0 && (
                   <div
-                    className={`w-full rounded-t transition-all duration-300 ${
-                      isToday
-                        ? 'bg-gradient-to-t from-blue-500 to-blue-400'
-                        : 'bg-gradient-to-t from-gray-400 to-gray-300 dark:from-gray-500 dark:to-gray-400'
-                    }`}
                     style={{
+                      width: '100%',
+                      borderRadius: '4px 4px 0 0',
+                      transition: 'all 0.3s',
+                      background: isToday
+                        ? 'linear-gradient(to top, #3b82f6, #60a5fa)'
+                        : 'linear-gradient(to top, #9ca3af, #d1d5db)',
                       height: `${heightPercent}%`,
                       minHeight: day.minutes > 0 ? '6px' : '0'
                     }}
@@ -143,13 +187,12 @@ export default function Statistics() {
               </div>
 
               {/* 日期标签 */}
-              <div
-                className={`text-xs transition-colors ${
-                  isToday
-                    ? 'text-blue-600 dark:text-blue-400 font-semibold'
-                    : 'text-gray-500 dark:text-gray-400'
-                }`}
-              >
+              <div style={{
+                fontSize: '12px',
+                color: isToday ? '#2563eb' : '#6b7280',
+                fontWeight: isToday ? 600 : 400,
+                transition: 'color 0.3s'
+              }}>
                 {formatDate(day.date, type)}
               </div>
             </div>
@@ -162,11 +205,74 @@ export default function Statistics() {
   const weekAverage = getAverageDuration(weekData);
   const monthAverage = getAverageDuration(monthData);
 
+  // 🐛 调试：实时显示组件状态
+  useEffect(() => {
+    console.log('=== Statistics 组件渲染调试 ===');
+    console.log('weekData 长度:', weekData.length);
+    console.log('weekData 内容:', weekData);
+    console.log('monthData 长度:', monthData.length);
+    console.log('todayDuration:', todayDuration);
+  }, [weekData, monthData, todayDuration]);
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
       <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">
-        📊 学习统计
+        📊 学习统计 <span className="text-xs bg-red-600 text-white px-2 py-1 rounded">v2.0-DEBUG</span>
       </h2>
+
+      {/* 🧪 硬编码测试块 - 如果你能看到这个，说明新代码已加载 */}
+      <div className="mb-4 p-4 bg-yellow-200 dark:bg-yellow-900 border-4 border-red-600 rounded-lg">
+        <p className="text-2xl font-bold text-black dark:text-white">
+          ⚠️ 测试块：如果看到这个黄色区域和红色边框，说明新代码已加载！
+        </p>
+      </div>
+
+      {/* 🧪 直接硬编码的柱状图测试 - 使用内联样式 */}
+      <div style={{
+        marginBottom: '24px',
+        border: '4px solid #22c55e',
+        padding: '16px',
+        backgroundColor: '#f3e8ff',
+        borderRadius: '8px'
+      }}>
+        <h3 style={{ fontWeight: 'bold', marginBottom: '8px', fontSize: '20px' }}>
+          🧪 硬编码测试图表（使用内联样式）
+        </h3>
+        <div style={{
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'space-between',
+          gap: '4px',
+          height: '128px',
+          backgroundColor: '#ffffff',
+          padding: '8px',
+          border: '2px solid #3b82f6'
+        }}>
+          <div style={{ width: '48px', height: '80px', backgroundColor: '#ef4444' }}></div>
+          <div style={{ width: '48px', height: '64px', backgroundColor: '#3b82f6' }}></div>
+          <div style={{ width: '48px', height: '96px', backgroundColor: '#22c55e' }}></div>
+          <div style={{ width: '48px', height: '48px', backgroundColor: '#eab308' }}></div>
+        </div>
+      </div>
+
+      {/* 🐛 实时调试信息卡片 */}
+      <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border-2 border-red-500">
+        <div className="text-sm text-gray-900 dark:text-gray-100 space-y-2 font-mono">
+          <div className="font-bold text-base mb-2">🐛 实时调试信息</div>
+          <div>weekData.length: <span className="font-bold text-red-600">{weekData.length}</span></div>
+          <div>monthData.length: <span className="font-bold text-red-600">{monthData.length}</span></div>
+          <div>todayDuration: <span className="font-bold text-red-600">{todayDuration}</span></div>
+          <div>weekData 有数据天数: <span className="font-bold text-red-600">{weekData.filter(d => d.minutes > 0).length}</span></div>
+          <div className="pt-2 border-t border-red-300">
+            <div className="text-xs">weekData 前3天:</div>
+            {weekData.slice(0, 3).map(d => (
+              <div key={d.date} className="text-xs ml-2">
+                {d.date}: {d.minutes}分钟
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
 
       {/* 今日学习时长 */}
       <div className="mb-8 p-4 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-lg">
