@@ -1,20 +1,76 @@
 # 更新日志
 
-所有重要的项目变更都会记录在这个文件中。
-
-格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
-版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
-
-## [未发布]
+## [未发布] - 2026-09-15
 
 ### 新增
-- 项目初始化
-- 基础文档（README, ARCHITECTURE, FEATURES）
-- 技术栈选型（React + TypeScript + Vite + Tailwind CSS）
+- ✨ 学习统计图表功能
+  - 今日学习时长卡片
+  - 本周学习曲线（7天柱状图）
+  - 本月学习曲线（30天柱状图）
+  - 平均每日学习时长显示
+  - 当日数据高亮
+
+### 修复
+- 🐛 修复 Statistics 组件中的 store 函数调用错误
+  - `loadTodayLog` → `getTodayLog`
+  - `todayLog` → `currentLog`
+
+---
 
 ## [0.1.0] - 2026-09-14
 
 ### 新增
-- 项目创建
-- 配置开发环境
-- 搭建项目架构文档
+- ✨ 项目初始化
+  - React + TypeScript + Vite 构建系统
+  - Tailwind CSS 样式框架
+  - Git 版本控制
+
+- ✨ 番茄钟计时器
+  - 25分钟学习 / 5分钟休息模式
+  - 开始/暂停/重置功能
+  - 进度条可视化
+  - 今日完成番茄钟数统计
+  - 自动模式切换
+
+- ✨ 学习记录功能
+  - Markdown 编辑器（基础版）
+  - 标签管理系统
+  - 知识点记录
+  - LocalStorage 持久化
+  - 与番茄钟联动（自动累计时长）
+
+- ✨ Streak 连续学习功能
+  - 连续天数计算算法
+  - 火焰图标可视化
+  - 今日打卡状态显示
+  - 断签提醒
+  - 与番茄钟联动
+
+- 📝 项目管理文档
+  - TODO.md（任务管理）
+  - DEV_LOG.md（开发日志）
+  - PROJECT_GUIDE.md（项目指南）
+
+### 修复
+- 🐛 修复 Tailwind CSS 配置问题
+- 🐛 修复 TypeScript 模块导入错误
+
+---
+
+## 版本说明
+
+- **格式**：遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)
+- **版本号**：使用 [语义化版本](https://semver.org/lang/zh-CN/)
+  - 主版本号：不兼容的 API 修改
+  - 次版本号：向下兼容的功能性新增
+  - 修订号：向下兼容的问题修正
+
+## 标签说明
+
+- ✨ 新增功能
+- 🐛 Bug 修复
+- 🎨 UI/样式改进
+- ⚡️ 性能优化
+- 📝 文档更新
+- ♻️ 代码重构
+- 🔧 配置修改
