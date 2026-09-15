@@ -3,6 +3,7 @@ import Pomodoro from './components/Pomodoro/Pomodoro';
 import StudyLog from './components/StudyLog/StudyLog';
 import Streak from './components/Streak/Streak';
 import Statistics from './components/Statistics/Statistics';
+import History from './components/History/History';
 import DevTools from './components/DevTools/DevTools';
 import { usePomodoroStore } from './store/pomodoroStore';
 import { useStudyLogStore } from './store/studyLogStore';
@@ -45,12 +46,17 @@ function App() {
         </section>
 
         {/* 统计区域 */}
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           {/* 连续学习 */}
           <Streak />
 
           {/* 学习统计 */}
           <Statistics />
+        </section>
+
+        {/* 历史记录 */}
+        <section className="mb-8">
+          <History />
         </section>
       </div>
 
