@@ -73,22 +73,22 @@ export default function DevTools() {
       {/* 浮动按钮 */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-4 right-4 z-50 w-12 h-12 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-lg flex items-center justify-center text-xl transition-transform hover:scale-110"
-        title="开发者工具"
+        className="fixed bottom-6 right-6 z-[9999] w-14 h-14 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-xl flex items-center justify-center text-2xl transition-transform hover:scale-110 border-2 border-purple-400"
+        title="开发者工具 (仅开发环境)"
       >
         🛠️
       </button>
 
       {/* 工具面板 */}
       {isOpen && (
-        <div className="fixed bottom-20 right-4 z-50 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-4 border-2 border-purple-500">
+        <div className="fixed bottom-24 right-6 z-[9999] w-80 bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-4 border-2 border-purple-500">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold text-purple-600 dark:text-purple-400">
               🛠️ 开发者工具
             </h3>
             <button
               onClick={() => setIsOpen(false)}
-              className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-xl"
             >
               ✕
             </button>
