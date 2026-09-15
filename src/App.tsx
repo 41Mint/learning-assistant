@@ -3,6 +3,7 @@ import Pomodoro from './components/Pomodoro/Pomodoro';
 import StudyLog from './components/StudyLog/StudyLog';
 import Streak from './components/Streak/Streak';
 import Statistics from './components/Statistics/Statistics';
+import DevTools from './components/DevTools/DevTools';
 import { usePomodoroStore } from './store/pomodoroStore';
 import { useStudyLogStore } from './store/studyLogStore';
 import { useStreakStore } from './store/streakStore';
@@ -52,6 +53,9 @@ function App() {
           <Statistics />
         </section>
       </div>
+
+      {/* 开发者工具（仅开发环境） */}
+      <DevTools />
     </div>
   );
 }
