@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import Pomodoro from './components/Pomodoro/Pomodoro';
 import StudyLog from './components/StudyLog/StudyLog';
 import Streak from './components/Streak/Streak';
+import Statistics from './components/Statistics/Statistics';
 import { usePomodoroStore } from './store/pomodoroStore';
 import { useStudyLogStore } from './store/studyLogStore';
 import { useStreakStore } from './store/streakStore';
@@ -47,13 +48,8 @@ function App() {
           {/* 连续学习 */}
           <Streak />
 
-          {/* 学习统计 - 待开发 */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              📊 学习统计
-            </h2>
-            <p className="text-gray-500 dark:text-gray-400">即将推出...</p>
-          </div>
+          {/* 学习统计 */}
+          <Statistics />
         </section>
       </div>
     </div>
