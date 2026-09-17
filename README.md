@@ -25,7 +25,7 @@
 
 ## 技术栈
 
-- **框架**: React 18 + TypeScript
+- **框架**: React 19 + TypeScript
 - **构建工具**: Vite
 - **样式**: Tailwind CSS
 - **状态管理**: Zustand
@@ -66,6 +66,7 @@ src/
 - **灵活可调整**：支持自定义每日学习流程
 - **记录成长**：详细的学习日志帮助回顾和总结
 - **持续迭代**：根据实际使用体验不断优化
+- **生成式软件工程实践**：以“意图 → 可验收规格 → 实现 → 验证”的小步闭环与 AI 协作，详见 [ENGINEERING_PLAYBOOK.md](./ENGINEERING_PLAYBOOK.md)
 
 ## 版本历史
 

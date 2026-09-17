@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import rehypeHighlight from 'rehype-highlight';
+import remarkGfm from 'remark-gfm';
 import { useStudyLogStore } from '../../store/studyLogStore';
 
 export default function StudyLog() {
@@ -70,13 +73,34 @@ export default function StudyLog() {
         </div>
 
         {isEditing ? (
-          <div>
-            <textarea
-              value={currentLog.content}
-              onChange={(e) => updateContent(e.target.value)}
-              className="w-full h-64 p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-mono text-sm"
-              placeholder="记录今天学到的内容..."
-            />
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div>
+                <label
+                  htmlFor="study-log-content"
+                  className="block mb-2 text-xs font-medium text-gray-500 dark:text-gray-400"
+                >
+                  编辑
+                </label>
+                <textarea
+                  id="study-log-content"
+                  value={currentLog.content}
+                  onChange={(e) => updateContent(e.target.value)}
+                  className="w-full h-72 p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-mono text-sm resize-y"
+                  placeholder="记录今天学到的内容..."
+                />
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+                  实时预览
+                </p>
+                <div className="markdown-preview h-72 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+                    {currentLog.content || '开始输入后，这里会显示 Markdown 效果。'}
+                  </ReactMarkdown>
+                </div>
+              </div>
+            </div>
             <button
               onClick={finishEditing}
               className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
@@ -85,10 +109,10 @@ export default function StudyLog() {
             </button>
           </div>
         ) : (
-          <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
-            <pre className="whitespace-pre-wrap font-sans text-gray-800 dark:text-gray-200">
+          <div className="markdown-preview p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200">
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
               {currentLog.content}
-            </pre>
+            </ReactMarkdown>
           </div>
         )}
       </div>
