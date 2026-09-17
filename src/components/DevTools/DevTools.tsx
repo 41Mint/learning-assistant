@@ -10,8 +10,6 @@ export default function DevTools() {
   // 只在开发环境显示
   const isDev = import.meta.env.DEV;
 
-  if (!isDev) return null;
-
   // 鼠标按下开始拖动
   const handleMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('.drag-handle')) {
@@ -25,6 +23,8 @@ export default function DevTools() {
 
   // 鼠标移动
   useEffect(() => {
+    if (!isDev) return;
+
     const handleMouseMove = (e: MouseEvent) => {
       if (isDragging) {
         const newX = Math.max(0, Math.min(e.clientX - dragOffset.x, window.innerWidth - 320));
@@ -46,7 +46,9 @@ export default function DevTools() {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, dragOffset]);
+  }, [isDev, isDragging, dragOffset]);
+
+  if (!isDev) return null;
 
   // 生成随机学习数据
   const generateMockData = (days: number) => {

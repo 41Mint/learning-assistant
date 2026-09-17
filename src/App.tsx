@@ -4,6 +4,7 @@ import StudyLog from './components/StudyLog/StudyLog';
 import Streak from './components/Streak/Streak';
 import Statistics from './components/Statistics/Statistics';
 import History from './components/History/History';
+import SkillTree from './components/SkillTree/SkillTree';
 import DevTools from './components/DevTools/DevTools';
 import { usePomodoroStore } from './store/pomodoroStore';
 import { useStudyLogStore } from './store/studyLogStore';
@@ -52,6 +53,11 @@ function App() {
 
           {/* 学习统计 */}
           <Statistics />
+        </section>
+
+        {/* 学习路径 */}
+        <section className="mb-8">
+          <SkillTree />
         </section>
 
         {/* 历史记录 */}

@@ -94,6 +94,8 @@ interface SkillTree {
 }
 ```
 
+**实现约定**：预设路径定义与 UI 分离，持久化数据仅保存 `completedIds`。节点的锁定、可用和完成状态由前置条件实时推导，避免将可计算状态写入 LocalStorage 后产生不一致。
+
 ### 4. 统计模块（Statistics）
 
 **职责**：

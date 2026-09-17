@@ -20,13 +20,21 @@
    - 支持 GFM（任务列表、表格等）与代码块语法高亮
    - 保持既有 LocalStorage 数据结构和自动保存行为，不需要数据迁移
 
+4. **工程健康修复与技能树 MVP** ✅
+   - 修复 DevTools 在生产环境条件返回前调用 Hook 的规则错误
+   - 新增配置驱动的学习路径：C#、Unity 客户端、算法，以及图形学/引擎工具探索分支
+   - 实现前置条件解锁、完成/撤销完成保护、进度统计和下一步建议
+   - LocalStorage 只保存已完成节点 ID，解锁状态由路径配置推导，避免派生数据不一致
+
 ### 验证
 - ✅ `npm run build` 通过（TypeScript 检查和 Vite 生产打包）
-- ⚠️ `npm run lint` 仍报告既有 DevTools Hook 规则错误；本次修改未新增 lint error，后续单独修复，避免扩大本功能范围
+- ✅ `npm run lint` 不再有 error；仍保留既有 Streak、StudyLog、Statistics、History 警告，后续单独处理
+- ✅ 本地开发服务器 `http://localhost:5185/` 返回 HTTP 200
 
 ### 下一步计划
 1. 手动验证 Markdown 编辑与预览体验
-2. 评估技能树系统的最小正确闭环
+2. 手动验证技能树的解锁、完成状态与刷新持久化
+3. 评估自定义任务或学习数据备份的下一步优先级
 
 ---
 
