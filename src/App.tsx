@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import Pomodoro from './components/Pomodoro/Pomodoro';
 import StudyLog from './components/StudyLog/StudyLog';
 import Streak from './components/Streak/Streak';
@@ -9,19 +9,26 @@ import DevTools from './components/DevTools/DevTools';
 import { usePomodoroStore } from './store/pomodoroStore';
 import { useStudyLogStore } from './store/studyLogStore';
 import { useStreakStore } from './store/streakStore';
+import { useCurrentGoalStore } from './store/currentGoalStore';
+import { getSkillNode } from './data/skillPath';
 
 function App() {
+  const processedPomodorosRef = useRef(0);
   const completedPomodoros = usePomodoroStore((state) => state.completedPomodoros);
   const addDuration = useStudyLogStore((state) => state.addDuration);
   const updateStreak = useStreakStore((state) => state.updateStreak);
+  const currentGoalId = useCurrentGoalStore((state) => state.skillId);
 
   // 当完成番茄钟时，自动增加学习时长并更新Streak
   useEffect(() => {
-    if (completedPomodoros > 0) {
-      addDuration(25); // 每完成一个番茄钟增加25分钟
+    const newlyCompleted = completedPomodoros - processedPomodorosRef.current;
+    if (newlyCompleted > 0) {
+      const currentGoal = currentGoalId ? getSkillNode(currentGoalId) : undefined;
+      addDuration(25 * newlyCompleted, currentGoal ? `目标：${currentGoal.name}` : undefined);
       updateStreak(); // 更新连续学习天数
+      processedPomodorosRef.current = completedPomodoros;
     }
-  }, [completedPomodoros, addDuration, updateStreak]);
+  }, [completedPomodoros, currentGoalId, addDuration, updateStreak]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4">

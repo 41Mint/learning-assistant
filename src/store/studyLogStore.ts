@@ -1,15 +1,41 @@
 import { create } from 'zustand';
 import { getStorageItem, setStorageItem, STORAGE_KEYS, generateId, getTodayDate } from '../utils/storage';
+import type { StudyLog } from '../types';
 
-interface StudyLog {
-  id: string;
-  date: string; // YYYY-MM-DD
-  duration: number; // 分钟
-  content: string; // Markdown内容
-  tags: string[];
-  knowledgePoints: string[];
-  createdAt: number;
-  updatedAt: number;
+const LEGACY_LOG_PREFIX = 'learning-assistant:log:';
+
+function migrateLegacyLogs(logs: StudyLog[]): StudyLog[] {
+  const knownDates = new Set(logs.map((log) => log.date));
+  const migratedLogs: StudyLog[] = [];
+
+  Object.keys(localStorage)
+    .filter((key) => key.startsWith(LEGACY_LOG_PREFIX))
+    .forEach((key) => {
+      const date = key.slice(LEGACY_LOG_PREFIX.length);
+      if (knownDates.has(date)) return;
+
+      try {
+        const legacyLog = JSON.parse(localStorage.getItem(key) || '{}') as { duration?: unknown; content?: unknown };
+        if (typeof legacyLog.duration !== 'number') return;
+
+        const now = Date.now();
+        migratedLogs.push({
+          id: generateId(),
+          date,
+          duration: legacyLog.duration,
+          content: typeof legacyLog.content === 'string' ? legacyLog.content : '',
+          tags: [],
+          knowledgePoints: [],
+          createdAt: now,
+          updatedAt: now,
+        });
+        knownDates.add(date);
+      } catch {
+        // 忽略无法解析的旧调试数据，避免影响正式学习日志加载。
+      }
+    });
+
+  return migratedLogs.length > 0 ? [...logs, ...migratedLogs] : logs;
 }
 
 interface StudyLogStore {
@@ -42,7 +68,7 @@ interface StudyLogStore {
   removeKnowledgePoint: (point: string) => void;
 
   // 增加学习时长（分钟）
-  addDuration: (minutes: number) => void;
+  addDuration: (minutes: number, contextTag?: string) => void;
 
   // 开始编辑
   startEditing: () => void;
@@ -61,7 +87,11 @@ export const useStudyLogStore = create<StudyLogStore>((set, get) => ({
 
   loadLogs: () => {
     const logs = getStorageItem<StudyLog[]>(STORAGE_KEYS.STUDY_LOGS, []);
-    set({ logs });
+    const migratedLogs = migrateLegacyLogs(logs);
+    if (migratedLogs !== logs) {
+      setStorageItem(STORAGE_KEYS.STUDY_LOGS, migratedLogs);
+    }
+    set({ logs: migratedLogs });
   },
 
   getTodayLog: () => {
@@ -155,14 +185,17 @@ export const useStudyLogStore = create<StudyLogStore>((set, get) => ({
     }
   },
 
-  addDuration: (minutes: number) => {
-    const currentLog = get().currentLog;
-    if (currentLog) {
-      get().saveLog({
-        ...currentLog,
-        duration: currentLog.duration + minutes,
-      });
-    }
+  addDuration: (minutes: number, contextTag?: string) => {
+    const currentLog = get().currentLog ?? get().getTodayLog();
+    const tags = contextTag && !currentLog.tags.includes(contextTag)
+      ? [...currentLog.tags, contextTag]
+      : currentLog.tags;
+
+    get().saveLog({
+      ...currentLog,
+      duration: currentLog.duration + minutes,
+      tags,
+    });
   },
 
   startEditing: () => set({ isEditing: true }),

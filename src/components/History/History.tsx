@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useStudyLogStore } from '../../store/studyLogStore';
 import { getTodayDate } from '../../utils/storage';
 
@@ -10,18 +10,23 @@ interface CalendarDay {
   duration: number;
 }
 
+const formatDateStr = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const History = () => {
   const { logs, loadLogs, getLogByDate } = useStudyLogStore();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [calendarDays, setCalendarDays] = useState<CalendarDay[]>([]);
 
   useEffect(() => {
     loadLogs();
   }, [loadLogs]);
 
-  // 生成日历数据
-  useEffect(() => {
+  const calendarDays = useMemo(() => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
     const today = getTodayDate();
@@ -86,15 +91,8 @@ const History = () => {
       });
     }
 
-    setCalendarDays(days);
+    return days;
   }, [currentMonth, logs]);
-
-  const formatDateStr = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
 
   const goToPrevMonth = () => {
     setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1));

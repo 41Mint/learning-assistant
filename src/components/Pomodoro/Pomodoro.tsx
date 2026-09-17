@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 import { usePomodoroStore } from '../../store/pomodoroStore';
+import { useCurrentGoalStore } from '../../store/currentGoalStore';
+import { getSkillNode } from '../../data/skillPath';
 
 // 格式化时间显示（MM:SS）
 const formatTime = (seconds: number): string => {
@@ -20,6 +22,12 @@ export default function Pomodoro() {
     switchMode,
     tick,
   } = usePomodoroStore();
+  const { skillId, loadCurrentGoal } = useCurrentGoalStore();
+  const currentGoal = skillId ? getSkillNode(skillId) : undefined;
+
+  useEffect(() => {
+    loadCurrentGoal();
+  }, [loadCurrentGoal]);
 
   // 计时器效果
   useEffect(() => {
@@ -43,6 +51,13 @@ export default function Pomodoro() {
         }`}>
           {mode === 'study' ? '📚 学习时间' : '☕ 休息时间'}
         </span>
+      </div>
+
+      <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 p-3 text-center dark:border-blue-900/60 dark:bg-blue-900/20">
+        <div className="text-xs font-medium text-blue-700 dark:text-blue-300">当前学习目标</div>
+        <div className="mt-1 text-sm font-semibold text-blue-950 dark:text-blue-100">
+          {currentGoal ? currentGoal.name : '暂未选择，可在学习路径中设置'}
+        </div>
       </div>
 
       {/* 计时器显示 */}

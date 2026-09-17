@@ -96,6 +96,12 @@ interface SkillTree {
 
 **实现约定**：预设路径定义与 UI 分离，持久化数据仅保存 `completedIds`。节点的锁定、可用和完成状态由前置条件实时推导，避免将可计算状态写入 LocalStorage 后产生不一致。
 
+### 3.1 当前学习目标（Current Goal）
+
+**职责**：保存用户当前聚焦的已解锁技能节点，为番茄钟与日志提供轻量的学习上下文。
+
+**边界**：当前目标只会在番茄钟完成时作为标签写入当天学习日志；不会自动将学习时长等同于技能掌握，也不会自动完成技能节点。未来 AI 总结可在此上下文上补充内容提炼和归类。
+
 ### 4. 统计模块（Statistics）
 
 **职责**：
@@ -118,6 +124,7 @@ interface SkillTree {
 const STORAGE_KEYS = {
   STUDY_LOGS: 'learning-assistant:study-logs',
   SKILL_TREE: 'learning-assistant:skill-tree',
+  CURRENT_GOAL: 'learning-assistant:current-goal',
   STREAK: 'learning-assistant:streak',
   SETTINGS: 'learning-assistant:settings',
 } as const;
@@ -129,6 +136,8 @@ const STORAGE_KEYS = {
 1. 添加版本号字段
 2. 编写迁移函数
 3. 应用启动时检查版本并迁移
+
+当前还兼容读取早期开发工具生成的 `learning-assistant:log:YYYY-MM-DD` 记录：首次加载时仅将缺失日期复制到正式学习日志，不覆盖或删除原数据。
 
 ```typescript
 interface StorageData {

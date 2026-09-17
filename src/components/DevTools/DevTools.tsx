@@ -1,4 +1,37 @@
 import { useState, useRef, useEffect } from 'react';
+import type { StudyLog } from '../../types';
+import { generateId, getStorageItem, setStorageItem, STORAGE_KEYS } from '../../utils/storage';
+import { usePomodoroStore } from '../../store/pomodoroStore';
+
+function addStoredDuration(date: string, minutes: number, content: string) {
+  const logs = getStorageItem<StudyLog[]>(STORAGE_KEYS.STUDY_LOGS, []);
+  const existingIndex = logs.findIndex((log) => log.date === date);
+  const now = Date.now();
+
+  if (existingIndex >= 0) {
+    const updatedLogs = [...logs];
+    updatedLogs[existingIndex] = {
+      ...updatedLogs[existingIndex],
+      duration: updatedLogs[existingIndex].duration + minutes,
+      updatedAt: now,
+    };
+    setStorageItem(STORAGE_KEYS.STUDY_LOGS, updatedLogs);
+    return updatedLogs[existingIndex].duration;
+  }
+
+  const newLog: StudyLog = {
+    id: generateId(),
+    date,
+    duration: minutes,
+    content,
+    tags: [],
+    knowledgePoints: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  setStorageItem(STORAGE_KEYS.STUDY_LOGS, [...logs, newLog]);
+  return newLog.duration;
+}
 
 export default function DevTools() {
   const [isOpen, setIsOpen] = useState(false);
@@ -6,6 +39,7 @@ export default function DevTools() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const panelRef = useRef<HTMLDivElement>(null);
+  const completePomodoro = usePomodoroStore((state) => state.completePomodoro);
 
   // 只在开发环境显示
   const isDev = import.meta.env.DEV;
@@ -59,10 +93,7 @@ export default function DevTools() {
 
       const duration = Math.floor(Math.random() * 126) + 25;
 
-      localStorage.setItem(
-        `learning-assistant:log:${dateStr}`,
-        JSON.stringify({ duration, content: `模拟数据 - 第${i + 1}天` })
-      );
+      addStoredDuration(dateStr, duration, `### 模拟学习记录\n\n第 ${i + 1} 天`);
     }
 
     alert(`✅ 已生成 ${days} 天的模拟数据！刷新页面查看效果。`);
@@ -86,19 +117,16 @@ export default function DevTools() {
   // 添加今日学习记录
   const addTodayDuration = (minutes: number) => {
     const today = new Date().toISOString().split('T')[0];
-    const key = `learning-assistant:log:${today}`;
-    const existing = localStorage.getItem(key);
-
-    const currentDuration = existing ? JSON.parse(existing).duration : 0;
-    const newDuration = currentDuration + minutes;
-
-    localStorage.setItem(
-      key,
-      JSON.stringify({ duration: newDuration, content: '测试数据' })
-    );
+    const newDuration = addStoredDuration(today, minutes, '### 测试学习记录\n\n由开发者工具添加');
 
     alert(`✅ 已添加 ${minutes} 分钟，今日总计: ${newDuration} 分钟`);
     window.location.reload();
+  };
+
+  // 走与计时自然结束相同的状态流程，用于验证番茄钟、Streak、目标标签的联动。
+  const simulatePomodoroCompletion = () => {
+    completePomodoro();
+    alert('✅ 已模拟完成 1 个番茄钟：学习时长、打卡和当前目标标签会按正式流程更新。');
   };
 
   // 查看所有学习数据（调试用）
@@ -106,12 +134,11 @@ export default function DevTools() {
     console.clear();
     console.log('=== 🔍 Learning Assistant 数据调试 ===\n');
 
-    const allKeys = Object.keys(localStorage).filter(k => k.startsWith('learning-assistant:log:'));
-    console.log(`📦 总共 ${allKeys.length} 条学习记录\n`);
+    const logs = getStorageItem<StudyLog[]>(STORAGE_KEYS.STUDY_LOGS, []);
+    console.log(`📦 总共 ${logs.length} 条学习记录\n`);
 
-    allKeys.sort().forEach(key => {
-      const data = JSON.parse(localStorage.getItem(key) || '{}');
-      console.log(`${key.replace('learning-assistant:log:', '')} → ${data.duration || 0} 分钟`);
+    logs.sort((a, b) => a.date.localeCompare(b.date)).forEach((log) => {
+      console.log(`${log.date} → ${log.duration || 0} 分钟`);
     });
 
     // 检查本周数据
@@ -121,9 +148,7 @@ export default function DevTools() {
       const date = new Date(today);
       date.setDate(date.getDate() - i);
       const dateStr = date.toISOString().split('T')[0];
-      const key = `learning-assistant:log:${dateStr}`;
-      const data = localStorage.getItem(key);
-      const duration = data ? JSON.parse(data).duration : 0;
+      const duration = logs.find((log) => log.date === dateStr)?.duration ?? 0;
       console.log(`  ${dateStr} → ${duration} 分钟 ${duration === 0 ? '❌' : '✅'}`);
     }
 
@@ -230,6 +255,22 @@ export default function DevTools() {
                   +100分钟
                 </button>
               </div>
+            </div>
+
+            {/* 模拟真实番茄钟完成 */}
+            <div className="border-b border-gray-200 dark:border-gray-700 pb-4">
+              <p className="text-base font-medium text-gray-700 dark:text-gray-300 mb-2">
+                🍅 模拟番茄钟完成
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                用于验证完成数、打卡、学习日志和当前目标标签的完整联动。
+              </p>
+              <button
+                onClick={simulatePomodoroCompletion}
+                className="w-full px-6 py-4 bg-orange-500 hover:bg-orange-600 text-white text-lg rounded-lg transition font-medium"
+              >
+                🍅 模拟完成 1 个番茄钟
+              </button>
             </div>
 
             {/* 调试工具 */}

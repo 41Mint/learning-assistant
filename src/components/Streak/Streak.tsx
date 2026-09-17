@@ -12,7 +12,7 @@ export default function Streak() {
 
   useEffect(() => {
     loadStreak();
-  }, []);
+  }, [loadStreak]);
 
   // 获取火焰图标数量（最多5个）
   const getFlameCount = () => {

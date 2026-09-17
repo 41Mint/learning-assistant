@@ -25,7 +25,7 @@ export default function StudyLog() {
   useEffect(() => {
     loadLogs();
     getTodayLog();
-  }, []);
+  }, [getTodayLog, loadLogs]);
 
   const handleAddTag = () => {
     if (newTag.trim()) {
