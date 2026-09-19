@@ -47,6 +47,17 @@ export interface SkillTreeState {
   totalCount: number;
 }
 
+// 技能节点下的可执行学习任务
+export interface LearningTask {
+  id: string;
+  parentSkillId: string;
+  title: string;
+  description: string;
+  completed: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
 // 设置
 export interface Settings {
   studyDuration: number; // 默认25分钟

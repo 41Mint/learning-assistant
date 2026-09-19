@@ -10,25 +10,23 @@ import { usePomodoroStore } from './store/pomodoroStore';
 import { useStudyLogStore } from './store/studyLogStore';
 import { useStreakStore } from './store/streakStore';
 import { useCurrentGoalStore } from './store/currentGoalStore';
-import { getSkillNode } from './data/skillPath';
 
 function App() {
   const processedPomodorosRef = useRef(0);
   const completedPomodoros = usePomodoroStore((state) => state.completedPomodoros);
   const addDuration = useStudyLogStore((state) => state.addDuration);
   const updateStreak = useStreakStore((state) => state.updateStreak);
-  const currentGoalId = useCurrentGoalStore((state) => state.skillId);
+  const currentGoal = useCurrentGoalStore((state) => state.goal);
 
   // 当完成番茄钟时，自动增加学习时长并更新Streak
   useEffect(() => {
     const newlyCompleted = completedPomodoros - processedPomodorosRef.current;
     if (newlyCompleted > 0) {
-      const currentGoal = currentGoalId ? getSkillNode(currentGoalId) : undefined;
-      addDuration(25 * newlyCompleted, currentGoal ? `目标：${currentGoal.name}` : undefined);
+      addDuration(25 * newlyCompleted, currentGoal ? `目标：${currentGoal.label}` : undefined);
       updateStreak(); // 更新连续学习天数
       processedPomodorosRef.current = completedPomodoros;
     }
-  }, [completedPomodoros, currentGoalId, addDuration, updateStreak]);
+  }, [completedPomodoros, currentGoal, addDuration, updateStreak]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4">

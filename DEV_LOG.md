@@ -34,9 +34,15 @@
    - 保留对旧版开发工具按日期数据的非破坏性兼容迁移：只补充缺失日志，不覆盖或删除原数据
    - 将现有 lint warning 清理至零
 
+6. **自定义任务 v1 与文档治理改进** ✅
+   - 支持在已解锁技能节点下创建带可选说明的可执行任务，并独立持久化
+   - 未完成任务可成为当前学习目标；番茄钟会以任务名写入日志标签
+   - 当前目标存储从单一技能 ID 升级为通用目标上下文，自动兼容已有技能目标
+   - 将待办和功能清单调整为“当前 / 下一步 / 以后再评估”的动态规划，移除过期 Sprint
+
 ### 验证
 - ✅ `npm run build` 通过（TypeScript 检查和 Vite 生产打包）
-- ✅ `npm run lint` 不再有 error；仍保留既有 Streak、StudyLog、Statistics、History 警告，后续单独处理
+- ✅ `npm run lint` 通过，无 warning 或 error
 - ✅ 本地开发服务器 `http://localhost:5185/` 返回 HTTP 200
 - ✅ `npm run lint` 通过，无 warning 或 error
 

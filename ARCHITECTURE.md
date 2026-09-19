@@ -102,6 +102,12 @@ interface SkillTree {
 
 **边界**：当前目标只会在番茄钟完成时作为标签写入当天学习日志；不会自动将学习时长等同于技能掌握，也不会自动完成技能节点。未来 AI 总结可在此上下文上补充内容提炼和归类。
 
+### 3.2 自定义任务（Task）
+
+**职责**：把较粗粒度的技能节点拆成近期可执行的任务。任务必须关联一个技能节点，包含标题、可选说明和完成状态；未完成任务可成为当前学习目标。
+
+**边界**：任务完成不会自动完成父技能节点；任务不承担复杂依赖、截止日期、子任务或排序功能。任务数据独立存储在 `learning-assistant:tasks`，当前目标以 `{ type, id, label }` 保存，并兼容旧的技能目标数据。
+
 ### 4. 统计模块（Statistics）
 
 **职责**：
@@ -125,6 +131,7 @@ const STORAGE_KEYS = {
   STUDY_LOGS: 'learning-assistant:study-logs',
   SKILL_TREE: 'learning-assistant:skill-tree',
   CURRENT_GOAL: 'learning-assistant:current-goal',
+  TASKS: 'learning-assistant:tasks',
   STREAK: 'learning-assistant:streak',
   SETTINGS: 'learning-assistant:settings',
 } as const;

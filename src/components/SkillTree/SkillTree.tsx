@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { SKILL_CATEGORIES, SKILL_PATH, getSkillNode } from '../../data/skillPath';
 import { useSkillTreeStore } from '../../store/skillTreeStore';
 import { useCurrentGoalStore } from '../../store/currentGoalStore';
+import SkillTasks from './SkillTasks';
 
 export default function SkillTree() {
   const { completedIds, isLoaded, loadSkillTree, isUnlocked, toggleCompleted } = useSkillTreeStore();
   const [notice, setNotice] = useState('');
-  const { skillId: currentGoalId, loadCurrentGoal, setCurrentGoal, clearCurrentGoal } = useCurrentGoalStore();
+  const { goal: currentGoal, loadCurrentGoal, setCurrentGoal, clearCurrentGoal } = useCurrentGoalStore();
 
   useEffect(() => {
     loadSkillTree();
@@ -23,14 +24,16 @@ export default function SkillTree() {
 
   const handleToggle = (id: string) => {
     const result = toggleCompleted(id);
-    if (result.changed && completedIds.includes(id) && currentGoalId === id) {
+    if (result.changed && completedIds.includes(id) && currentGoal?.type === 'skill' && currentGoal.id === id) {
       clearCurrentGoal();
     }
     setNotice(result.reason || '学习进度已保存。');
   };
 
   const handleSetCurrentGoal = (id: string) => {
-    setCurrentGoal(id);
+    const node = getSkillNode(id);
+    if (!node) return;
+    setCurrentGoal({ type: 'skill', id, label: node.name });
     setNotice('已设为当前学习目标；完成番茄钟时会自动关联到今日学习日志。');
   };
 
@@ -120,11 +123,12 @@ export default function SkillTree() {
                         <button
                           type="button"
                           onClick={() => handleSetCurrentGoal(node.id)}
-                          className={`mt-4 ml-2 rounded-md px-3 py-2 text-sm font-medium transition ${currentGoalId === node.id ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-100' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'}`}
+                          className={`mt-4 ml-2 rounded-md px-3 py-2 text-sm font-medium transition ${currentGoal?.type === 'skill' && currentGoal.id === node.id ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-100' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'}`}
                         >
-                          {currentGoalId === node.id ? '当前目标' : '设为当前目标'}
+                          {currentGoal?.type === 'skill' && currentGoal.id === node.id ? '当前目标' : '设为当前目标'}
                         </button>
                       )}
+                      <SkillTasks skillId={node.id} unlocked={unlocked || isCompleted} />
                     </article>
                   );
                 })}

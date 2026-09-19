@@ -4,6 +4,7 @@ const STORAGE_KEYS = {
   STUDY_LOGS: 'learning-assistant:study-logs',
   SKILL_TREE: 'learning-assistant:skill-tree',
   CURRENT_GOAL: 'learning-assistant:current-goal',
+  TASKS: 'learning-assistant:tasks',
   STREAK: 'learning-assistant:streak',
   SETTINGS: 'learning-assistant:settings',
   POMODORO_TODAY: 'learning-assistant:pomodoro-today',
