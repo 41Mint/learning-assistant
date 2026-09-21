@@ -7,7 +7,9 @@ interface TaskStore {
   isLoaded: boolean;
   loadTasks: () => void;
   addTask: (parentSkillId: string, title: string, description: string) => void;
+  updateTask: (id: string, title: string, description: string) => void;
   toggleTask: (id: string) => void;
+  deleteTask: (id: string) => void;
 }
 
 export const useTaskStore = create<TaskStore>((set, get) => ({
@@ -35,10 +37,24 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     setStorageItem(STORAGE_KEYS.TASKS, tasks);
   },
 
+  updateTask: (id, title, description) => {
+    const tasks = get().tasks.map((task) => task.id === id
+      ? { ...task, title, description, updatedAt: Date.now() }
+      : task);
+    set({ tasks });
+    setStorageItem(STORAGE_KEYS.TASKS, tasks);
+  },
+
   toggleTask: (id) => {
     const tasks = get().tasks.map((task) => task.id === id
       ? { ...task, completed: !task.completed, updatedAt: Date.now() }
       : task);
+    set({ tasks });
+    setStorageItem(STORAGE_KEYS.TASKS, tasks);
+  },
+
+  deleteTask: (id) => {
+    const tasks = get().tasks.filter((task) => task.id !== id);
     set({ tasks });
     setStorageItem(STORAGE_KEYS.TASKS, tasks);
   },
