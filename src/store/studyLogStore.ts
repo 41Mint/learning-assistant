@@ -51,6 +51,8 @@ interface StudyLogStore {
 
   // 保存日志
   saveLog: (log: StudyLog) => void;
+  appendToDate: (date: string, content: string) => void;
+  updateLogContent: (id: string, content: string) => void;
 
   // 更新当前日志内容
   updateContent: (content: string) => void;
@@ -134,8 +136,25 @@ export const useStudyLogStore = create<StudyLogStore>((set, get) => ({
       newLogs = [...logs, updatedLog];
     }
 
-    set({ logs: newLogs, currentLog: updatedLog });
-    setStorageItem(STORAGE_KEYS.STUDY_LOGS, newLogs);
+    // 先持久化；配额不足时抛错，界面保留草稿，不误报保存成功。
+    localStorage.setItem(STORAGE_KEYS.STUDY_LOGS, JSON.stringify(newLogs));
+    set({ logs: newLogs, ...(updatedLog.date === getTodayDate() ? { currentLog: updatedLog } : {}) });
+  },
+
+  appendToDate: (date, content) => {
+    const existing = get().logs.find((log) => log.date === date);
+    const now = Date.now();
+    const log: StudyLog = existing ?? {
+      id: generateId(), date, duration: 0, content: '', tags: [], knowledgePoints: [], createdAt: now, updatedAt: now,
+    };
+    const emptyHeading = !log.content.trim() || log.content.trim() === `### ${date}`;
+    get().saveLog({ ...log, content: emptyHeading ? content : `${log.content.trimEnd()}\n\n---\n\n${content}` });
+  },
+
+  updateLogContent: (id, content) => {
+    const log = get().logs.find((candidate) => candidate.id === id);
+    if (!log) throw new Error('这条记录不存在，请重新打开后再编辑。');
+    get().saveLog({ ...log, content });
   },
 
   updateContent: (content: string) => {
@@ -186,7 +205,7 @@ export const useStudyLogStore = create<StudyLogStore>((set, get) => ({
   },
 
   addDuration: (minutes: number, contextTag?: string) => {
-    const currentLog = get().currentLog ?? get().getTodayLog();
+    const currentLog = get().getTodayLog();
     const tags = contextTag && !currentLog.tags.includes(contextTag)
       ? [...currentLog.tags, contextTag]
       : currentLog.tags;

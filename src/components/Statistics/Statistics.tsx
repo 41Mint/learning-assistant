@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useStudyLogStore } from '../../store/studyLogStore';
-import { getTodayDate } from '../../utils/storage';
+import { formatDate as formatLocalDate, getTodayDate } from '../../utils/storage';
 
 interface DayData {
   date: string;
@@ -12,7 +12,7 @@ function createDayData(days: number, durationByDate: Map<string, number>): DayDa
   return Array.from({ length: days }, (_, index) => {
     const date = new Date(today);
     date.setDate(today.getDate() - (days - index - 1));
-    const dateString = date.toISOString().split('T')[0];
+    const dateString = formatLocalDate(date);
     return { date: dateString, minutes: durationByDate.get(dateString) ?? 0 };
   });
 }

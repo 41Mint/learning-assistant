@@ -139,6 +139,7 @@ AI建议："上次完成了X，建议现在做Y或Z"
 ### 🎯 你现在应该做的
 
 1. **把这个项目加入Git远程仓库**（GitHub）
+   - 已于 2026-11-05 关联私有仓库 `https://github.com/41Mint/learning-assistant`，远程名 `origin`，主分支为 `master`
    - 定期push，防止代码丢失
    - 可以展示在简历上
    - 方便在不同设备上开发

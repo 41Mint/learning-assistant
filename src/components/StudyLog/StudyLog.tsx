@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import rehypeHighlight from 'rehype-highlight';
-import remarkGfm from 'remark-gfm';
+import MarkdownContent from '../common/MarkdownContent';
+import MarkdownImport from './MarkdownImport';
 import { useStudyLogStore } from '../../store/studyLogStore';
 
 export default function StudyLog() {
@@ -56,6 +55,8 @@ export default function StudyLog() {
         </div>
       </div>
 
+      <MarkdownImport />
+
       {/* Markdown编辑器 */}
       <div className="mb-6">
         <div className="flex justify-between items-center mb-2">
@@ -95,9 +96,7 @@ export default function StudyLog() {
                   实时预览
                 </p>
                 <div className="markdown-preview h-72 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
-                    {currentLog.content || '开始输入后，这里会显示 Markdown 效果。'}
-                  </ReactMarkdown>
+                  <MarkdownContent content={currentLog.content || '开始输入后，这里会显示 Markdown 效果。'} />
                 </div>
               </div>
             </div>
@@ -110,9 +109,7 @@ export default function StudyLog() {
           </div>
         ) : (
           <div className="markdown-preview p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200">
-            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
-              {currentLog.content}
-            </ReactMarkdown>
+            <MarkdownContent content={currentLog.content} />
           </div>
         )}
       </div>

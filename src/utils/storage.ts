@@ -41,7 +41,7 @@ export function removeStorageItem(key: string): void {
 
 // 格式化日期为 YYYY-MM-DD
 export function formatDate(date: Date): string {
-  return date.toISOString().split('T')[0];
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 // 获取今天的日期字符串

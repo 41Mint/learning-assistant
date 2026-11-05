@@ -30,3 +30,7 @@ dist-ssr
 
 # OS
 Thumbs.db
+
+# Browser test artifacts
+test-results/
+playwright-report/

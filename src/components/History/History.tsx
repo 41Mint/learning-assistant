@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useStudyLogStore } from '../../store/studyLogStore';
 import { getTodayDate } from '../../utils/storage';
+import MarkdownContent from '../common/MarkdownContent';
 
 interface CalendarDay {
   date: string; // YYYY-MM-DD
@@ -18,9 +19,28 @@ const formatDateStr = (date: Date): string => {
 };
 
 const History = () => {
-  const { logs, loadLogs, getLogByDate } = useStudyLogStore();
+  const { logs, loadLogs, getLogByDate, updateLogContent } = useStudyLogStore();
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(getTodayDate);
+  const [draft, setDraft] = useState<{ id: string; content: string } | null>(null);
+  const [message, setMessage] = useState('');
+
+  const selectDate = (date: string) => {
+    if (draft && !window.confirm('尚未保存的编辑将被放弃，是否切换日期？')) return;
+    setDraft(null);
+    setMessage('');
+    setSelectedDate(date);
+    setCurrentMonth(new Date(`${date}T12:00:00`));
+  };
+
+  const saveDraft = () => {
+    if (!draft) return;
+    try {
+      updateLogContent(draft.id, draft.content);
+      setDraft(null);
+      setMessage('补充内容已保存，原有时长、标签和知识点保持不变。');
+    } catch (error) { setMessage(error instanceof Error ? error.message : '保存失败，请重试。'); }
+  };
 
   useEffect(() => {
     loadLogs();
@@ -103,20 +123,19 @@ const History = () => {
   };
 
   const goToToday = () => {
-    setCurrentMonth(new Date());
-    setSelectedDate(getTodayDate());
+    selectDate(getTodayDate());
   };
 
   const handleDayClick = (day: CalendarDay) => {
     if (day.hasLog) {
-      setSelectedDate(day.date);
+      selectDate(day.date);
     }
   };
 
   const selectedLog = selectedDate ? getLogByDate(selectedDate) : null;
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+    <div id="study-history" className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
           📅 学习历史
@@ -125,6 +144,8 @@ const History = () => {
           查看过往的学习记录和统计
         </p>
       </div>
+
+      <label className="history-date-picker">定位学习日期 <input aria-label="定位学习日期" type="date" value={selectedDate ?? ''} onChange={(event) => { if (event.target.value) selectDate(event.target.value); }} /></label>
 
       {/* 日历导航 */}
       <div className="flex items-center justify-between mb-4">
@@ -245,11 +266,22 @@ const History = () => {
               </div>
             )}
 
-            {/* 学习内容 */}
-            <div className="prose dark:prose-invert max-w-none">
-              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                {selectedLog.content}
-              </div>
+            <div className="history-editor">
+              {draft?.id === selectedLog.id ? (
+                <>
+                  <label htmlFor="history-content">编辑 / 补充 {selectedDate} 的学习内容</label>
+                  <textarea id="history-content" aria-label="历史学习内容" value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.target.value })} />
+                  <button type="button" className="note-button" onClick={saveDraft}>保存补充</button>
+                  <button type="button" className="note-button secondary" onClick={() => setDraft(null)}>取消编辑</button>
+                  <div className="markdown-preview history-content"><MarkdownContent content={draft.content} /></div>
+                </>
+              ) : (
+                <>
+                  <button type="button" className="note-button" onClick={() => { setDraft({ id: selectedLog.id, content: selectedLog.content }); setMessage(''); }}>编辑 / 补充记录</button>
+                  <div className="markdown-preview history-content"><MarkdownContent content={selectedLog.content} /></div>
+                </>
+              )}
+              {message && <p role="status">{message}</p>}
             </div>
           </div>
         </div>
@@ -261,6 +293,7 @@ const History = () => {
           点击有绿点的日期查看当天的学习记录
         </div>
       )}
+      {selectedDate && !selectedLog && <p className="text-sm text-gray-500 dark:text-gray-400">该日期暂无记录，可使用上方“导入图文学习记录”保存学习材料。</p>}
     </div>
   );
 };

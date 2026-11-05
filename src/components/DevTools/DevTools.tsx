@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import type { StudyLog } from '../../types';
-import { generateId, getStorageItem, setStorageItem, STORAGE_KEYS } from '../../utils/storage';
+import { formatDate, generateId, getStorageItem, getTodayDate, setStorageItem, STORAGE_KEYS } from '../../utils/storage';
 import { usePomodoroStore } from '../../store/pomodoroStore';
+import { writeImages } from '../../utils/imageStorage';
 
 function addStoredDuration(date: string, minutes: number, content: string) {
   const logs = getStorageItem<StudyLog[]>(STORAGE_KEYS.STUDY_LOGS, []);
@@ -89,7 +90,7 @@ export default function DevTools() {
     for (let i = 0; i < days; i++) {
       const date = new Date();
       date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = formatDate(date);
 
       const duration = Math.floor(Math.random() * 126) + 25;
 
@@ -101,8 +102,11 @@ export default function DevTools() {
   };
 
   // 清空所有数据
-  const clearAllData = () => {
+  const clearAllData = async () => {
     if (!confirm('⚠️ 确定要清空所有数据吗？此操作不可恢复！')) return;
+
+    try { await writeImages([], true); }
+    catch { alert('图片数据未能清空，操作已停止，请重试。'); return; }
 
     Object.keys(localStorage).forEach(key => {
       if (key.startsWith('learning-assistant:')) {
@@ -116,7 +120,7 @@ export default function DevTools() {
 
   // 添加今日学习记录
   const addTodayDuration = (minutes: number) => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayDate();
     const newDuration = addStoredDuration(today, minutes, '### 测试学习记录\n\n由开发者工具添加');
 
     alert(`✅ 已添加 ${minutes} 分钟，今日总计: ${newDuration} 分钟`);
@@ -147,7 +151,7 @@ export default function DevTools() {
     for (let i = 6; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = formatDate(date);
       const duration = logs.find((log) => log.date === dateStr)?.duration ?? 0;
       console.log(`  ${dateStr} → ${duration} 分钟 ${duration === 0 ? '❌' : '✅'}`);
     }
