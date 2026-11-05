@@ -5,6 +5,7 @@ import Streak from './components/Streak/Streak';
 import Statistics from './components/Statistics/Statistics';
 import History from './components/History/History';
 import SkillTree from './components/SkillTree/SkillTree';
+import DataBackup from './components/DataManagement/DataBackup';
 import DevTools from './components/DevTools/DevTools';
 import { usePomodoroStore } from './store/pomodoroStore';
 import { useStudyLogStore } from './store/studyLogStore';
@@ -68,6 +69,10 @@ function App() {
         {/* 历史记录 */}
         <section className="mb-8">
           <History />
+        </section>
+
+        <section className="mb-8">
+          <DataBackup />
         </section>
       </div>
 
