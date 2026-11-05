@@ -2,6 +2,7 @@
 
 const STORAGE_KEYS = {
   STUDY_LOGS: 'learning-assistant:study-logs',
+  KNOWLEDGE: 'learning-assistant:knowledge',
   SKILL_TREE: 'learning-assistant:skill-tree',
   CURRENT_GOAL: 'learning-assistant:current-goal',
   TASKS: 'learning-assistant:tasks',

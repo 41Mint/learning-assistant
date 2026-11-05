@@ -27,7 +27,7 @@
 
 ### 页面组织
 
-App 通过轻量 Hash 导航切换 `#today`、`#path`、`#history`、`#data` 四个入口，无新增路由依赖或存储迁移。各面板维持挂载、用原生 `hidden` 隐藏，避免切换时卸载番茄钟的计时 effect、丢失导入预览或历史编辑草稿。入口变化返回页顶；浏览器 hashchange 处理前后退及直接地址。
+App 通过轻量 Hash 导航切换 `#today`、`#path`、`#history`、`#knowledge`、`#data` 五个入口，无新增路由依赖。各面板维持挂载、用原生 `hidden` 隐藏，避免切换时卸载番茄钟的计时 effect、丢失导入预览或编辑草稿。入口变化返回页顶；浏览器 hashchange 处理前后退及直接地址。`workspaceStore` 只保存临时导航选择，支持 `#history/YYYY-MM-DD` 与 `#knowledge/词条ID`；日期选择同时决定对应日历月份，不改变今日计时日志。
 
 桌面今日页为番茄钟/笔记分栏，历史页为日历笔记/统计打卡分栏；窄屏纵向排列。顶部导航固定，其他入口显示精简计时状态与返回链接。长图文仍在自己的阅读区域中滚动，不再推动其他功能模块远离入口。
 
@@ -135,6 +135,30 @@ interface SkillTree {
 - 总学习时长
 - 连续学习天数
 
+### 5. 知识词条（Knowledge）
+
+**实体边界**：日志记录某天的学习情境；词条记录持续演进的理解；标签是分类文字；技能节点与任务服务于学习行动。词条不自动代表掌握，也不自动绑定技能节点。
+
+```mermaid
+erDiagram
+  StudyLog ||--o{ KnowledgeLogLink : references
+  KnowledgeEntry ||--o{ KnowledgeLogLink : gathers
+  KnowledgeEntry ||--o{ KnowledgeRelation : source
+  KnowledgeEntry ||--o{ KnowledgeRelation : target
+```
+
+`KnowledgeData` 单独以版本 1 持久化，包含三个数组：
+
+- `entries`：稳定 ID、名称、别名数组、单层分类字符串、Markdown 正文和创建/更新时间。只要求名称，未分类用空字符串。
+- `logLinks`：ID、词条 ID、日志 ID 与可选说明，按词条/日志对去重。保存历史情境，改名后关系保持。
+- `relations`：ID、sourceId、targetId。当前语义仅为无方向“相关”，对双方显示，按排序后的 ID 对去重，禁止自关联。
+
+`knowledgeStore` 负责 CRUD 与关系操作；每次先检查引用、名称和别名唯一性（忽略大小写、首尾空格和全半角差异），再持久化，成功后才更新内存状态。删除词条会同时移除它的日志链接及相关关系；解除链接不会删除词条或日志。读取失败保留原数据并禁止编辑。
+
+`KnowledgeLinks` 复用于今日和历史日志，支持选择已有词条、新建并关联、关联说明及手动升级旧知识点；`KnowledgeBase` 提供目录、名称/别名检索、编辑器、原记录回链与相关词条。旧 `knowledgePoints: string[]` 不迁移、不覆盖，仍能独立使用。
+
+本版不增加依赖，不实现关系类型、嵌套目录、自动提炼或图谱。稳定实体 ID 与独立关系数组为以后扩展保留边界；图片复用统一渲染器，词条内直接选择/粘贴图片后续评估。
+
 ## 数据持久化
 
 ### LocalStorage结构
@@ -143,6 +167,7 @@ interface SkillTree {
 // 存储键名
 const STORAGE_KEYS = {
   STUDY_LOGS: 'learning-assistant:study-logs',
+  KNOWLEDGE: 'learning-assistant:knowledge',
   SKILL_TREE: 'learning-assistant:skill-tree',
   CURRENT_GOAL: 'learning-assistant:current-goal',
   TASKS: 'learning-assistant:tasks',
@@ -169,9 +194,9 @@ interface StorageData {
 
 ### 数据备份与恢复
 
-备份 v2 使用带格式标识和版本号的 JSON 文件，覆盖 LocalStorage 中的学习日志、技能树、任务、当前目标、Streak、设置和现有番茄钟存储键，并额外包含 IndexedDB 图片的元数据与 Base64 内容。未持久化的运行中计时状态不包含在备份内。继续接受 v1 备份，其图片集合为空。
+备份 v3 使用带格式标识和版本号的 JSON 文件，覆盖 LocalStorage 中的学习日志、知识词条及关联、技能树、任务、当前目标、Streak、设置和现有番茄钟存储键，并包含 IndexedDB 图片的元数据与 Base64 内容。未持久化的运行中计时状态不包含在备份内。继续接受 v1（图片、词条为空）与 v2（词条为空），确认页面明确提示旧格式的范围；恢复不是合并。
 
-导入先校验记录字段、图片内容编码和引用完整性，再展示摘要；用户确认后才替换数据并刷新。恢复先准备所有数据并记录原文字快照，图片在单次 IDB 事务内替换；失败时事务保留原图并回退文字数据。清除旧版按日期调试键，避免刷新时迁移回已被替换的记录。当前不做合并导入。
+导入先校验记录字段、图片内容编码、日志和词条中的图片引用，以及词条/日志/关系的引用完整性，再展示摘要；用户确认后才替换数据并刷新。恢复先准备所有数据并记录原文字快照（包含知识数据），图片在单次 IDB 事务内替换；失败时事务保留原图并回退文字数据。清除旧版按日期调试键，避免刷新时迁移回已被替换的记录。
 
 ## 状态管理（Zustand）
 

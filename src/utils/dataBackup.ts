@@ -1,7 +1,8 @@
 import { getImages, IMAGE_PREFIX, writeImages } from './imageStorage';
 import type { StoredImage } from './imageStorage';
 import { STORAGE_KEYS } from './storage';
-import type { LearningTask, StudyLog } from '../types';
+import type { KnowledgeData, LearningTask, StudyLog } from '../types';
+import { emptyKnowledge, validateKnowledge } from './knowledge';
 
 interface BackupImage { id: string; name: string; type: string; base64: string }
 interface BackupData {
@@ -12,10 +13,11 @@ interface BackupData {
   streak: Record<string, unknown> | null;
   settings: Record<string, unknown> | null;
   pomodoroToday: Record<string, unknown> | null;
+  knowledge: KnowledgeData;
 }
 export interface BackupFile {
   format: 'learning-assistant-backup';
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   exportedAt: string;
   data: BackupData;
   images: BackupImage[];
@@ -48,7 +50,7 @@ function optionalRecord(value: unknown): Record<string, unknown> | null {
 }
 
 export function parseBackup(value: unknown): BackupFile {
-  if (!isRecord(value) || value.format !== 'learning-assistant-backup' || (value.version !== 1 && value.version !== 2)
+  if (!isRecord(value) || value.format !== 'learning-assistant-backup' || (value.version !== 1 && value.version !== 2 && value.version !== 3)
     || typeof value.exportedAt !== 'string' || !Number.isFinite(Date.parse(value.exportedAt)) || !isRecord(value.data)) {
     throw new Error('无法识别该备份，请选择由学习助手导出的 JSON 文件。');
   }
@@ -58,6 +60,7 @@ export function parseBackup(value: unknown): BackupFile {
   }
   const studyLogs: StudyLog[] = raw.studyLogs;
   const tasks: LearningTask[] = raw.tasks;
+  const knowledge = value.version === 3 ? validateKnowledge(raw.knowledge, new Set(studyLogs.map((log) => log.id))) : emptyKnowledge();
   if (new Set(studyLogs.map((log) => log.date)).size !== studyLogs.length
     || new Set(studyLogs.map((log) => log.id)).size !== studyLogs.length
     || new Set(tasks.map((task) => task.id)).size !== tasks.length) throw new Error('备份存在重复记录，无法恢复。');
@@ -73,7 +76,7 @@ export function parseBackup(value: unknown): BackupFile {
   if (streak && (!number(streak.currentStreak) || !number(streak.longestStreak) || !number(streak.totalDays)
     || !(streak.lastStudyDate === null || validDate(streak.lastStudyDate)))) throw new Error('打卡记录格式不正确。');
   const images: BackupImage[] = [];
-  if (value.version === 2) {
+  if (value.version >= 2) {
     if (!Array.isArray(value.images)) throw new Error('备份缺少图片数据。');
     for (const image of value.images) {
       if (!isRecord(image) || typeof image.id !== 'string' || typeof image.name !== 'string'
@@ -86,14 +89,14 @@ export function parseBackup(value: unknown): BackupFile {
   }
   const ids = new Set(images.map((image) => image.id));
   if (ids.size !== images.length) throw new Error('图片 ID 重复，无法恢复。');
-  for (const log of studyLogs) {
-    for (const match of log.content.matchAll(/learning-image:([a-zA-Z0-9-]+)/g)) {
+  for (const content of [...studyLogs.map((log) => log.content), ...knowledge.entries.map((entry) => entry.content)]) {
+    for (const match of content.matchAll(/learning-image:([a-zA-Z0-9-]+)/g)) {
       if (!ids.has(match[1])) throw new Error(`备份缺少记录引用的图片：${match[1]}`);
     }
   }
   return {
     format: 'learning-assistant-backup', version: value.version, exportedAt: value.exportedAt,
-    data: { studyLogs, tasks, skillTree, currentGoal, streak, settings: optionalRecord(raw.settings), pomodoroToday: optionalRecord(raw.pomodoroToday) }, images,
+    data: { studyLogs, tasks, skillTree, currentGoal, streak, settings: optionalRecord(raw.settings), pomodoroToday: optionalRecord(raw.pomodoroToday), knowledge }, images,
   };
 }
 
@@ -111,6 +114,7 @@ export async function createBackup(): Promise<BackupFile> {
   for (const [name, key] of Object.entries({
     studyLogs: STORAGE_KEYS.STUDY_LOGS, tasks: STORAGE_KEYS.TASKS, skillTree: STORAGE_KEYS.SKILL_TREE,
     currentGoal: STORAGE_KEYS.CURRENT_GOAL, streak: STORAGE_KEYS.STREAK, settings: STORAGE_KEYS.SETTINGS, pomodoroToday: STORAGE_KEYS.POMODORO_TODAY,
+    knowledge: STORAGE_KEYS.KNOWLEDGE,
   })) {
     const item = localStorage.getItem(key);
     try { raw[name] = item === null ? null : JSON.parse(item); }
@@ -118,8 +122,9 @@ export async function createBackup(): Promise<BackupFile> {
   }
   raw.studyLogs ??= [];
   raw.tasks ??= [];
+  raw.knowledge ??= emptyKnowledge();
   const images = await Promise.all((await getImages()).map(encodeImage));
-  return parseBackup({ format: 'learning-assistant-backup', version: 2, exportedAt: new Date().toISOString(), data: raw, images });
+  return parseBackup({ format: 'learning-assistant-backup', version: 3, exportedAt: new Date().toISOString(), data: raw, images });
 }
 
 export async function restoreBackup(backup: BackupFile): Promise<void> {
@@ -133,6 +138,7 @@ export async function restoreBackup(backup: BackupFile): Promise<void> {
     [STORAGE_KEYS.STUDY_LOGS, checked.data.studyLogs], [STORAGE_KEYS.TASKS, checked.data.tasks],
     [STORAGE_KEYS.SKILL_TREE, checked.data.skillTree], [STORAGE_KEYS.CURRENT_GOAL, checked.data.currentGoal],
     [STORAGE_KEYS.STREAK, checked.data.streak], [STORAGE_KEYS.SETTINGS, checked.data.settings], [STORAGE_KEYS.POMODORO_TODAY, checked.data.pomodoroToday],
+    [STORAGE_KEYS.KNOWLEDGE, checked.data.knowledge],
   ];
   // 避免旧版按日调试键在刷新后重新迁移出不属于这份备份的记录。
   const keys = [...mappings.map(([key]) => key), ...Object.keys(localStorage).filter((key) => key.startsWith('learning-assistant:log:'))];

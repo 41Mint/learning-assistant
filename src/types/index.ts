@@ -58,6 +58,36 @@ export interface LearningTask {
   updatedAt: number;
 }
 
+export interface KnowledgeEntry {
+  id: string;
+  title: string;
+  aliases: string[];
+  category: string;
+  content: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface KnowledgeLogLink {
+  id: string;
+  entryId: string;
+  logId: string;
+  note: string;
+}
+
+export interface KnowledgeRelation {
+  id: string;
+  sourceId: string;
+  targetId: string;
+}
+
+export interface KnowledgeData {
+  version: 1;
+  entries: KnowledgeEntry[];
+  logLinks: KnowledgeLogLink[];
+  relations: KnowledgeRelation[];
+}
+
 // 设置
 export interface Settings {
   studyDuration: number; // 默认25分钟

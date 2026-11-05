@@ -67,12 +67,19 @@ test('图片刷新后可读；历史补充及追加不覆盖旧正文和时长�
 
 test('新版备份包含真实图片；取消无写入；确认恢复后图文一致', async ({ page }) => {
   await importNote(page);
+  await page.evaluate(async () => {
+    const { useStudyLogStore } = await import('/src/store/studyLogStore.ts');
+    const { useKnowledgeStore } = await import('/src/store/knowledgeStore.ts');
+    const log = useStudyLogStore.getState().getLogByDate('2026-11-04');
+    useKnowledgeStore.getState().saveEntry({ title: 'PPU 图示', aliases: [], category: '2D 素材', content: log.content }, undefined, log.id, '原始截图');
+  });
   await page.getByRole('navigation', { name: '主要功能' }).getByRole('link', { name: '数据管理' }).click();
   const downloadEvent = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出完整备份', exact: true }).click();
   const download = await downloadEvent;
   const backup = JSON.parse(await readFile((await download.path())!, 'utf8'));
-  expect(backup.version).toBe(2);
+  expect(backup.version).toBe(3);
+  expect(backup.data.knowledge.entries).toHaveLength(1);
   expect(backup.images).toHaveLength(1);
   expect(Buffer.from(backup.images[0].base64, 'base64').equals(png)).toBe(true);
   const file = { name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) };
@@ -96,6 +103,9 @@ test('新版备份包含真实图片；取消无写入；确认恢复后图文�
   await page.locator('#study-history .markdown-preview img').scrollIntoViewIfNeeded();
   await expect.poll(() => page.locator('#study-history .markdown-preview img').evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
   expect(await page.evaluate(() => localStorage.getItem('learning-assistant:log:2000-01-01'))).toBeNull();
+  await page.locator('#study-history').getByRole('link', { name: 'PPU 图示', exact: true }).click();
+  await page.locator('.knowledge-entry-content img').scrollIntoViewIfNeeded();
+  await expect.poll(() => page.locator('.knowledge-entry-content img').evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
 });
 
 test('旧备份可读取，损坏备份无写入，写入失败可回退', async ({ page }) => {

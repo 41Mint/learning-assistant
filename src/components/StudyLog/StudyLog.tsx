@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import MarkdownContent from '../common/MarkdownContent';
 import MarkdownImport from './MarkdownImport';
+import KnowledgeLinks from '../Knowledge/KnowledgeLinks';
 import { useStudyLogStore } from '../../store/studyLogStore';
 
 export default function StudyLog() {
@@ -115,6 +116,8 @@ export default function StudyLog() {
       </div>
 
       {/* 标签 */}
+      <KnowledgeLinks logId={currentLog.id} legacyPoints={currentLog.knowledgePoints} />
+
       <div className="mb-6">
         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
           标签

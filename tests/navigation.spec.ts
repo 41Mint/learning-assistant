@@ -7,7 +7,7 @@ async function navigate(page: Page, label: string) {
   await expect(link).toHaveAttribute('aria-current', 'page');
 }
 
-test('四个入口分开呈现，刷新和浏览器前后退保留入口', async ({ page }) => {
+test('五个入口分开呈现，刷新和浏览器前后退保留入口', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: '📝 今日学习记录' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '📅 学习历史' })).toBeHidden();
@@ -63,10 +63,10 @@ test('历史草稿在切换入口后保留，长笔记可用固定导航直接�
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
 });
 
-test('窄屏四个入口可操作，页面无横向溢出', async ({ page }, testInfo) => {
+test('窄屏五个入口可操作，页面无横向溢出', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  for (const label of ['今日学习', '学习路径', '历史回顾', '数据管理']) {
+  for (const label of ['今日学习', '学习路径', '历史回顾', '知识词条', '数据管理']) {
     await navigate(page, label);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }

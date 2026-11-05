@@ -7,21 +7,24 @@ import History from './components/History/History';
 import SkillTree from './components/SkillTree/SkillTree';
 import DataBackup from './components/DataManagement/DataBackup';
 import DevTools from './components/DevTools/DevTools';
+import KnowledgeBase from './components/Knowledge/KnowledgeBase';
 import { usePomodoroStore } from './store/pomodoroStore';
 import { useStudyLogStore } from './store/studyLogStore';
 import { useStreakStore } from './store/streakStore';
 import { useCurrentGoalStore } from './store/currentGoalStore';
+import { readWorkspaceHash, useWorkspaceStore } from './store/workspaceStore';
 
 const PAGES = [
   { id: 'today', label: '今日学习', description: '选择目标、专注学习，记录今天的收获。' },
   { id: 'path', label: '学习路径', description: '管理技能节点和具体任务，确定下一步学习目标。' },
   { id: 'history', label: '历史回顾', description: '按日期回看、补充笔记，了解学习投入。' },
+  { id: 'knowledge', label: '知识词条', description: '整理自己的理解与疑问，从知识找回学习情境。' },
   { id: 'data', label: '数据管理', description: '导出完整备份，或从备份恢复学习记录与图片。' },
 ] as const;
 type PageId = typeof PAGES[number]['id'];
 
 function pageFromHash(): PageId | undefined {
-  return PAGES.find((page) => `#${page.id}` === window.location.hash)?.id;
+  return PAGES.find((page) => page.id === readWorkspaceHash().page)?.id;
 }
 
 function SessionStatus() {
@@ -39,7 +42,7 @@ function SessionStatus() {
 
 function App() {
   const [activePage, setActivePage] = useState<PageId>(() => pageFromHash() ?? 'today');
-  const processedPomodorosRef = useRef(0);
+  const processedPomodorosRef = useRef(usePomodoroStore.getState().completedPomodoros);
   const completedPomodoros = usePomodoroStore((state) => state.completedPomodoros);
   const addDuration = useStudyLogStore((state) => state.addDuration);
   const updateStreak = useStreakStore((state) => state.updateStreak);
@@ -48,6 +51,7 @@ function App() {
   useEffect(() => {
     const onHashChange = () => {
       const page = pageFromHash();
+      useWorkspaceStore.getState().syncHash();
       if (page) setActivePage(page);
     };
     window.addEventListener('hashchange', onHashChange);
@@ -113,6 +117,9 @@ function App() {
         </section>
         <section id="data" className="workspace-panel" aria-label="数据管理" hidden={activePage !== 'data'}>
           <DataBackup />
+        </section>
+        <section id="knowledge" className="workspace-panel" aria-label="知识词条" hidden={activePage !== 'knowledge'}>
+          <KnowledgeBase />
         </section>
       </main>
       <DevTools />

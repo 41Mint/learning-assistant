@@ -3,6 +3,8 @@ import { useStudyLogStore } from '../../store/studyLogStore';
 import { getTodayDate } from '../../utils/storage';
 import MarkdownContent from '../common/MarkdownContent';
 import CollapsibleNote from '../common/CollapsibleNote';
+import KnowledgeLinks from '../Knowledge/KnowledgeLinks';
+import { useWorkspaceStore } from '../../store/workspaceStore';
 
 interface CalendarDay {
   date: string; // YYYY-MM-DD
@@ -21,8 +23,9 @@ const formatDateStr = (date: Date): string => {
 
 const History = () => {
   const { logs, loadLogs, getLogByDate, updateLogContent } = useStudyLogStore();
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<string | null>(getTodayDate);
+  const { historyDate: selectedDate, openLog } = useWorkspaceStore();
+  const [calendarView, setCalendarView] = useState(() => ({ date: selectedDate, month: new Date(`${selectedDate}T12:00:00`) }));
+  const currentMonth = useMemo(() => calendarView.date === selectedDate ? calendarView.month : new Date(`${selectedDate}T12:00:00`), [calendarView, selectedDate]);
   const [draft, setDraft] = useState<{ id: string; content: string } | null>(null);
   const [message, setMessage] = useState('');
 
@@ -30,8 +33,8 @@ const History = () => {
     if (draft && !window.confirm('尚未保存的编辑将被放弃，是否切换日期？')) return;
     setDraft(null);
     setMessage('');
-    setSelectedDate(date);
-    setCurrentMonth(new Date(`${date}T12:00:00`));
+    openLog(date);
+    setCalendarView({ date, month: new Date(`${date}T12:00:00`) });
   };
 
   const saveDraft = () => {
@@ -116,11 +119,11 @@ const History = () => {
   }, [currentMonth, logs]);
 
   const goToPrevMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1));
+    setCalendarView({ date: selectedDate, month: new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1) });
   };
 
   const goToNextMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1));
+    setCalendarView({ date: selectedDate, month: new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1) });
   };
 
   const goToToday = () => {
@@ -269,6 +272,8 @@ const History = () => {
                 </div>
               </div>
             )}
+
+            <KnowledgeLinks key={selectedLog.id} logId={selectedLog.id} legacyPoints={selectedLog.knowledgePoints} />
 
             <div className="history-editor">
               {draft?.id === selectedLog.id ? (
