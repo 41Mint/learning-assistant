@@ -50,7 +50,7 @@ export default function DataBackup() {
 
   const skills = pendingBackup?.data.skillTree?.completedIds;
   return (
-    <section className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+    <section className="module-card backup-card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
       <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">💾 数据备份与恢复</h2>
       <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">备份包含学习日志、导入的图片、技能进度、自定义任务、当前目标和打卡数据。恢复会替换当前浏览器中的对应数据。</p>
       <div className="mt-5 flex flex-wrap gap-3">

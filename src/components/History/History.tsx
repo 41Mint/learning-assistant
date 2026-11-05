@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useStudyLogStore } from '../../store/studyLogStore';
 import { getTodayDate } from '../../utils/storage';
 import MarkdownContent from '../common/MarkdownContent';
+import CollapsibleNote from '../common/CollapsibleNote';
 
 interface CalendarDay {
   date: string; // YYYY-MM-DD
@@ -135,7 +136,7 @@ const History = () => {
   const selectedLog = selectedDate ? getLogByDate(selectedDate) : null;
 
   return (
-    <div id="study-history" className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+    <div id="study-history" className="module-card history-card bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
           📅 学习历史
@@ -177,7 +178,7 @@ const History = () => {
       </div>
 
       {/* 星期标题 */}
-      <div className="grid grid-cols-7 gap-2 mb-2">
+      <div className="history-weekdays">
         {['日', '一', '二', '三', '四', '五', '六'].map(day => (
           <div
             key={day}
@@ -189,7 +190,7 @@ const History = () => {
       </div>
 
       {/* 日历格子 */}
-      <div className="grid grid-cols-7 gap-2 mb-6">
+      <div className="history-calendar">
         {calendarDays.map((day, index) => {
           const dayNum = parseInt(day.date.split('-')[2]);
           const isSelected = selectedDate === day.date;
@@ -197,10 +198,15 @@ const History = () => {
           return (
             <button
               key={index}
+              type="button"
               onClick={() => handleDayClick(day)}
               disabled={!day.hasLog}
+              aria-label={`${day.date}${day.hasLog ? `，学习 ${day.duration} 分钟` : '，无记录'}`}
+              aria-pressed={isSelected}
+              data-today={day.isToday || undefined}
+              data-outside-month={!day.isCurrentMonth || undefined}
               className={`
-                aspect-square p-2 rounded-lg text-sm transition-all relative
+                calendar-day p-2 rounded-lg text-sm transition-all relative
                 ${!day.isCurrentMonth ? 'text-gray-400 dark:text-gray-600' : ''}
                 ${day.isToday ? 'ring-2 ring-blue-500' : ''}
                 ${day.hasLog ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700' : 'cursor-not-allowed'}
@@ -210,9 +216,7 @@ const History = () => {
             >
               <div className="font-medium">{dayNum}</div>
               {day.hasLog && (
-                <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div>
-                </div>
+                <span className="calendar-marker" aria-hidden="true" />
               )}
             </button>
           );
@@ -276,10 +280,11 @@ const History = () => {
                   <div className="markdown-preview history-content"><MarkdownContent content={draft.content} /></div>
                 </>
               ) : (
-                <>
-                  <button type="button" className="note-button" onClick={() => { setDraft({ id: selectedLog.id, content: selectedLog.content }); setMessage(''); }}>编辑 / 补充记录</button>
-                  <div className="markdown-preview history-content"><MarkdownContent content={selectedLog.content} /></div>
-                </>
+                <CollapsibleNote
+                  key={selectedLog.id}
+                  content={selectedLog.content}
+                  actions={<button type="button" className="note-button" onClick={() => { setDraft({ id: selectedLog.id, content: selectedLog.content }); setMessage(''); }}>编辑 / 补充记录</button>}
+                />
               )}
               {message && <p role="status">{message}</p>}
             </div>

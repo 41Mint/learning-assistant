@@ -39,7 +39,7 @@ export default function Pomodoro() {
   }, [isRunning, tick]);
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md mx-auto">
+    <div className="module-card pomodoro-card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md mx-auto">
       {/* 模式指示 */}
       <div className="text-center mb-4">
         <span className={`inline-block px-4 py-2 rounded-full text-sm font-semibold ${
@@ -60,7 +60,7 @@ export default function Pomodoro() {
 
       {/* 计时器显示 */}
       <div className="text-center mb-6">
-        <div className="text-6xl font-bold text-gray-800 dark:text-gray-100 mb-2">
+        <div data-testid="timer-display" className="timer-display text-6xl font-bold text-gray-800 dark:text-gray-100 mb-2">
           {formatTime(timeLeft)}
         </div>
         <div className="text-sm text-gray-500 dark:text-gray-400">
@@ -83,7 +83,7 @@ export default function Pomodoro() {
       </div>
 
       {/* 控制按钮 */}
-      <div className="flex gap-3 justify-center">
+      <div className="timer-controls flex gap-3 justify-center">
         <button
           onClick={isRunning ? pauseTimer : startTimer}
           className={`px-6 py-3 rounded-lg font-semibold text-white transition-colors ${

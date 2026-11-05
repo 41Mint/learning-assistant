@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Pomodoro from './components/Pomodoro/Pomodoro';
 import StudyLog from './components/StudyLog/StudyLog';
 import Streak from './components/Streak/Streak';
@@ -12,12 +12,49 @@ import { useStudyLogStore } from './store/studyLogStore';
 import { useStreakStore } from './store/streakStore';
 import { useCurrentGoalStore } from './store/currentGoalStore';
 
+const PAGES = [
+  { id: 'today', label: '今日学习', description: '选择目标、专注学习，记录今天的收获。' },
+  { id: 'path', label: '学习路径', description: '管理技能节点和具体任务，确定下一步学习目标。' },
+  { id: 'history', label: '历史回顾', description: '按日期回看、补充笔记，了解学习投入。' },
+  { id: 'data', label: '数据管理', description: '导出完整备份，或从备份恢复学习记录与图片。' },
+] as const;
+type PageId = typeof PAGES[number]['id'];
+
+function pageFromHash(): PageId | undefined {
+  return PAGES.find((page) => `#${page.id}` === window.location.hash)?.id;
+}
+
+function SessionStatus() {
+  const { isRunning, mode, timeLeft } = usePomodoroStore();
+  const minutes = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+  const seconds = (timeLeft % 60).toString().padStart(2, '0');
+  return (
+    <a className="session-status" href="#today">
+      <span className={`session-dot ${isRunning ? 'running' : ''}`} aria-hidden="true" />
+      {mode === 'study' ? '学习' : '休息'}{isRunning ? '中' : '已暂停'} · {minutes}:{seconds}
+      <span>返回计时器 →</span>
+    </a>
+  );
+}
+
 function App() {
+  const [activePage, setActivePage] = useState<PageId>(() => pageFromHash() ?? 'today');
   const processedPomodorosRef = useRef(0);
   const completedPomodoros = usePomodoroStore((state) => state.completedPomodoros);
   const addDuration = useStudyLogStore((state) => state.addDuration);
   const updateStreak = useStreakStore((state) => state.updateStreak);
   const currentGoal = useCurrentGoalStore((state) => state.goal);
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const page = pageFromHash();
+      if (page) setActivePage(page);
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, [activePage]);
 
   // 当完成番茄钟时，自动增加学习时长并更新Streak
   useEffect(() => {
@@ -30,53 +67,54 @@ function App() {
   }, [completedPomodoros, currentGoal, addDuration, updateStreak]);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4">
-      <div className="max-w-6xl mx-auto">
-        {/* 头部 */}
-        <header className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-            🎮 游戏开发学习助手
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            保持学习动力，记录成长轨迹
-          </p>
-        </header>
+    <div className="app-shell">
+      <header className="app-header">
+        <div>
+          <p className="app-eyebrow">LEARNING ASSISTANT</p>
+          <h1>游戏开发学习助手</h1>
+          <p className="app-description">{PAGES.find((page) => page.id === activePage)?.description}</p>
+        </div>
+        {activePage !== 'today' && <SessionStatus />}
+      </header>
 
-        {/* 番茄钟 */}
-        <section className="mb-8">
+      <nav className="app-navigation" aria-label="主要功能">
+        {PAGES.map((page) => (
+          <a
+            key={page.id}
+            href={`#${page.id}`}
+            aria-current={activePage === page.id ? 'page' : undefined}
+            onClick={(event) => {
+              event.preventDefault();
+              setActivePage(page.id);
+              if (window.location.hash !== `#${page.id}`) window.location.hash = page.id;
+              window.scrollTo({ top: 0, behavior: 'instant' });
+            }}
+          >
+            {page.label}
+          </a>
+        ))}
+      </nav>
+
+      <main>
+        {/* 保留各模块挂载，切换入口时维持计时、日期选择和未保存草稿。 */}
+        <section id="today" className="workspace-panel today-layout" aria-label="今日学习" hidden={activePage !== 'today'}>
           <Pomodoro />
-        </section>
-
-        {/* 学习记录 */}
-        <section className="mb-8">
           <StudyLog />
         </section>
-
-        {/* 统计区域 */}
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          {/* 连续学习 */}
-          <Streak />
-
-          {/* 学习统计 */}
-          <Statistics />
-        </section>
-
-        {/* 学习路径 */}
-        <section className="mb-8">
+        <section id="path" className="workspace-panel" aria-label="学习路径" hidden={activePage !== 'path'}>
           <SkillTree />
         </section>
-
-        {/* 历史记录 */}
-        <section className="mb-8">
+        <section id="history" className="workspace-panel history-layout" aria-label="历史回顾" hidden={activePage !== 'history'}>
           <History />
+          <aside className="history-sidebar" aria-label="学习统计与打卡">
+            <Statistics />
+            <Streak />
+          </aside>
         </section>
-
-        <section className="mb-8">
+        <section id="data" className="workspace-panel" aria-label="数据管理" hidden={activePage !== 'data'}>
           <DataBackup />
         </section>
-      </div>
-
-      {/* 开发者工具（仅开发环境） */}
+      </main>
       <DevTools />
     </div>
   );

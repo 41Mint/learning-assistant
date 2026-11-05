@@ -45,8 +45,8 @@ export default function StudyLog() {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-      <div className="flex justify-between items-center mb-4">
+    <div className="module-card study-log-card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+      <div className="study-log-heading flex justify-between items-center mb-4">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
           📝 今日学习记录
         </h2>
@@ -75,11 +75,11 @@ export default function StudyLog() {
 
         {isEditing ? (
           <div className="space-y-3">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div>
+            <div className="editor-grid grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="editor-pane">
                 <label
                   htmlFor="study-log-content"
-                  className="block mb-2 text-xs font-medium text-gray-500 dark:text-gray-400"
+                  className="editor-pane-label"
                 >
                   编辑
                 </label>
@@ -87,15 +87,15 @@ export default function StudyLog() {
                   id="study-log-content"
                   value={currentLog.content}
                   onChange={(e) => updateContent(e.target.value)}
-                  className="w-full h-72 p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-mono text-sm resize-y"
+                  className="editor-pane-area"
                   placeholder="记录今天学到的内容..."
                 />
               </div>
-              <div>
-                <p className="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+              <div className="editor-pane">
+                <p className="editor-pane-label">
                   实时预览
                 </p>
-                <div className="markdown-preview h-72 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200">
+                <div className="markdown-preview editor-pane-area" role="region" aria-label="学习内容实时预览" tabIndex={0}>
                   <MarkdownContent content={currentLog.content || '开始输入后，这里会显示 Markdown 效果。'} />
                 </div>
               </div>

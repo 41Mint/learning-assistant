@@ -52,6 +52,7 @@ export default function MarkdownImport() {
     <details className="learning-import">
       <summary>导入图文学习记录（Markdown + 图片）</summary>
       <p>选择整理好的 Markdown 和其引用的配套图片。先检查，再保存；导入不会增加学习时长或打卡。</p>
+      <p>已保存的笔记可到 <a href="#history">历史回顾 →</a> 按日期查看和补充。</p>
       <fieldset disabled={busy}>
         <div className="import-fields">
           <label>学习日期<input aria-label="导入学习日期" type="date" value={date} onChange={(event) => setDate(event.target.value)} required /></label>

@@ -116,7 +116,7 @@ export default function Statistics() {
   const todayDuration = durationByDate.get(getTodayDate()) ?? 0;
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+    <div className="module-card stats-card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
       <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">📊 学习统计</h2>
 
       <div className="mb-8 p-4 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-lg">
@@ -139,7 +139,7 @@ export default function Statistics() {
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">近 30 天学习曲线</h3>
           <div className="text-sm text-gray-500 dark:text-gray-400">平均: <span className="font-semibold">{averageDuration(monthData)}</span> 分钟/天</div>
         </div>
-        <div className="overflow-x-auto"><div className="min-w-[720px]"><BarChart data={monthData} type="month" /></div></div>
+        <div className="chart-scroll"><div style={{ minWidth: '1000px' }}><BarChart data={monthData} type="month" /></div></div>
       </div>
 
       <div className="mt-6 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">

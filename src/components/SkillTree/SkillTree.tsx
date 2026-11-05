@@ -44,7 +44,7 @@ export default function SkillTree() {
   const progress = Math.round((completedIds.length / SKILL_PATH.length) * 100);
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+    <div className="module-card skill-tree-card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">🗺️ 游戏开发学习路径</h2>

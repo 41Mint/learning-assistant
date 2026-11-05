@@ -21,6 +21,7 @@ async function importNote(page: Page) {
   await expect(page.locator('.import-preview img')).toHaveCount(1);
   await page.getByRole('button', { name: '保存到该日期', exact: true }).click();
   await expect(page.getByText(`已保存到 ${day} 的学习记录`, { exact: false })).toBeVisible();
+  await page.getByRole('navigation', { name: '主要功能' }).getByRole('link', { name: '历史回顾' }).click();
   await page.getByLabel('定位学习日期').fill(day);
   await expect(page.locator('#study-history .markdown-preview img')).toHaveCount(1);
   await expect.poll(() => page.locator('#study-history .markdown-preview img').evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
@@ -66,6 +67,7 @@ test('图片刷新后可读；历史补充及追加不覆盖旧正文和时长�
 
 test('新版备份包含真实图片；取消无写入；确认恢复后图文一致', async ({ page }) => {
   await importNote(page);
+  await page.getByRole('navigation', { name: '主要功能' }).getByRole('link', { name: '数据管理' }).click();
   const downloadEvent = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出完整备份', exact: true }).click();
   const download = await downloadEvent;
@@ -89,6 +91,7 @@ test('新版备份包含真实图片；取消无写入；确认恢复后图文�
     page.waitForEvent('load'),
     page.getByRole('button', { name: '确认恢复并刷新', exact: true }).click(),
   ]);
+  await page.getByRole('navigation', { name: '主要功能' }).getByRole('link', { name: '历史回顾' }).click();
   await page.getByLabel('定位学习日期').fill(day);
   await page.locator('#study-history .markdown-preview img').scrollIntoViewIfNeeded();
   await expect.poll(() => page.locator('#study-history .markdown-preview img').evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
@@ -130,7 +133,9 @@ test('Day1 真实材料：15 张图片的导入、刷新和备份', async ({ pag
   await page.locator('.learning-import').screenshot({ path: testInfo.outputPath('day1-import.png') });
   await page.getByRole('button', { name: '保存到该日期', exact: true }).click();
   await page.reload();
+  await page.getByRole('navigation', { name: '主要功能' }).getByRole('link', { name: '历史回顾' }).click();
   await page.getByLabel('定位学习日期').fill(day);
+  await page.getByRole('button', { name: '展开全文', exact: true }).click();
   await expect(page.locator('#study-history .markdown-preview img')).toHaveCount(15);
   for (const image of await page.locator('#study-history .markdown-preview img').all()) {
     await image.scrollIntoViewIfNeeded();
