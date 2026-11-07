@@ -16,7 +16,6 @@ interface SkillTreeStore {
   completedIds: string[];
   isLoaded: boolean;
   loadSkillTree: () => void;
-  isUnlocked: (id: string) => boolean;
   toggleCompleted: (id: string) => ToggleResult;
 }
 
@@ -43,11 +42,6 @@ export const useSkillTreeStore = create<SkillTreeStore>((set, get) => ({
     set({ completedIds, isLoaded: true });
   },
 
-  isUnlocked: (id: string) => {
-    const node = getSkillNode(id);
-    return Boolean(node && node.prerequisites.every((prerequisite) => get().completedIds.includes(prerequisite)));
-  },
-
   toggleCompleted: (id: string) => {
     const node = getSkillNode(id);
     if (!node) {
@@ -55,30 +49,11 @@ export const useSkillTreeStore = create<SkillTreeStore>((set, get) => ({
     }
 
     const completedIds = get().completedIds;
-    if (!completedIds.includes(id)) {
-      if (!get().isUnlocked(id)) {
-        return { changed: false, reason: '请先完成该节点的前置学习内容。' };
-      }
-
-      const nextCompletedIds = [...completedIds, id];
-      set({ completedIds: nextCompletedIds });
-      persist(nextCompletedIds);
-      return { changed: true };
-    }
-
-    const completedDependents = SKILL_PATH.filter(
-      (candidate) => candidate.prerequisites.includes(id) && completedIds.includes(candidate.id),
-    );
-    if (completedDependents.length > 0) {
-      return {
-        changed: false,
-        reason: `请先撤销后续节点“${completedDependents[0].name}”的完成状态。`,
-      };
-    }
-
-    const nextCompletedIds = completedIds.filter((completedId) => completedId !== id);
-    set({ completedIds: nextCompletedIds });
+    const nextCompletedIds = completedIds.includes(id)
+      ? completedIds.filter((completedId) => completedId !== id)
+      : [...completedIds, id];
     persist(nextCompletedIds);
+    set({ completedIds: nextCompletedIds });
     return { changed: true };
   },
 }));

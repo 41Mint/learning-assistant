@@ -21,7 +21,7 @@ export default function Pomodoro() {
     switchMode,
     tick,
   } = usePomodoroStore();
-  const { goal, loadCurrentGoal } = useCurrentGoalStore();
+  const { goal, loadCurrentGoal, clearCurrentGoal } = useCurrentGoalStore();
 
   useEffect(() => {
     loadCurrentGoal();
@@ -54,8 +54,9 @@ export default function Pomodoro() {
       <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 p-3 text-center dark:border-blue-900/60 dark:bg-blue-900/20">
         <div className="text-xs font-medium text-blue-700 dark:text-blue-300">当前学习目标</div>
         <div className="mt-1 text-sm font-semibold text-blue-950 dark:text-blue-100">
-          {goal ? goal.label : '暂未选择，可在学习路径中设置'}
+          {goal ? goal.label : '可以直接开始学习'}
         </div>
+        {goal && <button type="button" className="note-button secondary" onClick={clearCurrentGoal}>清除当前目标</button>}
       </div>
 
       {/* 计时器显示 */}

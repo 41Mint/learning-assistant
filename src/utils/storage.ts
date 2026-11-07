@@ -3,6 +3,7 @@
 const STORAGE_KEYS = {
   STUDY_LOGS: 'learning-assistant:study-logs',
   KNOWLEDGE: 'learning-assistant:knowledge',
+  GROWTH: 'learning-assistant:growth',
   SKILL_TREE: 'learning-assistant:skill-tree',
   CURRENT_GOAL: 'learning-assistant:current-goal',
   TASKS: 'learning-assistant:tasks',
@@ -48,6 +49,12 @@ export function formatDate(date: Date): string {
 // 获取今天的日期字符串
 export function getTodayDate(): string {
   return formatDate(new Date());
+}
+
+export function isCalendarDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
 // 计算两个日期之间的天数差

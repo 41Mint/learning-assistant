@@ -5,10 +5,9 @@ import { useTaskStore } from '../../store/taskStore';
 
 interface SkillTasksProps {
   skillId: string;
-  unlocked: boolean;
 }
 
-export default function SkillTasks({ skillId, unlocked }: SkillTasksProps) {
+export default function SkillTasks({ skillId }: SkillTasksProps) {
   const { tasks, isLoaded, loadTasks, addTask, updateTask, toggleTask, deleteTask } = useTaskStore();
   const { goal, setCurrentGoal, clearCurrentGoal } = useCurrentGoalStore();
   const [title, setTitle] = useState('');
@@ -142,8 +141,7 @@ export default function SkillTasks({ skillId, unlocked }: SkillTasksProps) {
         </details>
       )}
 
-      {unlocked ? (
-        <div className="mt-3 space-y-2">
+      <div className="mt-3 space-y-2">
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
@@ -160,10 +158,7 @@ export default function SkillTasks({ skillId, unlocked }: SkillTasksProps) {
           <button type="button" onClick={handleAdd} className="rounded bg-gray-700 px-3 py-1.5 text-sm text-white hover:bg-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500">
             添加任务
           </button>
-        </div>
-      ) : (
-        <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">解锁该节点后可创建关联任务。</p>
-      )}
+      </div>
     </div>
   );
 }

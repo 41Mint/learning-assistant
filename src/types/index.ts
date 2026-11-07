@@ -88,6 +88,28 @@ export interface KnowledgeData {
   relations: KnowledgeRelation[];
 }
 
+export type GrowthDomain = SkillNode['category'];
+
+export interface GrowthPractice {
+  id: string;
+  date: string;
+  note: string;
+  logIds: string[];
+  entryIds: string[];
+}
+
+export interface GrowthOutcome {
+  id: string;
+  title: string;
+  domains: GrowthDomain[];
+  practices: GrowthPractice[];
+}
+
+export interface GrowthData {
+  version: 1;
+  outcomes: GrowthOutcome[];
+}
+
 // 设置
 export interface Settings {
   studyDuration: number; // 默认25分钟

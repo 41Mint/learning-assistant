@@ -41,7 +41,7 @@ test('历史长文默认预览，可展开/收起；短文完整显示，编辑�
   await expand.click();
   await expect(page.getByRole('button', { name: '收起正文', exact: true })).toHaveAttribute('aria-expanded', 'true');
   expect((await page.locator('.collapsible-note-window').boundingBox())!.height).toBeGreaterThan(320);
-  await nav.getByRole('link', { name: '学习路径' }).click();
+  await nav.getByRole('link', { name: '成长记录' }).click();
   await nav.getByRole('link', { name: '历史回顾' }).click();
   await expect(page.getByRole('button', { name: '收起正文', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '收起并返回正文开头', exact: true }).click();

@@ -11,9 +11,9 @@ test('五个入口分开呈现，刷新和浏览器前后退保留入口', async
   await page.goto('/');
   await expect(page.getByRole('heading', { name: '📝 今日学习记录' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '📅 学习历史' })).toBeHidden();
-  await navigate(page, '学习路径');
+  await navigate(page, '成长记录');
   await expect(page).toHaveURL(/#path$/);
-  await expect(page.getByRole('heading', { name: '🗺️ 游戏开发学习路径' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '最近做到' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '📝 今日学习记录' })).toBeHidden();
   await navigate(page, '数据管理');
   await expect(page.getByRole('button', { name: '导出完整备份', exact: true })).toBeVisible();
@@ -31,7 +31,7 @@ test('切换入口持续计时，回到今日不重置且不会重复记时长',
   await page.getByRole('button', { name: '▶️ 开始', exact: true }).click();
   await page.clock.runFor(2000);
   await expect(page.getByTestId('timer-display')).toHaveText('24:58');
-  await navigate(page, '学习路径');
+  await navigate(page, '成长记录');
   await page.clock.runFor(3000);
   await expect(page.locator('.session-status')).toContainText('24:55');
   await navigate(page, '历史回顾');
@@ -66,7 +66,7 @@ test('历史草稿在切换入口后保留，长笔记可用固定导航直接�
 test('窄屏五个入口可操作，页面无横向溢出', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  for (const label of ['今日学习', '学习路径', '历史回顾', '知识词条', '数据管理']) {
+  for (const label of ['今日学习', '成长记录', '历史回顾', '知识词条', '数据管理']) {
     await navigate(page, label);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }

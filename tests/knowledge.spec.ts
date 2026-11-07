@@ -32,7 +32,7 @@ test('名称即可创建；别名检索、分类、Markdown 编辑及草稿在�
   await page.getByLabel('别名（用逗号分隔）').fill('Pixels Per Unit，像素单位');
   await page.getByLabel('分类（可选）').fill('2D 素材');
   await page.getByLabel('词条正文（Markdown）').fill('## 我的理解\n\n16 像素 / 16 PPU = **1 个世界单位**。');
-  await navigate(page, '学习路径');
+  await navigate(page, '成长记录');
   await navigate(page, '知识词条');
   await expect(page.getByLabel('词条正文（Markdown）')).toHaveValue(/16 PPU/);
   await page.getByRole('button', { name: '保存词条', exact: true }).click();
@@ -140,7 +140,7 @@ test('名称/别名冲突阻止保存；相关词条双向且去重；解除及�
   expect(await page.evaluate((key) => localStorage.getItem(key), logsKey)).toBe(beforeLogs);
 });
 
-test('v3 备份在独立浏览器恢复完整词条、说明与双向关联', async ({ page, browser }) => {
+test('完整备份在独立浏览器恢复词条、说明与双向关联', async ({ page, browser }) => {
   await page.goto('/');
   await seedLogs(page);
   await page.evaluate(async () => {
@@ -158,7 +158,7 @@ test('v3 备份在独立浏览器恢复完整词条、说明与双向关联', as
   const download = await downloadEvent;
   const buffer = await readFile((await download.path())!);
   const backup = JSON.parse(buffer.toString('utf8'));
-  expect(backup.version).toBe(3);
+  expect(backup.version).toBe(4);
   expect(backup.data.knowledge.entries).toHaveLength(2);
   const context = await browser.newContext();
   try {
