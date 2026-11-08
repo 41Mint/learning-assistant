@@ -71,14 +71,14 @@ test('新版备份包含真实图片；取消无写入；确认恢复后图文�
     const { useStudyLogStore } = await import('/src/store/studyLogStore.ts');
     const { useKnowledgeStore } = await import('/src/store/knowledgeStore.ts');
     const log = useStudyLogStore.getState().getLogByDate('2026-11-04');
-    useKnowledgeStore.getState().saveEntry({ title: 'PPU 图示', aliases: [], category: '2D 素材', content: log.content }, undefined, log.id, '原始截图');
+    useKnowledgeStore.getState().saveEntry({ title: 'PPU 图示', aliases: [], category: '2D 素材', content: log.content }, { fromLog: { id: log.id, note: '原始截图' } });
   });
   await page.getByRole('navigation', { name: '主要功能' }).getByRole('link', { name: '数据管理' }).click();
   const downloadEvent = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出完整备份', exact: true }).click();
   const download = await downloadEvent;
   const backup = JSON.parse(await readFile((await download.path())!, 'utf8'));
-  expect(backup.version).toBe(4);
+  expect(backup.version).toBe(5);
   expect(backup.data.knowledge.entries).toHaveLength(1);
   expect(backup.images).toHaveLength(1);
   expect(Buffer.from(backup.images[0].base64, 'base64').equals(png)).toBe(true);

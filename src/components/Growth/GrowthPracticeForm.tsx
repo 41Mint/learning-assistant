@@ -1,12 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import { useState } from 'react';
 import { GROWTH_DOMAINS } from '../../data/growthPresets';
 import { useGrowthStore } from '../../store/growthStore';
 import { useKnowledgeStore } from '../../store/knowledgeStore';
+import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
 import type { GrowthOutcome, GrowthPractice } from '../../types';
 import { logLabel } from '../../utils/growth';
+import { codeVersionLabel, practiceCodeIds } from '../../utils/projectCode';
+import { codeSearchFields, entrySearchFields, logSearchFields } from '../../utils/resourceSearch';
 import { generateId, getTodayDate } from '../../utils/storage';
+import FocusEditor from '../common/FocusEditor';
+import ReferenceChoices from '../common/ReferenceChoices';
 
 export interface GrowthDraft {
   outcome: Omit<GrowthOutcome, 'practices'>;
@@ -18,69 +22,48 @@ function toggleSelection<T>(values: T[], value: T) {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
 }
 
-interface ReferenceChoicesProps {
-  title: string;
-  options: { id: string; label: string }[];
-  selected: string[];
-  onChange: (ids: string[]) => void;
-}
-
-function ReferenceChoices({ title, options, selected, onChange }: ReferenceChoicesProps) {
-  const unavailable = selected.filter((id) => !options.some((option) => option.id === id));
-  return (
-    <details className="growth-references">
-      <summary>{title}（{selected.length}）</summary>
-      <fieldset className="growth-options">
-        <legend>{title}</legend>
-        {options.length === 0 && unavailable.length === 0 && <p>暂无可选记录。</p>}
-        {[...options, ...unavailable.map((id) => ({ id, label: '原记录已不可用' }))].map(({ id, label }) => (
-          <label key={id}>
-            <input type="checkbox" checked={selected.includes(id)} onChange={() => onChange(toggleSelection(selected, id))} />
-            {label}
-          </label>
-        ))}
-      </fieldset>
-    </details>
-  );
-}
-
-export default function GrowthPracticeForm({ draft, onClose }: { draft: GrowthDraft; onClose: (saved: boolean) => void }) {
+export default function GrowthPracticeForm({ draft, onClose }: { draft: GrowthDraft; onClose: (savedId?: string) => void }) {
   const [title, setTitle] = useState(draft.outcome.title);
   const [domains, setDomains] = useState(draft.outcome.domains);
   const [date, setDate] = useState(draft.practice?.date ?? getTodayDate);
   const [note, setNote] = useState(draft.practice?.note ?? '');
   const [logIds, setLogIds] = useState(draft.practice?.logIds ?? []);
   const [entryIds, setEntryIds] = useState(draft.practice?.entryIds ?? []);
+  const [codeSelection, setCodeSelection] = useState<string[] | null>(null);
   const [error, setError] = useState('');
-  const formRef = useRef<HTMLFormElement>(null);
   const logs = useStudyLogStore((state) => state.logs);
   const entries = useKnowledgeStore((state) => state.entries);
   const savePractice = useGrowthStore((state) => state.savePractice);
+  const { data: projectCode, isLoaded: codeLoaded, error: codeError } = useProjectCodeStore();
+  const codeIds = codeSelection ?? (draft.practice ? practiceCodeIds(draft.outcome.id, draft.practice, projectCode.links) : []);
+  const codeOptions = [...projectCode.versions].reverse().map((version) => {
+    const projectName = projectCode.projects.find((project) => project.id === version.projectId)?.name ?? '';
+    return { id: version.id, label: codeVersionLabel(version, projectName), fields: codeSearchFields(version, projectName) };
+  });
 
-  useEffect(() => {
-    formRef.current?.scrollIntoView({ block: 'nearest' });
-  }, []);
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const handleSubmit = () => {
     if (!title.trim()) {
       setError('请填写成果名称。');
       return;
     }
     try {
+      const id = draft.practice?.id ?? generateId();
+      const codeVersionIds = codeSelection ?? draft.practice?.codeVersionIds;
       savePractice(
         { id: draft.outcome.id, title: title.trim(), domains },
-        { id: draft.practice?.id ?? generateId(), date, note: note.trim(), logIds, entryIds },
+        { id, date, note: note.trim(), logIds, entryIds, codeVersionIds },
       );
-      onClose(true);
+      onClose(id);
     } catch (error) {
       setError(error instanceof Error ? error.message : '保存失败，请重试。');
     }
   };
 
   return (
-    <form ref={formRef} className="growth-form" aria-label="实践记录表单" onSubmit={handleSubmit}>
-      <h3>{draft.practice ? '编辑实践' : '记录实践'}</h3>
+    <FocusEditor title={draft.practice ? '编辑实践' : '记录实践'}
+      description={draft.practice ? draft.outcome.title + ' · ' + draft.practice.date : '填写这次实践，按需选择相关资料。'}
+      formLabel="实践记录表单" saveLabel="保存实践" cancelLabel="取消" error={error}
+      onSave={handleSubmit} onCancel={() => onClose()}>
       {draft.preset ? (
         <p><strong>{title}</strong> <span className="growth-muted">{domains.join(' · ')}</span></p>
       ) : (
@@ -105,11 +88,16 @@ export default function GrowthPracticeForm({ draft, onClose }: { draft: GrowthDr
       <label className="growth-field">这次做了什么（可选）
         <textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如：跟着教程实现移动，自己调整了速度。" />
       </label>
-      <ReferenceChoices title="关联学习日志" options={[...logs].sort((a, b) => b.date.localeCompare(a.date)).map((log) => ({ id: log.id, label: logLabel(log) }))} selected={logIds} onChange={setLogIds} />
-      <ReferenceChoices title="关联知识词条" options={entries.map((entry) => ({ id: entry.id, label: entry.title }))} selected={entryIds} onChange={setEntryIds} />
-      {error && <p role="alert">{error}</p>}
-      <button type="submit" className="note-button">保存实践</button>
-      <button type="button" className="note-button secondary" onClick={() => onClose(false)}>取消</button>
-    </form>
+      <section className="growth-attachments" aria-label="关联资料（可选）">
+        <h3>关联资料（可选）</h3>
+        <p className="growth-muted">展开需要的类别，所选资料会随这次实践一起保存。</p>
+        <ReferenceChoices title="关联学习日志" options={[...logs].sort((a, b) => b.date.localeCompare(a.date)).map((log) => ({ id: log.id, label: logLabel(log), fields: logSearchFields(log) }))} selected={logIds} onChange={setLogIds} />
+        <ReferenceChoices title="关联知识词条" options={entries.map((entry) => ({ id: entry.id, label: entry.title, fields: entrySearchFields(entry) }))} selected={entryIds} onChange={setEntryIds} />
+        {codeLoaded && !codeError ? (
+          <ReferenceChoices title="关联代码版本" options={codeOptions} selected={codeIds} onChange={setCodeSelection}
+            emptyText="可先在学习日志或项目代码中保存一个版本。" />
+        ) : <p className="growth-muted">{codeError || '正在读取可选的代码版本…'}</p>}
+      </section>
+    </FocusEditor>
   );
 }

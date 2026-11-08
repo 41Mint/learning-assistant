@@ -1,26 +1,27 @@
-import { useEffect, useState } from 'react';
-import MarkdownContent from '../common/MarkdownContent';
+import { useEffect, useRef, useState } from 'react';
+import CollapsibleNote from '../common/CollapsibleNote';
 import MarkdownImport from './MarkdownImport';
 import KnowledgeLinks from '../Knowledge/KnowledgeLinks';
+import CodeLinksPanel from '../ProjectCode/CodeLinksPanel';
 import { useStudyLogStore } from '../../store/studyLogStore';
+import LogContentEditor from './LogContentEditor';
+import type { LogEditingProps } from './LogContentEditor';
 
-export default function StudyLog() {
+export default function StudyLog({ draft, setDraft }: LogEditingProps) {
   const {
     currentLog,
-    isEditing,
     getTodayLog,
     loadLogs,
-    updateContent,
     addTag,
     removeTag,
     addKnowledgePoint,
     removeKnowledgePoint,
-    startEditing,
-    finishEditing,
   } = useStudyLogStore();
 
   const [newTag, setNewTag] = useState('');
   const [newKnowledge, setNewKnowledge] = useState('');
+  const [message, setMessage] = useState('');
+  const editButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     loadLogs();
@@ -45,8 +46,8 @@ export default function StudyLog() {
     return <div>加载中...</div>;
   }
 
-  return (
-    <div className="module-card study-log-card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+  const reading = (
+    <div className="module-card study-log-card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6" hidden={Boolean(draft)}>
       <div className="study-log-heading flex justify-between items-center mb-4">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
           📝 今日学习记录
@@ -58,65 +59,17 @@ export default function StudyLog() {
 
       <MarkdownImport />
 
-      {/* Markdown编辑器 */}
-      <div className="mb-6">
-        <div className="flex justify-between items-center mb-2">
-          <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-            学习内容（支持Markdown）
-          </label>
-          {!isEditing && (
-            <button
-              onClick={startEditing}
-              className="text-sm text-blue-500 hover:text-blue-600"
-            >
-              编辑
-            </button>
-          )}
-        </div>
-
-        {isEditing ? (
-          <div className="space-y-3">
-            <div className="editor-grid grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="editor-pane">
-                <label
-                  htmlFor="study-log-content"
-                  className="editor-pane-label"
-                >
-                  编辑
-                </label>
-                <textarea
-                  id="study-log-content"
-                  value={currentLog.content}
-                  onChange={(e) => updateContent(e.target.value)}
-                  className="editor-pane-area"
-                  placeholder="记录今天学到的内容..."
-                />
-              </div>
-              <div className="editor-pane">
-                <p className="editor-pane-label">
-                  实时预览
-                </p>
-                <div className="markdown-preview editor-pane-area" role="region" aria-label="学习内容实时预览" tabIndex={0}>
-                  <MarkdownContent content={currentLog.content || '开始输入后，这里会显示 Markdown 效果。'} />
-                </div>
-              </div>
-            </div>
-            <button
-              onClick={finishEditing}
-              className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-            >
-              完成编辑
-            </button>
-          </div>
-        ) : (
-          <div className="markdown-preview p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200">
-            <MarkdownContent content={currentLog.content} />
-          </div>
-        )}
-      </div>
+      <CollapsibleNote key={currentLog.id} content={currentLog.content} actions={
+        <button ref={editButton} type="button" className="note-button" onClick={() => {
+          setMessage('');
+          setDraft(currentLog);
+        }}>编辑</button>
+      } />
+      {message && <p role="status">{message}</p>}
 
       {/* 标签 */}
       <KnowledgeLinks logId={currentLog.id} legacyPoints={currentLog.knowledgePoints} />
+      <CodeLinksPanel key={currentLog.id + '-code'} target={{ kind: 'log', id: currentLog.id }} title="项目代码" />
 
       <div className="mb-6">
         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
@@ -197,6 +150,17 @@ export default function StudyLog() {
           </button>
         </div>
       </div>
+    </div>
+  );
+
+  return (
+    <div>
+      {draft && <LogContentEditor key={draft.id} log={draft} kind="today" onClose={(saved) => {
+        setDraft(null);
+        if (saved) setMessage('学习记录已保存。');
+        window.requestAnimationFrame(() => editButton.current?.focus());
+      }} />}
+      {reading}
     </div>
   );
 }

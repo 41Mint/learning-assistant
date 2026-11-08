@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import type { StudyLog } from '../../types';
 import { formatDate, generateId, getStorageItem, getTodayDate, setStorageItem, STORAGE_KEYS } from '../../utils/storage';
 import { usePomodoroStore } from '../../store/pomodoroStore';
-import { writeImages } from '../../utils/imageStorage';
+import { replaceBackupAssets } from '../../utils/projectCodeStorage';
+import { emptyProjectCode } from '../../utils/projectCode';
 
 function addStoredDuration(date: string, minutes: number, content: string) {
   const logs = getStorageItem<StudyLog[]>(STORAGE_KEYS.STUDY_LOGS, []);
@@ -105,8 +106,8 @@ export default function DevTools() {
   const clearAllData = async () => {
     if (!confirm('⚠️ 确定要清空所有数据吗？此操作不可恢复！')) return;
 
-    try { await writeImages([], true); }
-    catch { alert('图片数据未能清空，操作已停止，请重试。'); return; }
+    try { await replaceBackupAssets([], emptyProjectCode()); }
+    catch { alert('图片和项目代码未能清空，操作已停止，请重试。'); return; }
 
     Object.keys(localStorage).forEach(key => {
       if (key.startsWith('learning-assistant:')) {

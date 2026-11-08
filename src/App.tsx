@@ -8,6 +8,9 @@ import GrowthWorkspace from './components/Growth/GrowthWorkspace';
 import DataBackup from './components/DataManagement/DataBackup';
 import DevTools from './components/DevTools/DevTools';
 import KnowledgeBase from './components/Knowledge/KnowledgeBase';
+import ProjectCodeWorkspace from './components/ProjectCode/ProjectCodeWorkspace';
+import ResourceSearch from './components/Search/ResourceSearch';
+import type { StudyLog as Log } from './types';
 import { usePomodoroStore } from './store/pomodoroStore';
 import { useStudyLogStore } from './store/studyLogStore';
 import { useStreakStore } from './store/streakStore';
@@ -19,7 +22,8 @@ const PAGES = [
   { id: 'path', label: '成长记录', description: '回看做成的事，记录每一次新的实践。' },
   { id: 'history', label: '历史回顾', description: '按日期回看、补充笔记，了解学习投入。' },
   { id: 'knowledge', label: '知识词条', description: '整理自己的理解与疑问，从知识找回学习情境。' },
-  { id: 'data', label: '数据管理', description: '导出完整备份，或从备份恢复学习记录与图片。' },
+  { id: 'data', label: '数据管理', description: '导出完整备份，或从备份恢复学习资料。' },
+  { id: 'code', label: '项目代码', description: '回看具体版本的脚本和引用它们的学习经历。' },
 ] as const;
 type PageId = typeof PAGES[number]['id'];
 
@@ -27,21 +31,33 @@ function pageFromHash(): PageId | undefined {
   return PAGES.find((page) => page.id === readWorkspaceHash().page)?.id;
 }
 
-function SessionStatus() {
-  const { isRunning, mode, timeLeft } = usePomodoroStore();
+function SessionStatus({ editingToday, inToday }: { editingToday: boolean; inToday: boolean }) {
+  const { isRunning, mode, timeLeft, startTimer, pauseTimer } = usePomodoroStore();
   const minutes = Math.floor(timeLeft / 60).toString().padStart(2, '0');
   const seconds = (timeLeft % 60).toString().padStart(2, '0');
-  return (
-    <a className="session-status" href="#today">
+  const status = (
+    <>
       <span className={`session-dot ${isRunning ? 'running' : ''}`} aria-hidden="true" />
       {mode === 'study' ? '学习' : '休息'}{isRunning ? '中' : '已暂停'} · {minutes}:{seconds}
-      <span>返回计时器 →</span>
+    </>
+  );
+  return inToday ? (
+    <div className="session-status">
+      {status}
+      <button type="button" onClick={isRunning ? pauseTimer : startTimer}>{isRunning ? '暂停计时' : '开始计时'}</button>
+    </div>
+  ) : (
+    <a className="session-status" href="#today">
+      {status}
+      <span>{editingToday ? '返回今日编辑 →' : '返回计时器 →'}</span>
     </a>
   );
 }
 
 function App() {
   const [activePage, setActivePage] = useState<PageId>(() => pageFromHash() ?? 'today');
+  const [todayDraft, setTodayDraft] = useState<Log | null>(null);
+  const [historyDraft, setHistoryDraft] = useState<Log | null>(null);
   const processedPomodorosRef = useRef(usePomodoroStore.getState().completedPomodoros);
   const completedPomodoros = usePomodoroStore((state) => state.completedPomodoros);
   const addDuration = useStudyLogStore((state) => state.addDuration);
@@ -53,8 +69,10 @@ function App() {
       const page = pageFromHash();
       useWorkspaceStore.getState().syncHash();
       if (page) setActivePage(page);
+      else if (!window.location.hash) setActivePage('today');
     };
     window.addEventListener('hashchange', onHashChange);
+    onHashChange();
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
@@ -78,15 +96,15 @@ function App() {
           <h1>游戏开发学习助手</h1>
           <p className="app-description">{PAGES.find((page) => page.id === activePage)?.description}</p>
         </div>
-        {activePage !== 'today' && <SessionStatus />}
+        {(activePage !== 'today' || todayDraft) && <SessionStatus editingToday={Boolean(todayDraft)} inToday={activePage === 'today'} />}
       </header>
 
       <nav className="app-navigation" aria-label="主要功能">
-        {PAGES.map((page) => (
+        {PAGES.filter((page) => page.id !== 'code').map((page) => (
           <a
             key={page.id}
             href={`#${page.id}`}
-            aria-current={activePage === page.id ? 'page' : undefined}
+            aria-current={activePage === page.id || (activePage === 'code' && page.id === 'path') ? 'page' : undefined}
             onClick={(event) => {
               event.preventDefault();
               setActivePage(page.id);
@@ -97,20 +115,21 @@ function App() {
             {page.label}
           </a>
         ))}
+        <ResourceSearch />
       </nav>
 
       <main>
         {/* 保留各模块挂载，切换入口时维持计时、日期选择和未保存草稿。 */}
-        <section id="today" className="workspace-panel today-layout" aria-label="今日学习" hidden={activePage !== 'today'}>
+        <section id="today" className="workspace-panel today-layout" aria-label="今日学习" hidden={activePage !== 'today'} data-editing={Boolean(todayDraft) || undefined}>
           <Pomodoro />
-          <StudyLog />
+          <StudyLog draft={todayDraft} setDraft={setTodayDraft} />
         </section>
         <section id="path" className="workspace-panel" aria-label="成长记录" hidden={activePage !== 'path'}>
           <GrowthWorkspace />
         </section>
-        <section id="history" className="workspace-panel history-layout" aria-label="历史回顾" hidden={activePage !== 'history'}>
-          <History />
-          <aside className="history-sidebar" aria-label="学习统计与打卡">
+        <section id="history" className="workspace-panel history-layout" aria-label="历史回顾" hidden={activePage !== 'history'} data-editing={Boolean(historyDraft) || undefined}>
+          <History draft={historyDraft} setDraft={setHistoryDraft} />
+          <aside className="history-sidebar" aria-label="学习统计与打卡" hidden={Boolean(historyDraft)}>
             <Statistics />
             <Streak />
           </aside>
@@ -120,6 +139,9 @@ function App() {
         </section>
         <section id="knowledge" className="workspace-panel" aria-label="知识词条" hidden={activePage !== 'knowledge'}>
           <KnowledgeBase />
+        </section>
+        <section id="code" className="workspace-panel" aria-label="项目代码" hidden={activePage !== 'code'}>
+          <ProjectCodeWorkspace />
         </section>
       </main>
       <DevTools />

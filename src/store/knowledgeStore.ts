@@ -1,15 +1,21 @@
 import { create } from 'zustand';
 import type { KnowledgeData, KnowledgeEntry } from '../types';
-import { emptyKnowledge, normalizedName, validateKnowledge } from '../utils/knowledge';
+import { emptyKnowledge, normalizedName, otherEntryId, validateKnowledge } from '../utils/knowledge';
 import { generateId, STORAGE_KEYS } from '../utils/storage';
 import { useStudyLogStore } from './studyLogStore';
 
 export type EntryInput = Pick<KnowledgeEntry, 'title' | 'aliases' | 'category' | 'content'>;
+interface EntrySaveOptions {
+  id?: string;
+  fromLog?: { id: string; note: string };
+  references?: { logIds: string[]; entryIds: string[]; codeVersionIds?: string[] };
+}
+
 interface KnowledgeStore extends KnowledgeData {
   isLoaded: boolean;
   error: string;
   loadKnowledge: () => void;
-  saveEntry: (input: EntryInput, id?: string, fromLogId?: string, note?: string) => string;
+  saveEntry: (input: EntryInput, options?: EntrySaveOptions) => string;
   deleteEntry: (id: string) => void;
   linkLog: (entryId: string, logId: string, note: string) => void;
   unlinkLog: (id: string) => void;
@@ -34,7 +40,7 @@ export const useKnowledgeStore = create<KnowledgeStore>((set, get) => {
         set({ ...(raw === null ? emptyKnowledge() : validateKnowledge(JSON.parse(raw))), isLoaded: true });
       } catch { set({ isLoaded: true, error: '知识数据读取失败，已保留原数据。请先保留备份并联系开发者。' }); }
     },
-    saveEntry: (input, id, fromLogId, note = '') => {
+    saveEntry: (input, { id, fromLog, references } = {}) => {
       const title = input.title.trim();
       if (!title) throw new Error('请填写词条名称。');
       const old = id ? get().entries.find((item) => item.id === id) : undefined;
@@ -42,11 +48,27 @@ export const useKnowledgeStore = create<KnowledgeStore>((set, get) => {
       const aliases = [...new Map(input.aliases.map((alias) => [normalizedName(alias), alias.trim()])).values()]
         .filter((alias) => alias && normalizedName(alias) !== normalizedName(title));
       const now = Date.now();
-      const item: KnowledgeEntry = { ...input, title, aliases, category: input.category.trim(), id: old?.id ?? generateId(), createdAt: old?.createdAt ?? now, updatedAt: now };
+      const item: KnowledgeEntry = {
+        ...input, title, aliases, category: input.category.trim(),
+        id: old?.id ?? generateId(), createdAt: old?.createdAt ?? now, updatedAt: now,
+        codeVersionIds: references?.codeVersionIds ?? old?.codeVersionIds,
+      };
       const next = data();
       next.entries = old ? next.entries.map((entry) => entry.id === id ? item : entry) : [...next.entries, item];
-      if (fromLogId && !next.logLinks.some((link) => link.logId === fromLogId && link.entryId === item.id)) {
-        next.logLinks = [...next.logLinks, { id: generateId(), entryId: item.id, logId: fromLogId, note: note.trim() }];
+      if (references) {
+        const previousLogs = new Map(next.logLinks.filter((link) => link.entryId === item.id).map((link) => [link.logId, link]));
+        next.logLinks = [
+          ...next.logLinks.filter((link) => link.entryId !== item.id),
+          ...references.logIds.map((logId) => previousLogs.get(logId) ?? { id: generateId(), entryId: item.id, logId, note: '' }),
+        ];
+        const previousRelations = new Map(next.relations.map((relation) => [otherEntryId(relation, item.id), relation]));
+        next.relations = [
+          ...next.relations.filter((relation) => otherEntryId(relation, item.id) === undefined),
+          ...references.entryIds.map((entryId) => previousRelations.get(entryId) ?? { id: generateId(), sourceId: item.id, targetId: entryId }),
+        ];
+      }
+      if (fromLog && !next.logLinks.some((link) => link.logId === fromLog.id && link.entryId === item.id)) {
+        next.logLinks = [...next.logLinks, { id: generateId(), entryId: item.id, logId: fromLog.id, note: fromLog.note.trim() }];
       }
       persist(next);
       return item.id;

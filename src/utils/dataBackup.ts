@@ -1,9 +1,12 @@
-import { getImages, IMAGE_PREFIX, writeImages } from './imageStorage';
+import { IMAGE_PREFIX } from './imageStorage';
 import type { StoredImage } from './imageStorage';
 import { isCalendarDate, STORAGE_KEYS } from './storage';
 import type { GrowthData, KnowledgeData, LearningTask, StudyLog } from '../types';
+import type { ProjectCodeData } from '../types/projectCode';
 import { emptyKnowledge, validateKnowledge } from './knowledge';
 import { emptyGrowth, validateGrowth } from './growth';
+import { emptyProjectCode, validateProjectCode } from './projectCode';
+import { readBackupAssets, replaceBackupAssets } from './projectCodeStorage';
 
 interface BackupImage { id: string; name: string; type: string; base64: string }
 interface BackupData {
@@ -16,10 +19,11 @@ interface BackupData {
   pomodoroToday: Record<string, unknown> | null;
   knowledge: KnowledgeData;
   growth: GrowthData;
+  projectCode: ProjectCodeData;
 }
 export interface BackupFile {
   format: 'learning-assistant-backup';
-  version: 1 | 2 | 3 | 4;
+  version: 1 | 2 | 3 | 4 | 5;
   exportedAt: string;
   data: BackupData;
   images: BackupImage[];
@@ -47,7 +51,8 @@ function optionalRecord(value: unknown): Record<string, unknown> | null {
 }
 
 export function parseBackup(value: unknown): BackupFile {
-  if (!isRecord(value) || value.format !== 'learning-assistant-backup' || (value.version !== 1 && value.version !== 2 && value.version !== 3 && value.version !== 4)
+  if (!isRecord(value) || value.format !== 'learning-assistant-backup'
+    || (value.version !== 1 && value.version !== 2 && value.version !== 3 && value.version !== 4 && value.version !== 5)
     || typeof value.exportedAt !== 'string' || !Number.isFinite(Date.parse(value.exportedAt)) || !isRecord(value.data)) {
     throw new Error('无法识别该备份，请选择由学习助手导出的 JSON 文件。');
   }
@@ -58,7 +63,8 @@ export function parseBackup(value: unknown): BackupFile {
   const studyLogs: StudyLog[] = raw.studyLogs;
   const tasks: LearningTask[] = raw.tasks;
   const knowledge = value.version >= 3 ? validateKnowledge(raw.knowledge, new Set(studyLogs.map((log) => log.id))) : emptyKnowledge();
-  const growth = value.version === 4 ? validateGrowth(raw.growth) : emptyGrowth();
+  const growth = value.version >= 4 ? validateGrowth(raw.growth) : emptyGrowth();
+  const projectCode = value.version >= 5 ? validateProjectCode(raw.projectCode) : emptyProjectCode();
   if (new Set(studyLogs.map((log) => log.date)).size !== studyLogs.length
     || new Set(studyLogs.map((log) => log.id)).size !== studyLogs.length
     || new Set(tasks.map((task) => task.id)).size !== tasks.length) throw new Error('备份存在重复记录，无法恢复。');
@@ -94,7 +100,7 @@ export function parseBackup(value: unknown): BackupFile {
   }
   return {
     format: 'learning-assistant-backup', version: value.version, exportedAt: value.exportedAt,
-    data: { studyLogs, tasks, skillTree, currentGoal, streak, settings: optionalRecord(raw.settings), pomodoroToday: optionalRecord(raw.pomodoroToday), knowledge, growth }, images,
+    data: { studyLogs, tasks, skillTree, currentGoal, streak, settings: optionalRecord(raw.settings), pomodoroToday: optionalRecord(raw.pomodoroToday), knowledge, growth, projectCode }, images,
   };
 }
 
@@ -123,8 +129,10 @@ export async function createBackup(): Promise<BackupFile> {
   raw.tasks ??= [];
   raw.knowledge ??= emptyKnowledge();
   raw.growth ??= emptyGrowth();
-  const images = await Promise.all((await getImages()).map(encodeImage));
-  return parseBackup({ format: 'learning-assistant-backup', version: 4, exportedAt: new Date().toISOString(), data: raw, images });
+  const assets = await readBackupAssets();
+  raw.projectCode = assets.projectCode;
+  const images = await Promise.all(assets.images.map(encodeImage));
+  return parseBackup({ format: 'learning-assistant-backup', version: 5, exportedAt: new Date().toISOString(), data: raw, images });
 }
 
 export async function restoreBackup(backup: BackupFile): Promise<void> {
@@ -147,8 +155,8 @@ export async function restoreBackup(backup: BackupFile): Promise<void> {
   try {
     keys.forEach((key) => localStorage.removeItem(key));
     mappings.forEach(([key, value]) => { if (value !== null) localStorage.setItem(key, JSON.stringify(value)); });
-    // IDB 事务若失败会保留原图；此后没有会失败的持久化步骤。
-    await writeImages(images, true);
+    // 图片和项目代码在同一次事务里替换，失败时两者均回退。
+    await replaceBackupAssets(images, checked.data.projectCode);
   } catch (error) {
     keys.forEach((key) => localStorage.removeItem(key));
     previous.forEach(([key, value]) => { if (value !== null) localStorage.setItem(key, value); });

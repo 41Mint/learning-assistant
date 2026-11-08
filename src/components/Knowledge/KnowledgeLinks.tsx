@@ -20,7 +20,7 @@ export default function KnowledgeLinks({ logId, legacyPoints = [] }: { logId: st
     catch (error) { setMessage(error instanceof Error ? error.message : '保存失败，请重试。'); }
   };
   const create = (name: string) => execute(() => {
-    store.saveEntry({ title: name, aliases: [], category: '', content: '' }, undefined, logId, note);
+    store.saveEntry({ title: name, aliases: [], category: '', content: '' }, { fromLog: { id: logId, note } });
     setTitle('');
   });
 

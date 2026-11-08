@@ -23,7 +23,8 @@ function uniqueStrings(value: unknown): value is string[] {
 
 function isPractice(value: unknown): value is GrowthPractice {
   return isRecord(value) && nonempty(value.id) && isCalendarDate(value.date)
-    && typeof value.note === 'string' && uniqueStrings(value.logIds) && uniqueStrings(value.entryIds);
+    && typeof value.note === 'string' && uniqueStrings(value.logIds) && uniqueStrings(value.entryIds)
+    && (value.codeVersionIds === undefined || uniqueStrings(value.codeVersionIds));
 }
 
 function isOutcome(value: unknown): value is GrowthOutcome {

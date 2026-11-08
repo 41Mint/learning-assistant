@@ -41,7 +41,6 @@ function migrateLegacyLogs(logs: StudyLog[]): StudyLog[] {
 interface StudyLogStore {
   logs: StudyLog[];
   currentLog: StudyLog | null;
-  isEditing: boolean;
 
   // 加载所有日志
   loadLogs: () => void;
@@ -52,7 +51,7 @@ interface StudyLogStore {
   // 保存日志
   saveLog: (log: StudyLog) => void;
   appendToDate: (date: string, content: string) => void;
-  updateLogContent: (id: string, content: string) => void;
+  updateLogContent: (id: string, content: string, originalContent?: string) => void;
 
   // 更新当前日志内容
   updateContent: (content: string) => void;
@@ -72,12 +71,6 @@ interface StudyLogStore {
   // 增加学习时长（分钟）
   addDuration: (minutes: number, contextTag?: string) => void;
 
-  // 开始编辑
-  startEditing: () => void;
-
-  // 结束编辑
-  finishEditing: () => void;
-
   // 获取指定日期的日志
   getLogByDate: (date: string) => StudyLog | undefined;
 }
@@ -85,7 +78,6 @@ interface StudyLogStore {
 export const useStudyLogStore = create<StudyLogStore>((set, get) => ({
   logs: [],
   currentLog: null,
-  isEditing: false,
 
   loadLogs: () => {
     const logs = getStorageItem<StudyLog[]>(STORAGE_KEYS.STUDY_LOGS, []);
@@ -151,9 +143,12 @@ export const useStudyLogStore = create<StudyLogStore>((set, get) => ({
     get().saveLog({ ...log, content: emptyHeading ? content : `${log.content.trimEnd()}\n\n---\n\n${content}` });
   },
 
-  updateLogContent: (id, content) => {
+  updateLogContent: (id, content, originalContent) => {
     const log = get().logs.find((candidate) => candidate.id === id);
     if (!log) throw new Error('这条记录不存在，请重新打开后再编辑。');
+    if (originalContent !== undefined && log.content !== originalContent) {
+      throw new Error('这篇正文已有新的保存内容。请先复制本次草稿，再重新打开记录核对。');
+    }
     get().saveLog({ ...log, content });
   },
 
@@ -216,10 +211,6 @@ export const useStudyLogStore = create<StudyLogStore>((set, get) => ({
       tags,
     });
   },
-
-  startEditing: () => set({ isEditing: true }),
-
-  finishEditing: () => set({ isEditing: false }),
 
   getLogByDate: (date: string) => {
     return get().logs.find(l => l.date === date);

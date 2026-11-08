@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { createBackup, parseBackup, restoreBackup } from '../../utils/dataBackup';
 import type { BackupFile } from '../../utils/dataBackup';
 import { usePomodoroStore } from '../../store/pomodoroStore';
+import { effectiveCodeLinks } from '../../utils/projectCode';
 
 export default function DataBackup() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -20,7 +21,7 @@ export default function DataBackup() {
       link.download = `learning-assistant-backup-${new Date().toISOString().slice(0, 10)}.json`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setMessage(`备份已下载，包含 ${backup.data.studyLogs.length} 条日志、${backup.images.length} 张图片、${backup.data.knowledge.entries.length} 个知识词条和 ${backup.data.growth.outcomes.length} 项成果。`);
+      setMessage(`备份已下载，包含 ${backup.data.studyLogs.length} 条日志、${backup.images.length} 张图片、${backup.data.knowledge.entries.length} 个知识词条、${backup.data.growth.outcomes.length} 项成果和 ${backup.data.projectCode.versions.length} 个代码版本。`);
     } catch (error) { setMessage(error instanceof Error ? error.message : '导出失败，请重试。'); }
     finally { setBusy(false); }
   };
@@ -53,11 +54,12 @@ export default function DataBackup() {
     pendingBackup.version < 2 ? '图片' : '',
     pendingBackup.version < 3 ? '知识词条' : '',
     pendingBackup.version < 4 ? '成长记录' : '',
+    pendingBackup.version < 5 ? '项目代码' : '',
   ].filter(Boolean) : [];
   return (
     <section className="module-card backup-card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
       <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">💾 数据备份与恢复</h2>
-      <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">备份包含学习日志、图片、知识词条、成果与实践、参考路径记录、任务、当前目标和打卡数据。恢复会替换当前浏览器中的对应数据。</p>
+      <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">备份包含日志、图片、词条、成长记录、项目代码及学习进度。恢复会替换当前浏览器中的对应数据。</p>
       <div className="mt-5 flex flex-wrap gap-3">
         <button type="button" disabled={busy} onClick={handleExport} className="note-button">{busy ? '处理中…' : '导出完整备份'}</button>
         <button type="button" disabled={busy} onClick={() => inputRef.current?.click()} className="note-button secondary">选择备份文件恢复</button>
@@ -70,6 +72,7 @@ export default function DataBackup() {
           <p className="mt-1 text-sm text-amber-800 dark:text-amber-200">导出时间：{new Date(pendingBackup.exportedAt).toLocaleString()}；包含 {pendingBackup.data.studyLogs.length} 条日志、{pendingBackup.data.tasks.length} 个任务、{Array.isArray(skills) ? skills.length : 0} 个已完成技能节点、{pendingBackup.images.length} 张图片。</p>
           <p>{pendingBackup.data.knowledge.entries.length} 个知识词条、{pendingBackup.data.knowledge.logLinks.length} 个日志关联、{pendingBackup.data.knowledge.relations.length} 个词条间关联。</p>
           <p>{pendingBackup.data.growth.outcomes.length} 项成果、{pendingBackup.data.growth.outcomes.reduce((count, outcome) => count + outcome.practices.length, 0)} 次实践。</p>
+          <p>{pendingBackup.data.projectCode.projects.length} 个项目、{pendingBackup.data.projectCode.versions.length} 个代码版本、{effectiveCodeLinks(pendingBackup.data.projectCode, pendingBackup.data.growth.outcomes, pendingBackup.data.knowledge.entries).length} 条代码关联。</p>
           <p className="mt-2 text-sm font-medium text-red-700 dark:text-red-300">恢复会替换当前数据，建议先导出当前备份。{missing.length > 0 && `该旧备份不包含${missing.join('、')}，恢复后这些内容为空。`}</p>
           <div className="mt-3 flex gap-3">
             <button type="button" disabled={busy} onClick={restore} className="note-button" style={{ backgroundColor: '#dc2626' }}>确认恢复并刷新</button>

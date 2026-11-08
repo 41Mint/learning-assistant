@@ -1,3 +1,5 @@
+import { IMAGE_STORE as STORE, openAssetDatabase as openDatabase } from './assetDatabase';
+
 export interface StoredImage {
   id: string;
   name: string;
@@ -5,17 +7,6 @@ export interface StoredImage {
 }
 
 export const IMAGE_PREFIX = 'learning-image:';
-const DATABASE = 'learning-assistant-assets';
-const STORE = 'images';
-
-function openDatabase(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DATABASE, 1);
-    request.onupgradeneeded = () => request.result.createObjectStore(STORE, { keyPath: 'id' });
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(new Error('无法打开图片存储，请检查浏览器是否允许保存本站数据。'));
-  });
-}
 
 export async function getImages(): Promise<StoredImage[]> {
   const database = await openDatabase();

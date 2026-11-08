@@ -102,7 +102,7 @@ test('旧节点和任务保留，参考基础不锁住后续节点，目标可�
   await expect(page.getByRole('region', { name: '最近做到' }).getByRole('article')).toHaveCount(0);
 });
 
-test('v4 在独立浏览器恢复实践与回链，v3 继续恢复词条和任务', async ({ page, browser }) => {
+test('完整备份在独立浏览器恢复实践与回链，v3 继续恢复词条和任务', async ({ page, browser }) => {
   await seedLearning(page);
   await page.goto('/#path');
   await recordPreset(page);
@@ -110,7 +110,7 @@ test('v4 在独立浏览器恢复实践与回链，v3 继续恢复词条和任�
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出完整备份' }).click();
   const backup = JSON.parse(await readFile((await (await download).path())!, 'utf8'));
-  expect(backup.version).toBe(4);
+  expect(backup.version).toBe(5);
 
   const context = await browser.newContext();
   try {

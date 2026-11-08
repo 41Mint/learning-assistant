@@ -66,6 +66,7 @@ export interface KnowledgeEntry {
   content: string;
   createdAt: number;
   updatedAt: number;
+  codeVersionIds?: string[];
 }
 
 export interface KnowledgeLogLink {
@@ -96,6 +97,7 @@ export interface GrowthPractice {
   note: string;
   logIds: string[];
   entryIds: string[];
+  codeVersionIds?: string[];
 }
 
 export interface GrowthOutcome {

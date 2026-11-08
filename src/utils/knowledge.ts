@@ -12,13 +12,20 @@ function timestamp(value: unknown): value is number { return typeof value === 'n
 function entry(value: unknown): value is KnowledgeEntry {
   return record(value) && identifier(value.id) && identifier(value.title) && Array.isArray(value.aliases)
     && value.aliases.every(identifier) && typeof value.category === 'string' && typeof value.content === 'string'
-    && timestamp(value.createdAt) && timestamp(value.updatedAt);
+    && timestamp(value.createdAt) && timestamp(value.updatedAt)
+    && (value.codeVersionIds === undefined || Array.isArray(value.codeVersionIds)
+      && value.codeVersionIds.every(identifier) && new Set(value.codeVersionIds).size === value.codeVersionIds.length);
 }
 function link(value: unknown): value is KnowledgeLogLink {
   return record(value) && identifier(value.id) && identifier(value.entryId) && identifier(value.logId) && typeof value.note === 'string';
 }
 function relation(value: unknown): value is KnowledgeRelation {
   return record(value) && identifier(value.id) && identifier(value.sourceId) && identifier(value.targetId) && value.sourceId !== value.targetId;
+}
+
+export function otherEntryId(relation: KnowledgeRelation, entryId: string): string | undefined {
+  if (relation.sourceId === entryId) return relation.targetId;
+  if (relation.targetId === entryId) return relation.sourceId;
 }
 
 export function validateKnowledge(value: unknown, logIds?: Set<string>): KnowledgeData {

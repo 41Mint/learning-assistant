@@ -1,10 +1,12 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useStudyLogStore } from '../../store/studyLogStore';
 import { getTodayDate } from '../../utils/storage';
-import MarkdownContent from '../common/MarkdownContent';
 import CollapsibleNote from '../common/CollapsibleNote';
 import KnowledgeLinks from '../Knowledge/KnowledgeLinks';
+import CodeLinksPanel from '../ProjectCode/CodeLinksPanel';
 import { useWorkspaceStore } from '../../store/workspaceStore';
+import LogContentEditor from '../StudyLog/LogContentEditor';
+import type { LogEditingProps } from '../StudyLog/LogContentEditor';
 
 interface CalendarDay {
   date: string; // YYYY-MM-DD
@@ -21,29 +23,18 @@ const formatDateStr = (date: Date): string => {
   return `${year}-${month}-${day}`;
 };
 
-const History = () => {
-  const { logs, loadLogs, getLogByDate, updateLogContent } = useStudyLogStore();
+const History = ({ draft, setDraft }: LogEditingProps) => {
+  const { logs, loadLogs, getLogByDate } = useStudyLogStore();
   const { historyDate: selectedDate, openLog } = useWorkspaceStore();
   const [calendarView, setCalendarView] = useState(() => ({ date: selectedDate, month: new Date(`${selectedDate}T12:00:00`) }));
   const currentMonth = useMemo(() => calendarView.date === selectedDate ? calendarView.month : new Date(`${selectedDate}T12:00:00`), [calendarView, selectedDate]);
-  const [draft, setDraft] = useState<{ id: string; content: string } | null>(null);
   const [message, setMessage] = useState('');
+  const editButton = useRef<HTMLButtonElement>(null);
 
   const selectDate = (date: string) => {
-    if (draft && !window.confirm('尚未保存的编辑将被放弃，是否切换日期？')) return;
-    setDraft(null);
     setMessage('');
     openLog(date);
     setCalendarView({ date, month: new Date(`${date}T12:00:00`) });
-  };
-
-  const saveDraft = () => {
-    if (!draft) return;
-    try {
-      updateLogContent(draft.id, draft.content);
-      setDraft(null);
-      setMessage('补充内容已保存，原有时长、标签和知识点保持不变。');
-    } catch (error) { setMessage(error instanceof Error ? error.message : '保存失败，请重试。'); }
   };
 
   useEffect(() => {
@@ -138,8 +129,8 @@ const History = () => {
 
   const selectedLog = selectedDate ? getLogByDate(selectedDate) : null;
 
-  return (
-    <div id="study-history" className="module-card history-card bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+  const reading = (
+    <div className="module-card history-card bg-white dark:bg-gray-800 rounded-lg shadow-md p-6" hidden={Boolean(draft)}>
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
           📅 学习历史
@@ -274,23 +265,17 @@ const History = () => {
             )}
 
             <KnowledgeLinks key={selectedLog.id} logId={selectedLog.id} legacyPoints={selectedLog.knowledgePoints} />
+            <CodeLinksPanel key={selectedLog.id + '-code'} target={{ kind: 'log', id: selectedLog.id }} title="项目代码" />
 
             <div className="history-editor">
-              {draft?.id === selectedLog.id ? (
-                <>
-                  <label htmlFor="history-content">编辑 / 补充 {selectedDate} 的学习内容</label>
-                  <textarea id="history-content" aria-label="历史学习内容" value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.target.value })} />
-                  <button type="button" className="note-button" onClick={saveDraft}>保存补充</button>
-                  <button type="button" className="note-button secondary" onClick={() => setDraft(null)}>取消编辑</button>
-                  <div className="markdown-preview history-content"><MarkdownContent content={draft.content} /></div>
-                </>
-              ) : (
-                <CollapsibleNote
-                  key={selectedLog.id}
-                  content={selectedLog.content}
-                  actions={<button type="button" className="note-button" onClick={() => { setDraft({ id: selectedLog.id, content: selectedLog.content }); setMessage(''); }}>编辑 / 补充记录</button>}
-                />
-              )}
+              <CollapsibleNote
+                key={selectedLog.id}
+                content={selectedLog.content}
+                actions={<button ref={editButton} type="button" className="note-button" onClick={() => {
+                  setMessage('');
+                  setDraft(selectedLog);
+                }}>编辑 / 补充记录</button>}
+              />
               {message && <p role="status">{message}</p>}
             </div>
           </div>
@@ -304,6 +289,20 @@ const History = () => {
         </div>
       )}
       {selectedDate && !selectedLog && <p className="text-sm text-gray-500 dark:text-gray-400">该日期暂无记录，可使用上方“导入图文学习记录”保存学习材料。</p>}
+    </div>
+  );
+
+  return (
+    <div id="study-history">
+      {draft && <LogContentEditor key={draft.id} log={draft} kind="history" onClose={(saved) => {
+        setDraft(null);
+        if (saved) {
+          setMessage('补充内容已保存。');
+          if (selectedDate !== draft.date) openLog(draft.date);
+        }
+        window.requestAnimationFrame(() => editButton.current?.focus());
+      }} />}
+      {reading}
     </div>
   );
 };
