@@ -192,6 +192,9 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .search-results a { color: var(--app-accent); font-weight: 600; }
 .search-muted, .search-excerpt { margin: 4px 0; font-size: 13px; line-height: 1.55; }
 .search-muted { color: var(--app-muted); }
+.search-match { background: #fde68a; color: inherit; border-radius: 2px; }
+.search-source-option { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+@media (prefers-color-scheme: dark) { .search-match { background: #eab3084d; } }
 .workspace-panel { min-width: 0; padding-bottom: 28px; }
 .workspace-panel[hidden] { display: none !important; }
 .today-layout { display: grid; grid-template-columns: minmax(270px, 320px) minmax(0, 1fr); gap: 22px; align-items: start; }

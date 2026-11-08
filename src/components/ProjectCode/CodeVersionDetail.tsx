@@ -3,12 +3,16 @@ import { useGrowthStore } from '../../store/growthStore';
 import { useKnowledgeStore } from '../../store/knowledgeStore';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
-import { practiceHref } from '../../store/workspaceStore';
+import { practiceHref, readWorkspaceHash, useWorkspaceStore } from '../../store/workspaceStore';
+import type { SearchLocation } from '../../store/workspaceStore';
 import type { CodeProject, CodeVersion } from '../../types/projectCode';
 import { logLabel } from '../../utils/growth';
-import { codeTargetKey, codeVersionHref, codeVersionSource, effectiveCodeLinks, parseCodePermalink } from '../../utils/projectCode';
+import { codeTargetKey, codeVersionSource, effectiveCodeLinks, parseCodePermalink } from '../../utils/projectCode';
+import { matchScriptLine } from '../../utils/searchMatches';
 import MarkdownContent from '../common/MarkdownContent';
 import FocusEditor from '../common/FocusEditor';
+import HighlightedText from '../common/HighlightedText';
+import { useScrollToSearchMatch } from '../common/useScrollToSearchMatch';
 
 function CodeReferences({ versionId }: { versionId: string }) {
   const data = useProjectCodeStore((state) => state.data);
@@ -47,7 +51,7 @@ function CodeReferences({ versionId }: { versionId: string }) {
   );
 }
 
-function ScriptPreview({ content }: { content: string }) {
+function ScriptPreview({ content, search }: { content: string; search: SearchLocation | null }) {
   const markdown = useMemo(() => {
     // 选择比脚本里任何可能闭合代码块的围栏更长的围栏。
     let length = 3;
@@ -55,10 +59,12 @@ function ScriptPreview({ content }: { content: string }) {
     const fence = '~'.repeat(length);
     return fence + 'csharp\n' + content + '\n' + fence;
   }, [content]);
+  const match = search?.inSource ? matchScriptLine(content, search.words) : undefined;
   return (
     <section className="code-preview" aria-label="脚本快照">
       <h3>脚本快照</h3>
-      {content ? <div className="markdown-preview"><MarkdownContent content={markdown} /></div> : <p>这份脚本为空文件。</p>}
+      {match && <p className="code-muted">命中第 {match.line} 行</p>}
+      {content ? <div className="markdown-preview" data-search-body><MarkdownContent content={markdown} searchWords={match ? search?.words : undefined} /></div> : <p>这份脚本为空文件。</p>}
     </section>
   );
 }
@@ -71,6 +77,9 @@ export default function CodeVersionDetail({ version, project }: { version: CodeV
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const editTrigger = useRef<HTMLButtonElement>(null);
+  const detail = useRef<HTMLElement>(null);
+  const search = useWorkspaceStore((state) => state.search?.page === 'code' && state.search.id === version.id ? state.search : null);
+  useScrollToSearchMatch(detail, search);
   const commit = version.githubUrl ? parseCodePermalink(version.githubUrl).commit : '';
 
   const closeEditor = (message = '') => {
@@ -97,7 +106,8 @@ export default function CodeVersionDetail({ version, project }: { version: CodeV
     setBusy(true);
     try {
       await deleteVersion(version.id);
-      if (window.location.hash === codeVersionHref(version.id)) window.location.hash = 'code';
+      const { page, id } = readWorkspaceHash();
+      if (page === 'code' && id === version.id) window.location.hash = 'code';
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '删除失败，请重试。');
     } finally {
@@ -131,11 +141,11 @@ export default function CodeVersionDetail({ version, project }: { version: CodeV
   }
 
   return (
-    <article className="module-card code-version">
-      <p className="code-muted">{project.name}</p>
-      <h2>{version.path}</h2>
+    <article ref={detail} className="module-card code-version">
+      <p className="code-muted"><HighlightedText text={project.name} words={search?.words} /></p>
+      <h2><HighlightedText text={version.path} words={search?.words} /></h2>
       <p className="code-muted">{codeVersionSource(version)} · 保存于 {new Date(version.savedAt).toLocaleString('zh-CN')}</p>
-      {version.note && <p className="code-note">{version.note}</p>}
+      {version.note && <p className="code-note"><HighlightedText text={version.note} words={search?.words} /></p>}
       {version.githubUrl && (
         <p>
           <a href={version.githubUrl} target="_blank" rel="noreferrer">在 GitHub 查看此版本</a> <code>{commit.slice(0, 10)}</code>
@@ -153,7 +163,7 @@ export default function CodeVersionDetail({ version, project }: { version: CodeV
       {message && <p role="status">{message}</p>}
       {version.content === null
         ? <p className="code-muted">此版本仅保存链接。私有文件可用有权限的 GitHub 账号打开。</p>
-        : <ScriptPreview content={version.content} />}
+        : <ScriptPreview content={version.content} search={search} />}
       <CodeReferences versionId={version.id} />
     </article>
   );

@@ -136,7 +136,8 @@ test('Day1 真实材料：15 张图片的导入、刷新和备份', async ({ pag
   test.skip(!source, '设置 DAY1_NOTE 后使用本机真实学习材料验证，不把个人材料放入仓库。');
   const directory = path.dirname(source!);
   const files = (await readdir(path.join(directory, 'images'))).map((name) => path.join(directory, 'images', name));
-  await openImport(page, await readFile(source!, 'utf8'));
+  const markdown = await readFile(source!, 'utf8');
+  await openImport(page, markdown);
   await page.getByLabel('配套图片', { exact: true }).setInputFiles(files);
   await page.getByRole('button', { name: '检查并预览', exact: true }).click();
   await expect(page.locator('.import-preview img')).toHaveCount(15);
@@ -152,6 +153,15 @@ test('Day1 真实材料：15 张图片的导入、刷新和备份', async ({ pag
     await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0)).toBe(true);
   }
   await expect.poll(() => page.locator('#study-history .markdown-preview img').evaluateAll((images: HTMLImageElement[]) => images.every((image) => image.complete && image.naturalWidth > 0))).toBe(true);
+  const heading = [...markdown.matchAll(/^#{1,6} +([\p{Letter}\p{Number}]{3,})[ \t]*\r?$/gmu)].at(-1)?.[1];
+  if (heading) {
+    await page.getByRole('button', { name: '收起正文', exact: true }).click();
+    await page.getByRole('button', { name: '检索资料', exact: true }).click();
+    const search = page.getByRole('dialog', { name: '检索资料' });
+    await search.getByRole('searchbox').fill(heading);
+    await search.getByRole('link', { name: new RegExp(day) }).click();
+    await expect(page.locator('#study-history .markdown-preview .search-match').first()).toBeInViewport({ ratio: 1 });
+  }
   const counts = await page.evaluate(async () => {
     const { createBackup } = await import('/src/utils/dataBackup.ts');
     const backup = await createBackup();

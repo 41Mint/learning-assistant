@@ -355,9 +355,19 @@ test('实际 Unity 脚本可保存为快照，GitHub 来源保留在备份中', 
     await expect(page.getByRole('link', { name: '在 GitHub 查看此版本' })).toHaveAttribute('href', source);
     await expect(page.getByRole('heading', { name: 'Assets/Scripts/' + fileName, exact: true })).toBeVisible();
   }
+  const scriptText = new TextDecoder('utf-8', { fatal: true }).decode(await readFile(sample!));
+  const identifier = scriptText.match(/\b([A-Za-z_]\w{3,})\s*\(/)?.[1];
+  if (identifier) {
+    await page.getByRole('button', { name: '检索资料', exact: true }).click();
+    const search = page.getByRole('dialog', { name: '检索资料' });
+    await search.getByRole('button', { name: '代码版本', exact: true }).click();
+    await search.getByRole('checkbox', { name: '搜索脚本正文（本地快照）' }).check();
+    await search.getByRole('searchbox').fill(identifier);
+    await search.getByRole('link', { name: new RegExp(fileName) }).click();
+    await expect(page.getByRole('region', { name: '脚本快照' }).locator('pre code.hljs .search-match').first()).toBeInViewport({ ratio: 1 });
+  }
   const backup = await downloadBackup(page);
   const version = backup.data.projectCode.versions[0];
-  const bytes = await readFile(sample!);
-  expect(version.content === new TextDecoder('utf-8', { fatal: true }).decode(bytes)).toBe(true);
+  expect(version.content === scriptText).toBe(true);
   expect(version.githubUrl).toBe(source ?? '');
 });

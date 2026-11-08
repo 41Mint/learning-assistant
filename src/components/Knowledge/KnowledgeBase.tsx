@@ -8,6 +8,8 @@ import { logLabel } from '../../utils/growth';
 import { entryNames, normalizedName, otherEntryId } from '../../utils/knowledge';
 import { codeVersionHref, codeVersionLabel, entryCodeIds } from '../../utils/projectCode';
 import MarkdownContent from '../common/MarkdownContent';
+import HighlightedText from '../common/HighlightedText';
+import { useScrollToSearchMatch } from '../common/useScrollToSearchMatch';
 import KnowledgeEditor from './KnowledgeEditor';
 
 export default function KnowledgeBase() {
@@ -15,15 +17,18 @@ export default function KnowledgeBase() {
   const loadKnowledge = store.loadKnowledge;
   const logs = useStudyLogStore((state) => state.logs);
   const code = useProjectCodeStore((state) => state.data);
-  const { entryId, openEntry, openLog } = useWorkspaceStore();
+  const { entryId, openEntry, openLog, search: searchLocation } = useWorkspaceStore();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ entry?: KnowledgeEntry } | null>(null);
   const [message, setMessage] = useState('');
   const editTrigger = useRef<HTMLButtonElement>(null);
   const detailHeading = useRef<HTMLHeadingElement>(null);
+  const detail = useRef<HTMLElement>(null);
   useEffect(() => { loadKnowledge(); }, [loadKnowledge]);
   const selected = store.entries.find((entry) => entry.id === entryId);
+  const search = searchLocation?.page === 'knowledge' && searchLocation.id === entryId ? searchLocation : null;
+  useScrollToSearchMatch(detail, search, selected?.content);
   const categories = [...new Set(store.entries.map((entry) => entry.category))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
   const filtered = store.entries.filter((entry) => (category === null || entry.category === category)
     && entryNames(entry).some((name) => name.includes(normalizedName(query))));
@@ -88,18 +93,23 @@ export default function KnowledgeBase() {
         {!filtered.length && <p className="knowledge-muted">{store.entries.length ? '没有匹配的词条。可调整搜索或分类。' : '还没有词条，可新建，也可从日志中创建并关联。'}</p>}
       </aside>
 
-      <section className="module-card knowledge-detail" aria-label="词条详情" hidden={Boolean(draft)}>
+      <section ref={detail} className="module-card knowledge-detail" aria-label="词条详情" hidden={Boolean(draft)}>
         {store.error ? <p role="alert">{store.error}</p> : selected ? (
           <>
             <div className="knowledge-detail-heading">
-              <div><span className="knowledge-muted">{selected.category || '未分类'}</span><h2 ref={detailHeading} tabIndex={-1}>{selected.title}</h2></div>
+              <div>
+                <span className="knowledge-muted"><HighlightedText text={selected.category || '未分类'} words={search?.words} /></span>
+                <h2 ref={detailHeading} tabIndex={-1}><HighlightedText text={selected.title} words={search?.words} /></h2>
+              </div>
               <div>
                 <button type="button" className="note-button" onClick={(event) => edit(event.currentTarget, selected)}>编辑词条</button>
                 <button type="button" className="knowledge-text-button danger" onClick={() => remove(selected)}>删除词条</button>
               </div>
             </div>
-            {selected.aliases.length > 0 && <p className="knowledge-muted">别名：{selected.aliases.join('、')}</p>}
-            <div className="markdown-preview knowledge-entry-content"><MarkdownContent content={selected.content || '尚未填写正文。可先关联学习记录，之后补充自己的理解与疑问。'} /></div>
+            {selected.aliases.length > 0 && <p className="knowledge-muted">别名：<HighlightedText text={selected.aliases.join('、')} words={search?.words} /></p>}
+            <div className="markdown-preview knowledge-entry-content" data-search-body>
+              <MarkdownContent content={selected.content || '尚未填写正文。可先关联学习记录，之后补充自己的理解与疑问。'} searchWords={selected.content ? search?.words : undefined} />
+            </div>
             {!links.length && !related.length && !codeIds.length && (
               <p className="knowledge-muted">可在“编辑词条”的关联资料中添加日志、词条或代码版本。</p>
             )}

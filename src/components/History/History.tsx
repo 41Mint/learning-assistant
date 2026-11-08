@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useStudyLogStore } from '../../store/studyLogStore';
 import { getTodayDate } from '../../utils/storage';
 import CollapsibleNote from '../common/CollapsibleNote';
+import HighlightedText from '../common/HighlightedText';
+import { useScrollToSearchMatch } from '../common/useScrollToSearchMatch';
 import KnowledgeLinks from '../Knowledge/KnowledgeLinks';
 import CodeLinksPanel from '../ProjectCode/CodeLinksPanel';
 import { useWorkspaceStore } from '../../store/workspaceStore';
@@ -25,11 +27,15 @@ const formatDateStr = (date: Date): string => {
 
 const History = ({ draft, setDraft }: LogEditingProps) => {
   const { logs, loadLogs, getLogByDate } = useStudyLogStore();
-  const { historyDate: selectedDate, openLog } = useWorkspaceStore();
+  const { historyDate: selectedDate, openLog, search: searchLocation } = useWorkspaceStore();
   const [calendarView, setCalendarView] = useState(() => ({ date: selectedDate, month: new Date(`${selectedDate}T12:00:00`) }));
   const currentMonth = useMemo(() => calendarView.date === selectedDate ? calendarView.month : new Date(`${selectedDate}T12:00:00`), [calendarView, selectedDate]);
   const [message, setMessage] = useState('');
   const editButton = useRef<HTMLButtonElement>(null);
+  const record = useRef<HTMLDivElement>(null);
+  const selectedLog = selectedDate ? getLogByDate(selectedDate) : null;
+  const search = searchLocation?.page === 'history' && searchLocation.id === selectedDate ? searchLocation : null;
+  useScrollToSearchMatch(record, search, selectedLog?.content);
 
   const selectDate = (date: string) => {
     setMessage('');
@@ -127,8 +133,6 @@ const History = ({ draft, setDraft }: LogEditingProps) => {
     }
   };
 
-  const selectedLog = selectedDate ? getLogByDate(selectedDate) : null;
-
   const reading = (
     <div className="module-card history-card bg-white dark:bg-gray-800 rounded-lg shadow-md p-6" hidden={Boolean(draft)}>
       <div className="mb-6">
@@ -219,11 +223,11 @@ const History = ({ draft, setDraft }: LogEditingProps) => {
 
       {/* 选中日期的详细信息 */}
       {selectedLog && (
-        <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+        <div ref={record} className="border-t border-gray-200 dark:border-gray-700 pt-6">
           <div className="mb-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                {selectedDate}
+                <HighlightedText text={selectedDate} words={search?.words} />
               </h3>
               <div className="text-sm text-gray-600 dark:text-gray-400">
                 学习时长：<span className="font-semibold text-blue-600 dark:text-blue-400">
@@ -241,7 +245,7 @@ const History = ({ draft, setDraft }: LogEditingProps) => {
                       key={tag}
                       className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full"
                     >
-                      #{tag}
+                      #<HighlightedText text={tag} words={search?.words} />
                     </span>
                   ))}
                 </div>
@@ -257,7 +261,7 @@ const History = ({ draft, setDraft }: LogEditingProps) => {
                       key={point}
                       className="px-2 py-1 text-xs bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-full"
                     >
-                      💡 {point}
+                      💡 <HighlightedText text={point} words={search?.words} />
                     </span>
                   ))}
                 </div>
@@ -271,6 +275,7 @@ const History = ({ draft, setDraft }: LogEditingProps) => {
               <CollapsibleNote
                 key={selectedLog.id}
                 content={selectedLog.content}
+                search={search}
                 actions={<button ref={editButton} type="button" className="note-button" onClick={() => {
                   setMessage('');
                   setDraft(selectedLog);

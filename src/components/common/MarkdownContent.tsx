@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
+import type { PluggableList } from 'unified';
 import { getImage, IMAGE_PREFIX } from '../../utils/imageStorage';
 import type { StoredImage } from '../../utils/imageStorage';
+import { rehypeSearchMatches } from '../../utils/rehypeSearchMatches';
 
 function MarkdownImage({ src, alt, image }: { src?: string; alt?: string; image?: StoredImage }) {
   const [resolved, setResolved] = useState<{ source: string; url?: string; failed?: boolean } | null>(null);
@@ -25,11 +27,13 @@ function MarkdownImage({ src, alt, image }: { src?: string; alt?: string; image?
   return <a href={url} target="_blank" rel="noreferrer" title="在新标签页查看原图"><img src={url} alt={alt ?? ''} loading="lazy" /></a>;
 }
 
-export default function MarkdownContent({ content, images }: { content: string; images?: StoredImage[] }) {
+export default function MarkdownContent({ content, images, searchWords }: { content: string; images?: StoredImage[]; searchWords?: string[] }) {
+  const plugins: PluggableList = [[rehypeHighlight, { ignoreMissing: true }]];
+  if (searchWords?.length) plugins.push([rehypeSearchMatches, searchWords]);
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
-      rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+      rehypePlugins={plugins}
       urlTransform={(url, key) => key === 'src' && url.startsWith(IMAGE_PREFIX) ? url : defaultUrlTransform(url)}
       components={{
         img: ({ src, alt }) => <MarkdownImage src={typeof src === 'string' ? src : undefined} alt={alt} image={typeof src === 'string' ? images?.find((image) => `${IMAGE_PREFIX}${image.id}` === src) : undefined} />,
