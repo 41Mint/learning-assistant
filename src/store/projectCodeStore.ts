@@ -1,9 +1,11 @@
 import { create } from 'zustand';
 import type { CodeLink, CodeProject, CodeTarget, CodeVersion, ProjectCodeData } from '../types/projectCode';
+import type { RelationAnnotation } from '../types/relations';
 import {
   codeTargetKey, emptyProjectCode, normalizeRepositoryUrl, normalizeScriptPath, normalizeTutorialUrl, parseCodePermalink,
 } from '../utils/projectCode';
 import { readProjectCode, updateProjectCode } from '../utils/projectCodeStorage';
+import { cleanRelationAnnotation } from '../utils/relationAnnotation';
 import { generateId } from '../utils/storage';
 
 export type ProjectInput = Omit<CodeProject, 'id'>;
@@ -26,6 +28,7 @@ interface ProjectCodeStore {
   saveVersionDetails: (id: string, note: string, githubUrl: string) => Promise<void>;
   linkVersion: (versionId: string, target: CodeTarget) => Promise<void>;
   unlinkVersion: (versionId: string, target: CodeTarget) => Promise<void>;
+  annotateLogCode: (versionId: string, logId: string, input: RelationAnnotation) => Promise<void>;
   deleteVersion: (id: string) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
 }
@@ -140,6 +143,12 @@ export const useProjectCodeStore = create<ProjectCodeStore>((set, get) => {
       ...data,
       links: data.links.filter((link) => link.versionId !== versionId || codeTargetKey(link.target) !== codeTargetKey(target)),
     })),
+    annotateLogCode: (versionId, logId, input) => update((data) => {
+      const annotation = cleanRelationAnnotation(input);
+      const link = data.links.find((item) => item.versionId === versionId && item.target.kind === 'log' && item.target.id === logId);
+      if (!link) throw new Error('这条关联已不存在。');
+      return { ...data, links: data.links.map((item) => item === link ? { ...item, annotation } : item) };
+    }),
     deleteVersion: (id) => update((data) => ({
       ...data,
       versions: data.versions.filter((version) => version.id !== id),

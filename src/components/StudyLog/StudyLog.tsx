@@ -3,6 +3,7 @@ import CollapsibleNote from '../common/CollapsibleNote';
 import MarkdownImport from './MarkdownImport';
 import KnowledgeLinks from '../Knowledge/KnowledgeLinks';
 import CodeLinksPanel from '../ProjectCode/CodeLinksPanel';
+import RelationLink from '../Relations/RelationLink';
 import { useStudyLogStore } from '../../store/studyLogStore';
 import LogContentEditor from './LogContentEditor';
 import type { LogEditingProps } from './LogContentEditor';
@@ -60,10 +61,13 @@ export default function StudyLog({ draft, setDraft }: LogEditingProps) {
       <MarkdownImport />
 
       <CollapsibleNote key={currentLog.id} content={currentLog.content} actions={
-        <button ref={editButton} type="button" className="note-button" onClick={() => {
-          setMessage('');
-          setDraft(currentLog);
-        }}>编辑</button>
+        <>
+          <button ref={editButton} type="button" className="note-button" onClick={() => {
+            setMessage('');
+            setDraft(currentLog);
+          }}>编辑</button>
+          <RelationLink kind="log" id={currentLog.id} />
+        </>
       } />
       {message && <p role="status">{message}</p>}
 

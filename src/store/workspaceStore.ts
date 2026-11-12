@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { RelationNodeRef } from '../types/relations';
 import { searchWords } from '../utils/resourceSearch';
 import { getTodayDate } from '../utils/storage';
 
@@ -14,12 +15,15 @@ export function readWorkspaceHash() {
   const [page, value = '', detail = ''] = path.split('/');
   try {
     const id = decodeURIComponent(value);
+    const decodedDetail = decodeURIComponent(detail);
     const params = new URLSearchParams(query);
     const words = searchWords(params.get('find') ?? '');
     const search: SearchLocation | null = id && words.length && (page === 'history' || page === 'knowledge' || page === 'code')
       ? { page, id, words, inSource: page === 'code' && params.get('source') === '1' } : null;
-    return { page, id, detail: decodeURIComponent(detail), search };
-  } catch { return { page, id: '', detail: '', search: null }; }
+    const relation: RelationNodeRef | null = page === 'relations' && decodedDetail && (id === 'log' || id === 'entry' || id === 'code')
+      ? { kind: id, id: decodedDetail } : null;
+    return { page, id, detail: decodedDetail, search, relation };
+  } catch { return { page, id: '', detail: '', search: null, relation: null }; }
 }
 const initial = readWorkspaceHash();
 const isDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(new Date(`${value}T12:00:00`).getTime());
@@ -34,12 +38,25 @@ export function searchHref(href: string, query: string, inSource = false): strin
   return href + '?' + params;
 }
 
+export function relationHref({ kind, id }: RelationNodeRef): string {
+  return '#relations/' + kind + '/' + encodeURIComponent(id);
+}
+
+export function hasWorkspaceEditor(page: string): boolean {
+  return Boolean(document.getElementById(page)?.querySelector('form'));
+}
+
+export function workspaceResourceTarget(href: string) {
+  return hasWorkspaceEditor(href.slice(1).split('/')[0]) ? { target: '_blank', rel: 'noopener' } : {};
+}
+
 interface WorkspaceStore {
   historyDate: string;
   entryId: string | null;
   codeVersionId: string | null;
   practiceTarget: { outcomeId: string; practiceId: string } | null;
   search: SearchLocation | null;
+  relationTarget: RelationNodeRef | null;
   syncHash: () => void;
   openLog: (date: string) => void;
   openEntry: (id: string) => void;
@@ -51,9 +68,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   practiceTarget: initial.page === 'path' && initial.id && initial.detail
     ? { outcomeId: initial.id, practiceId: initial.detail } : null,
   search: initial.search,
+  relationTarget: initial.relation,
   syncHash: () => {
-    const { page, id, detail, search } = readWorkspaceHash();
-    const selection: Partial<WorkspaceStore> = { search };
+    const { page, id, detail, search, relation } = readWorkspaceHash();
+    const selection: Partial<WorkspaceStore> = { search, relationTarget: relation };
     if (page === 'knowledge' && id) selection.entryId = id;
     if (page === 'history' && isDate(id)) selection.historyDate = id;
     if (page === 'code') selection.codeVersionId = id || null;

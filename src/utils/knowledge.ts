@@ -1,4 +1,5 @@
 import type { KnowledgeData, KnowledgeEntry, KnowledgeLogLink, KnowledgeRelation } from '../types';
+import { isRelationAnnotation } from './relationAnnotation';
 
 export const emptyKnowledge = (): KnowledgeData => ({ version: 1, entries: [], logLinks: [], relations: [] });
 export const normalizedName = (name: string) => name.normalize('NFKC').trim().toLocaleLowerCase();
@@ -10,17 +11,24 @@ function record(value: unknown): value is Record<string, unknown> {
 function identifier(value: unknown): value is string { return typeof value === 'string' && value.trim().length > 0; }
 function timestamp(value: unknown): value is number { return typeof value === 'number' && Number.isFinite(value) && value >= 0; }
 function entry(value: unknown): value is KnowledgeEntry {
-  return record(value) && identifier(value.id) && identifier(value.title) && Array.isArray(value.aliases)
+  if (!(record(value) && identifier(value.id) && identifier(value.title) && Array.isArray(value.aliases)
     && value.aliases.every(identifier) && typeof value.category === 'string' && typeof value.content === 'string'
     && timestamp(value.createdAt) && timestamp(value.updatedAt)
     && (value.codeVersionIds === undefined || Array.isArray(value.codeVersionIds)
-      && value.codeVersionIds.every(identifier) && new Set(value.codeVersionIds).size === value.codeVersionIds.length);
+      && value.codeVersionIds.every(identifier) && new Set(value.codeVersionIds).size === value.codeVersionIds.length))) return false;
+  const versionIds = new Set(Array.isArray(value.codeVersionIds) ? value.codeVersionIds : []);
+  const annotations = value.codeAnnotations;
+  return annotations === undefined || Array.isArray(annotations)
+    && annotations.every((item) => record(item) && identifier(item.versionId) && versionIds.has(item.versionId) && isRelationAnnotation(item.annotation))
+    && new Set(annotations.map((item) => item.versionId)).size === annotations.length;
 }
 function link(value: unknown): value is KnowledgeLogLink {
-  return record(value) && identifier(value.id) && identifier(value.entryId) && identifier(value.logId) && typeof value.note === 'string';
+  return record(value) && identifier(value.id) && identifier(value.entryId) && identifier(value.logId) && typeof value.note === 'string'
+    && (value.annotation === undefined || isRelationAnnotation(value.annotation));
 }
 function relation(value: unknown): value is KnowledgeRelation {
-  return record(value) && identifier(value.id) && identifier(value.sourceId) && identifier(value.targetId) && value.sourceId !== value.targetId;
+  return record(value) && identifier(value.id) && identifier(value.sourceId) && identifier(value.targetId) && value.sourceId !== value.targetId
+    && (value.annotation === undefined || isRelationAnnotation(value.annotation));
 }
 
 export function otherEntryId(relation: KnowledgeRelation, entryId: string): string | undefined {

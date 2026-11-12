@@ -10,6 +10,7 @@ import DevTools from './components/DevTools/DevTools';
 import KnowledgeBase from './components/Knowledge/KnowledgeBase';
 import ProjectCodeWorkspace from './components/ProjectCode/ProjectCodeWorkspace';
 import ResourceSearch from './components/Search/ResourceSearch';
+import RelationsWorkspace from './components/Relations/RelationsWorkspace';
 import type { StudyLog as Log } from './types';
 import { usePomodoroStore } from './store/pomodoroStore';
 import { useStudyLogStore } from './store/studyLogStore';
@@ -24,6 +25,7 @@ const PAGES = [
   { id: 'knowledge', label: '知识词条', description: '整理自己的理解与疑问，从知识找回学习情境。' },
   { id: 'data', label: '数据管理', description: '导出完整备份，或从备份恢复学习资料。' },
   { id: 'code', label: '项目代码', description: '回看具体版本的脚本和引用它们的学习经历。' },
+  { id: 'relations', label: '关系视图', description: '查看当前资料与其他学习资料的直接关联。' },
 ] as const;
 type PageId = typeof PAGES[number]['id'];
 
@@ -100,7 +102,7 @@ function App() {
       </header>
 
       <nav className="app-navigation" aria-label="主要功能">
-        {PAGES.filter((page) => page.id !== 'code').map((page) => (
+        {PAGES.filter((page) => page.id !== 'code' && page.id !== 'relations').map((page) => (
           <a
             key={page.id}
             href={`#${page.id}`}
@@ -143,6 +145,9 @@ function App() {
         <section id="code" className="workspace-panel" aria-label="项目代码" hidden={activePage !== 'code'}>
           <ProjectCodeWorkspace />
         </section>
+        {activePage === 'relations' && <section id="relations" className="workspace-panel" aria-label="关系视图">
+          <RelationsWorkspace />
+        </section>}
       </main>
       <DevTools />
     </div>

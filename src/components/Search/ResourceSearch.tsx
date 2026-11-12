@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useKnowledgeStore } from '../../store/knowledgeStore';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
-import { searchHref, useWorkspaceStore } from '../../store/workspaceStore';
+import { hasWorkspaceEditor, searchHref, useWorkspaceStore } from '../../store/workspaceStore';
 import { logLabel } from '../../utils/growth';
 import { normalizedName } from '../../utils/knowledge';
 import { codeVersionHref } from '../../utils/projectCode';
@@ -113,7 +113,7 @@ export default function ResourceSearch() {
 
   const open = () => {
     // 各页面切换后仍挂载。若结果页已有表单，在另一标签页阅读可保留原草稿。
-    setEditingPages(GROUPS.map(({ page }) => page).filter((page) => document.getElementById(page)?.querySelector('form')));
+    setEditingPages(GROUPS.map(({ page }) => page).filter(hasWorkspaceEditor));
     dialog.current?.showModal();
     input.current?.focus();
   };

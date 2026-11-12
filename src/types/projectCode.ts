@@ -1,3 +1,5 @@
+import type { RelationAnnotation } from './relations';
+
 export interface CodeProject {
   id: string;
   name: string;
@@ -23,6 +25,7 @@ export type CodeTarget =
 export interface CodeLink {
   versionId: string;
   target: CodeTarget;
+  annotation?: RelationAnnotation;
 }
 
 export interface ProjectCodeData {

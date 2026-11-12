@@ -6,6 +6,7 @@ import HighlightedText from '../common/HighlightedText';
 import { useScrollToSearchMatch } from '../common/useScrollToSearchMatch';
 import KnowledgeLinks from '../Knowledge/KnowledgeLinks';
 import CodeLinksPanel from '../ProjectCode/CodeLinksPanel';
+import RelationLink from '../Relations/RelationLink';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import LogContentEditor from '../StudyLog/LogContentEditor';
 import type { LogEditingProps } from '../StudyLog/LogContentEditor';
@@ -276,10 +277,13 @@ const History = ({ draft, setDraft }: LogEditingProps) => {
                 key={selectedLog.id}
                 content={selectedLog.content}
                 search={search}
-                actions={<button ref={editButton} type="button" className="note-button" onClick={() => {
-                  setMessage('');
-                  setDraft(selectedLog);
-                }}>编辑 / 补充记录</button>}
+                actions={<>
+                  <button ref={editButton} type="button" className="note-button" onClick={() => {
+                    setMessage('');
+                    setDraft(selectedLog);
+                  }}>编辑 / 补充记录</button>
+                  <RelationLink kind="log" id={selectedLog.id} />
+                </>}
               />
               {message && <p role="status">{message}</p>}
             </div>

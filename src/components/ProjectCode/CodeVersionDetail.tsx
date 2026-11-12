@@ -13,6 +13,7 @@ import MarkdownContent from '../common/MarkdownContent';
 import FocusEditor from '../common/FocusEditor';
 import HighlightedText from '../common/HighlightedText';
 import { useScrollToSearchMatch } from '../common/useScrollToSearchMatch';
+import RelationLink from '../Relations/RelationLink';
 
 function CodeReferences({ versionId }: { versionId: string }) {
   const data = useProjectCodeStore((state) => state.data);
@@ -158,6 +159,7 @@ export default function CodeVersionDetail({ version, project }: { version: CodeV
           setMessage('');
           setEditing(true);
         }}>编辑版本资料</button>
+        <RelationLink kind="code" id={version.id} />
         <button type="button" className="knowledge-text-button danger" disabled={busy} onClick={() => void remove()}>删除代码版本</button>
       </div>
       {message && <p role="status">{message}</p>}

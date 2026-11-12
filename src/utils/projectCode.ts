@@ -1,4 +1,5 @@
 import type { CodeLink, CodeProject, CodeTarget, CodeVersion, ProjectCodeData } from '../types/projectCode';
+import { isRelationAnnotation } from './relationAnnotation';
 import type { GrowthOutcome, GrowthPractice, KnowledgeEntry } from '../types';
 
 export const MAX_SCRIPT_BYTES = 512 * 1024;
@@ -137,14 +138,15 @@ export function effectiveCodeLinks(data: ProjectCodeData, outcomes: GrowthOutcom
   const knownVersions = new Set(data.versions.map((version) => version.id));
   const editedTargets = new Set<string>();
   const references: CodeLink[] = [];
-  const add = (target: CodeTarget, versionIds?: string[]) => {
+  const add = (target: CodeTarget, versionIds?: string[], annotations?: KnowledgeEntry['codeAnnotations']) => {
     if (versionIds === undefined) return;
     editedTargets.add(codeTargetKey(target));
+    const byVersion = new Map(annotations?.map((item) => [item.versionId, item.annotation]));
     for (const versionId of versionIds) {
-      if (knownVersions.has(versionId)) references.push({ versionId, target });
+      if (knownVersions.has(versionId)) references.push({ versionId, target, annotation: byVersion.get(versionId) });
     }
   };
-  for (const entry of entries) add({ kind: 'entry', id: entry.id }, entry.codeVersionIds);
+  for (const entry of entries) add({ kind: 'entry', id: entry.id }, entry.codeVersionIds, entry.codeAnnotations);
   for (const outcome of outcomes) {
     for (const practice of outcome.practices) {
       add({ kind: 'practice', id: practice.id, outcomeId: outcome.id }, practice.codeVersionIds);
@@ -180,7 +182,8 @@ function isVersion(value: unknown): value is CodeVersion {
 }
 
 function isLink(value: unknown): value is CodeLink {
-  if (!isRecord(value) || !nonempty(value.versionId) || !isRecord(value.target) || !nonempty(value.target.id)) return false;
+  if (!isRecord(value) || !nonempty(value.versionId) || !isRecord(value.target) || !nonempty(value.target.id)
+    || (value.annotation !== undefined && !isRelationAnnotation(value.annotation))) return false;
   const { kind, outcomeId } = value.target;
   return kind === 'log' || kind === 'entry' || (kind === 'practice' && nonempty(outcomeId));
 }

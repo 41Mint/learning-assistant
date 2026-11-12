@@ -11,6 +11,7 @@ import MarkdownContent from '../common/MarkdownContent';
 import HighlightedText from '../common/HighlightedText';
 import { useScrollToSearchMatch } from '../common/useScrollToSearchMatch';
 import KnowledgeEditor from './KnowledgeEditor';
+import RelationLink from '../Relations/RelationLink';
 
 export default function KnowledgeBase() {
   const store = useKnowledgeStore();
@@ -103,6 +104,7 @@ export default function KnowledgeBase() {
               </div>
               <div>
                 <button type="button" className="note-button" onClick={(event) => edit(event.currentTarget, selected)}>编辑词条</button>
+                <RelationLink kind="entry" id={selected.id} />
                 <button type="button" className="knowledge-text-button danger" onClick={() => remove(selected)}>删除词条</button>
               </div>
             </div>

@@ -1,3 +1,5 @@
+import type { RelationAnnotation } from './relations';
+
 // 番茄钟状态
 export interface PomodoroState {
   isRunning: boolean;
@@ -67,6 +69,7 @@ export interface KnowledgeEntry {
   createdAt: number;
   updatedAt: number;
   codeVersionIds?: string[];
+  codeAnnotations?: { versionId: string; annotation: RelationAnnotation }[];
 }
 
 export interface KnowledgeLogLink {
@@ -74,12 +77,14 @@ export interface KnowledgeLogLink {
   entryId: string;
   logId: string;
   note: string;
+  annotation?: RelationAnnotation;
 }
 
 export interface KnowledgeRelation {
   id: string;
   sourceId: string;
   targetId: string;
+  annotation?: RelationAnnotation;
 }
 
 export interface KnowledgeData {
