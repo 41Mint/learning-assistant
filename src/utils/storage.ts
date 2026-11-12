@@ -1,16 +1,17 @@
-// LocalStorage工具函数
+import { STORAGE_PREFIX } from './workspaceMode';
 
 const STORAGE_KEYS = {
-  STUDY_LOGS: 'learning-assistant:study-logs',
-  KNOWLEDGE: 'learning-assistant:knowledge',
-  GROWTH: 'learning-assistant:growth',
-  SKILL_TREE: 'learning-assistant:skill-tree',
-  CURRENT_GOAL: 'learning-assistant:current-goal',
-  TASKS: 'learning-assistant:tasks',
-  STREAK: 'learning-assistant:streak',
-  SETTINGS: 'learning-assistant:settings',
-  POMODORO_TODAY: 'learning-assistant:pomodoro-today',
+  STUDY_LOGS: STORAGE_PREFIX + 'study-logs',
+  KNOWLEDGE: STORAGE_PREFIX + 'knowledge',
+  GROWTH: STORAGE_PREFIX + 'growth',
+  SKILL_TREE: STORAGE_PREFIX + 'skill-tree',
+  CURRENT_GOAL: STORAGE_PREFIX + 'current-goal',
+  TASKS: STORAGE_PREFIX + 'tasks',
+  STREAK: STORAGE_PREFIX + 'streak',
+  SETTINGS: STORAGE_PREFIX + 'settings',
+  POMODORO_TODAY: STORAGE_PREFIX + 'pomodoro-today',
 } as const;
+export const LEGACY_LOG_PREFIX = STORAGE_PREFIX + 'log:';
 
 // 获取数据
 export function getStorageItem<T>(key: string, defaultValue: T): T {

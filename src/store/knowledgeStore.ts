@@ -21,10 +21,11 @@ interface KnowledgeStore extends KnowledgeData {
   loadKnowledge: () => void;
   saveEntry: (input: EntryInput, options?: EntrySaveOptions) => string;
   deleteEntry: (id: string) => void;
-  linkLog: (entryId: string, logId: string, note: string) => void;
+  linkLog: (entryId: string, logId: string, note: string, annotation?: RelationAnnotation) => void;
   unlinkLog: (id: string) => void;
-  relate: (sourceId: string, targetId: string) => void;
+  relate: (sourceId: string, targetId: string, annotation?: RelationAnnotation) => void;
   removeRelation: (id: string) => void;
+  setEntryCodeLinked: (entryId: string, versionId: string, linked: boolean, annotation?: RelationAnnotation) => void;
   annotateLink: (kind: 'log-entry' | 'entry-entry', id: string, input: RelationAnnotation) => void;
   annotateEntryCode: (entryId: string, versionId: string, input: RelationAnnotation) => void;
 }
@@ -86,19 +87,34 @@ export const useKnowledgeStore = create<KnowledgeStore>((set, get) => {
       logLinks: get().logLinks.filter((item) => item.entryId !== id),
       relations: get().relations.filter((item) => item.sourceId !== id && item.targetId !== id),
     }),
-    linkLog: (entryId, logId, note) => {
+    linkLog: (entryId, logId, note, annotation) => {
       const existing = get().logLinks.find((item) => item.entryId === entryId && item.logId === logId);
       persist({ ...data(), logLinks: existing
         ? get().logLinks.map((item) => item.id === existing.id ? { ...item, note: note.trim() } : item)
-        : [...get().logLinks, { id: generateId(), entryId, logId, note: note.trim() }] });
+        : [...get().logLinks, { id: generateId(), entryId, logId, note: note.trim(), annotation }] });
     },
     unlinkLog: (id) => persist({ ...data(), logLinks: get().logLinks.filter((item) => item.id !== id) }),
-    relate: (sourceId, targetId) => {
+    relate: (sourceId, targetId, annotation) => {
       if (sourceId === targetId) throw new Error('请选择另一个词条。');
       if (get().relations.some((item) => item.sourceId === sourceId && item.targetId === targetId || item.sourceId === targetId && item.targetId === sourceId)) return;
-      persist({ ...data(), relations: [...get().relations, { id: generateId(), sourceId, targetId }] });
+      persist({ ...data(), relations: [...get().relations, { id: generateId(), sourceId, targetId, annotation }] });
     },
     removeRelation: (id) => persist({ ...data(), relations: get().relations.filter((item) => item.id !== id) }),
+    setEntryCodeLinked: (entryId, versionId, linked, annotation) => {
+      const entry = get().entries.find((item) => item.id === entryId);
+      if (!entry) throw new Error('这个词条已不存在。');
+      const code = useProjectCodeStore.getState().data;
+      if (linked && !code.versions.some((version) => version.id === versionId)) throw new Error('这个代码版本已不存在。');
+      const previous = entryCodeIds(entry, code.links);
+      if (previous.includes(versionId) === linked) return;
+      const codeVersionIds = linked ? [...previous, versionId] : previous.filter((id) => id !== versionId);
+      const legacyAnnotations = entry.codeVersionIds === undefined ? code.links.flatMap((link) =>
+        link.target.kind === 'entry' && link.target.id === entryId && link.annotation ? [{ versionId: link.versionId, annotation: link.annotation }] : []) : [];
+      const codeAnnotations = (entry.codeAnnotations ?? legacyAnnotations).filter((item) => codeVersionIds.includes(item.versionId));
+      if (linked && annotation) codeAnnotations.push({ versionId, annotation });
+      const updated = { ...entry, codeVersionIds, codeAnnotations: codeAnnotations.length ? codeAnnotations : undefined };
+      persist({ ...data(), entries: get().entries.map((item) => item.id === entryId ? updated : item) });
+    },
     annotateLink: (kind, id, input) => {
       const annotation = cleanRelationAnnotation(input);
       const next = data();

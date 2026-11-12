@@ -1,11 +1,11 @@
-const DATABASE = 'learning-assistant-assets';
+import { ASSET_DATABASE_NAME } from './workspaceMode';
 export const IMAGE_STORE = 'images';
 export const PROJECT_CODE_STORE = 'project-code';
 
 export function openAssetDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     let blocked = false;
-    const request = indexedDB.open(DATABASE, 2);
+    const request = indexedDB.open(ASSET_DATABASE_NAME, 2);
     request.onupgradeneeded = () => {
       const database = request.result;
       if (!database.objectStoreNames.contains(IMAGE_STORE)) database.createObjectStore(IMAGE_STORE, { keyPath: 'id' });

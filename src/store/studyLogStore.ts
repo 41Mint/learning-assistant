@@ -1,8 +1,6 @@
 import { create } from 'zustand';
-import { getStorageItem, setStorageItem, STORAGE_KEYS, generateId, getTodayDate } from '../utils/storage';
+import { getStorageItem, setStorageItem, STORAGE_KEYS, LEGACY_LOG_PREFIX, generateId, getTodayDate } from '../utils/storage';
 import type { StudyLog } from '../types';
-
-const LEGACY_LOG_PREFIX = 'learning-assistant:log:';
 
 function migrateLegacyLogs(logs: StudyLog[]): StudyLog[] {
   const knownDates = new Set(logs.map((log) => log.date));

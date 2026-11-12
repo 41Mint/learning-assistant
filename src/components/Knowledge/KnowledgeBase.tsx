@@ -3,7 +3,7 @@ import type { KnowledgeEntry } from '../../types';
 import { useKnowledgeStore } from '../../store/knowledgeStore';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
-import { useWorkspaceStore } from '../../store/workspaceStore';
+import { knowledgeNetworkHref, useWorkspaceStore } from '../../store/workspaceStore';
 import { logLabel } from '../../utils/growth';
 import { entryNames, normalizedName, otherEntryId } from '../../utils/knowledge';
 import { codeVersionHref, codeVersionLabel, entryCodeIds } from '../../utils/projectCode';
@@ -11,6 +11,7 @@ import MarkdownContent from '../common/MarkdownContent';
 import HighlightedText from '../common/HighlightedText';
 import { useScrollToSearchMatch } from '../common/useScrollToSearchMatch';
 import KnowledgeEditor from './KnowledgeEditor';
+import KnowledgeDirectory from './KnowledgeDirectory';
 import RelationLink from '../Relations/RelationLink';
 
 export default function KnowledgeBase() {
@@ -80,17 +81,19 @@ export default function KnowledgeBase() {
         <button type="button" className="note-button" onClick={(event) => edit(event.currentTarget)} disabled={Boolean(store.error)}>新建词条</button>
         <label htmlFor="knowledge-search">搜索名称或别名</label>
         <input id="knowledge-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="PPU / Pixels Per Unit" />
-        <h3>分类目录</h3>
-        <div className="knowledge-category-list">
-          <button type="button" aria-pressed={category === null} onClick={() => setCategory(null)}>全部（{store.entries.length}）</button>
-          {categories.map((item) => <button type="button" key={item} aria-pressed={category === item} onClick={() => setCategory(item)}>{item || '未分类'}（{store.entries.filter((entry) => entry.category === item).length}）</button>)}
-        </div>
+        <label htmlFor="knowledge-category">词条分类</label>
+        <select id="knowledge-category" value={category === null ? '' : 'category:' + category}
+          onChange={(event) => setCategory(event.target.value ? event.target.value.slice('category:'.length) : null)}>
+          <option value="">全部分类</option>
+          {categories.map((item) => <option key={item} value={'category:' + item}>{item || '未分类'}</option>)}
+        </select>
         <h3>词条列表（{filtered.length}）</h3>
-        <ul className="knowledge-entry-list">{filtered.map((entry) => <li key={entry.id}>
+        <KnowledgeDirectory items={filtered} categoryOf={(entry) => entry.category} selectedCategory={selected?.category}
+          expandAll={Boolean(normalizedName(query))} renderEntry={(entry) => (
           <button type="button" aria-current={selected?.id === entry.id ? 'true' : undefined} onClick={() => select(entry)}>
-            <strong>{entry.title}</strong><span>{entry.category || '未分类'} · {store.logLinks.filter((link) => link.entryId === entry.id).length} 条学习记录</span>
+            <strong>{entry.title}</strong><span>{store.logLinks.filter((link) => link.entryId === entry.id).length} 条学习记录</span>
           </button>
-        </li>)}</ul>
+        )} />
         {!filtered.length && <p className="knowledge-muted">{store.entries.length ? '没有匹配的词条。可调整搜索或分类。' : '还没有词条，可新建，也可从日志中创建并关联。'}</p>}
       </aside>
 
@@ -105,6 +108,7 @@ export default function KnowledgeBase() {
               <div>
                 <button type="button" className="note-button" onClick={(event) => edit(event.currentTarget, selected)}>编辑词条</button>
                 <RelationLink kind="entry" id={selected.id} />
+                <a className="relation-entry-link" href={knowledgeNetworkHref(selected.id)}>在知识网络中查看</a>
                 <button type="button" className="knowledge-text-button danger" onClick={() => remove(selected)}>删除词条</button>
               </div>
             </div>

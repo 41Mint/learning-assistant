@@ -4,6 +4,7 @@ import { formatDate, generateId, getStorageItem, getTodayDate, setStorageItem, S
 import { usePomodoroStore } from '../../store/pomodoroStore';
 import { replaceBackupAssets } from '../../utils/projectCodeStorage';
 import { emptyProjectCode } from '../../utils/projectCode';
+import { IS_KNOWLEDGE_DEMO, KNOWLEDGE_DEMO_HREF, STORAGE_PREFIX } from '../../utils/workspaceMode';
 
 function addStoredDuration(date: string, minutes: number, content: string) {
   const logs = getStorageItem<StudyLog[]>(STORAGE_KEYS.STUDY_LOGS, []);
@@ -110,13 +111,24 @@ export default function DevTools() {
     catch { alert('图片和项目代码未能清空，操作已停止，请重试。'); return; }
 
     Object.keys(localStorage).forEach(key => {
-      if (key.startsWith('learning-assistant:')) {
+      if (key.startsWith(STORAGE_PREFIX)) {
         localStorage.removeItem(key);
       }
     });
 
     alert('✅ 所有数据已清空！');
     window.location.reload();
+  };
+
+  const resetDemo = async () => {
+    if (!confirm('恢复内置演示数据？演示工作区中的修改会被替换。')) return;
+    try {
+      const { prepareKnowledgeDemo } = await import('../../data/knowledgeDemo');
+      await prepareKnowledgeDemo(true);
+      window.location.reload();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '演示数据恢复失败。');
+    }
   };
 
   // 添加今日学习记录
@@ -208,6 +220,11 @@ export default function DevTools() {
 
           {/* 面板内容 - 更大的字体和按钮 */}
           <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+            <div className="border-b border-gray-200 dark:border-gray-700 pb-4">
+              {IS_KNOWLEDGE_DEMO
+                ? <button type="button" className="note-button secondary" onClick={() => void resetDemo()}>恢复内置演示数据</button>
+                : <a className="relation-entry-link" href={KNOWLEDGE_DEMO_HREF} target="_blank" rel="noopener">打开知识网络演示</a>}
+            </div>
             {/* 生成模拟数据 */}
             <div className="border-b border-gray-200 dark:border-gray-700 pb-4">
               <p className="text-base font-medium text-gray-700 dark:text-gray-300 mb-3">
@@ -291,13 +308,12 @@ export default function DevTools() {
               </button>
             </div>
 
-            {/* 清空数据 */}
-            <button
+            {!IS_KNOWLEDGE_DEMO && <button
               onClick={clearAllData}
               className="w-full px-6 py-4 bg-red-500 hover:bg-red-600 text-white text-lg rounded-lg transition font-medium"
             >
               🗑️ 清空所有数据
-            </button>
+            </button>}
 
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-4 text-center">
               💡 仅开发环境 | 抓住标题栏拖动面板

@@ -1,6 +1,6 @@
 import { IMAGE_PREFIX } from './imageStorage';
 import type { StoredImage } from './imageStorage';
-import { isCalendarDate, STORAGE_KEYS } from './storage';
+import { isCalendarDate, LEGACY_LOG_PREFIX, STORAGE_KEYS } from './storage';
 import type { GrowthData, KnowledgeData, LearningTask, StudyLog } from '../types';
 import type { ProjectCodeData } from '../types/projectCode';
 import { emptyKnowledge, validateKnowledge } from './knowledge';
@@ -150,7 +150,7 @@ export async function restoreBackup(backup: BackupFile): Promise<void> {
     [STORAGE_KEYS.GROWTH, checked.data.growth],
   ];
   // 避免旧版按日调试键在刷新后重新迁移出不属于这份备份的记录。
-  const keys = [...mappings.map(([key]) => key), ...Object.keys(localStorage).filter((key) => key.startsWith('learning-assistant:log:'))];
+  const keys = [...mappings.map(([key]) => key), ...Object.keys(localStorage).filter((key) => key.startsWith(LEGACY_LOG_PREFIX))];
   const previous = keys.map((key) => [key, localStorage.getItem(key)] as const);
   try {
     keys.forEach((key) => localStorage.removeItem(key));

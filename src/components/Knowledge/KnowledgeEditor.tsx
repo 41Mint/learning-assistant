@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { KnowledgeEntry } from '../../types';
 import { useKnowledgeStore } from '../../store/knowledgeStore';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
@@ -11,9 +11,10 @@ import FocusEditor from '../common/FocusEditor';
 import MarkdownFields from '../common/MarkdownFields';
 import ReferenceChoices from '../common/ReferenceChoices';
 
-export default function KnowledgeEditor({ entry, categories, onSave, onCancel }: {
+export default function KnowledgeEditor({ entry, categories, initialCategory, onSave, onCancel }: {
   entry?: KnowledgeEntry;
   categories: string[];
+  initialCategory?: string;
   onSave: (id: string) => void;
   onCancel: () => void;
 }) {
@@ -22,12 +23,14 @@ export default function KnowledgeEditor({ entry, categories, onSave, onCancel }:
   const { data: code, isLoaded: codeLoaded, error: codeError } = useProjectCodeStore();
   const [title, setTitle] = useState(entry?.title ?? '');
   const [aliases, setAliases] = useState(entry?.aliases.join('，') ?? '');
-  const [category, setCategory] = useState(entry?.category ?? '');
+  const [category, setCategory] = useState(entry?.category ?? initialCategory ?? '');
   const [content, setContent] = useState(entry?.content ?? '');
   const [logSelection, setLogSelection] = useState<string[] | null>(null);
   const [entrySelection, setEntrySelection] = useState<string[] | null>(null);
   const [codeSelection, setCodeSelection] = useState<string[] | null>(null);
   const [error, setError] = useState('');
+  const categoriesId = useId();
+  const contentId = useId();
   const current = entries.find((item) => item.id === entry?.id);
   const previousLogs = new Map(logLinks.filter((link) => link.entryId === entry?.id).map((link) => [link.logId, link.note]));
   const logIds = logSelection ?? [...previousLogs.keys()];
@@ -58,11 +61,11 @@ export default function KnowledgeEditor({ entry, categories, onSave, onCancel }:
           <input value={aliases} onChange={(event) => setAliases(event.target.value)} />
         </label>
         <label>分类（可选）
-          <input list="entry-categories" value={category} onChange={(event) => setCategory(event.target.value)} placeholder="例如：2D 素材" />
+          <input list={categoriesId} value={category} onChange={(event) => setCategory(event.target.value)} placeholder="例如：2D 素材" />
         </label>
-        <datalist id="entry-categories">{categories.filter(Boolean).map((item) => <option key={item} value={item} />)}</datalist>
+        <datalist id={categoriesId}>{categories.filter(Boolean).map((item) => <option key={item} value={item} />)}</datalist>
       </div>
-      <MarkdownFields id="entry-content" label="词条正文（Markdown）" previewLabel="词条正文实时预览" value={content}
+      <MarkdownFields id={contentId} label="词条正文（Markdown）" previewLabel="词条正文实时预览" value={content}
         onChange={setContent} placeholder="我的理解、使用例子、仍有疑问…" />
       <section className="growth-attachments" aria-label="关联资料（可选）">
         <h3>关联资料（可选）</h3>

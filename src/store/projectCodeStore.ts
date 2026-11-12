@@ -26,7 +26,7 @@ interface ProjectCodeStore {
   saveVersion: (input: CodeVersionInput, target?: CodeTarget) => Promise<string>;
   saveProject: (id: string, input: ProjectInput) => Promise<void>;
   saveVersionDetails: (id: string, note: string, githubUrl: string) => Promise<void>;
-  linkVersion: (versionId: string, target: CodeTarget) => Promise<void>;
+  linkVersion: (versionId: string, target: CodeTarget, annotation?: RelationAnnotation) => Promise<void>;
   unlinkVersion: (versionId: string, target: CodeTarget) => Promise<void>;
   annotateLogCode: (versionId: string, logId: string, input: RelationAnnotation) => Promise<void>;
   deleteVersion: (id: string) => Promise<void>;
@@ -45,11 +45,11 @@ function verifyRepository(project: CodeProject, repositoryUrl: string): void {
   }
 }
 
-function withLink(links: CodeLink[], versionId: string, target: CodeTarget): CodeLink[] {
+function withLink(links: CodeLink[], versionId: string, target: CodeTarget, annotation?: RelationAnnotation): CodeLink[] {
   const key = codeTargetKey(target);
   return links.some((link) => link.versionId === versionId && codeTargetKey(link.target) === key)
     ? links
-    : [...links, { versionId, target }];
+    : [...links, { versionId, target, annotation }];
 }
 
 export const useProjectCodeStore = create<ProjectCodeStore>((set, get) => {
@@ -135,9 +135,9 @@ export const useProjectCodeStore = create<ProjectCodeStore>((set, get) => {
       const updated = { ...version, path, note: note.trim(), githubUrl: address };
       return { ...data, projects, versions: data.versions.map((item) => item.id === id ? updated : item) };
     }),
-    linkVersion: (versionId, target) => update((data) => {
+    linkVersion: (versionId, target, annotation) => update((data) => {
       if (!data.versions.some((version) => version.id === versionId)) throw new Error('这个代码版本已不存在，请重新选择。');
-      return { ...data, links: withLink(data.links, versionId, target) };
+      return { ...data, links: withLink(data.links, versionId, target, annotation) };
     }),
     unlinkVersion: (versionId, target) => update((data) => ({
       ...data,

@@ -42,6 +42,10 @@ export function relationHref({ kind, id }: RelationNodeRef): string {
   return '#relations/' + kind + '/' + encodeURIComponent(id);
 }
 
+export function knowledgeNetworkHref(entryId?: string): string {
+  return entryId ? '#network/' + encodeURIComponent(entryId) : '#network';
+}
+
 export function hasWorkspaceEditor(page: string): boolean {
   return Boolean(document.getElementById(page)?.querySelector('form'));
 }
@@ -57,6 +61,7 @@ interface WorkspaceStore {
   practiceTarget: { outcomeId: string; practiceId: string } | null;
   search: SearchLocation | null;
   relationTarget: RelationNodeRef | null;
+  networkEntryRequest: { id: string } | null;
   syncHash: () => void;
   openLog: (date: string) => void;
   openEntry: (id: string) => void;
@@ -69,9 +74,15 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
     ? { outcomeId: initial.id, practiceId: initial.detail } : null,
   search: initial.search,
   relationTarget: initial.relation,
+  networkEntryRequest: initial.page === 'network' && initial.id ? { id: initial.id } : null,
   syncHash: () => {
     const { page, id, detail, search, relation } = readWorkspaceHash();
     const selection: Partial<WorkspaceStore> = { search, relationTarget: relation };
+    if (page === 'network' && id && window.history.state?.knowledgeNetworkEntry !== id) {
+      // Back and Forward revisit an existing entry, while a new link requests focus.
+      window.history.replaceState({ ...window.history.state, knowledgeNetworkEntry: id }, '');
+      selection.networkEntryRequest = { id };
+    }
     if (page === 'knowledge' && id) selection.entryId = id;
     if (page === 'history' && isDate(id)) selection.historyDate = id;
     if (page === 'code') selection.codeVersionId = id || null;

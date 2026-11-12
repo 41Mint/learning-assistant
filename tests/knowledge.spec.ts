@@ -43,7 +43,7 @@ test('名称即可创建；别名检索、分类、Markdown 编辑及草稿在�
   await expect(page.locator('.knowledge-entry-list li')).toHaveCount(0);
   await page.getByLabel('搜索名称或别名').fill('');
   await createEntry(page, 'Sprite 切割');
-  await page.getByRole('button', { name: '2D 素材（1）', exact: true }).click();
+  await page.getByRole('combobox', { name: '词条分类', exact: true }).selectOption({ label: '2D 素材' });
   await expect(page.locator('.knowledge-entry-list li')).toHaveCount(1);
   await page.locator('.knowledge-entry-list button').click();
   await page.reload();

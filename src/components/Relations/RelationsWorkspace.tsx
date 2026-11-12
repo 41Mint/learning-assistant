@@ -1,70 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useKnowledgeStore } from '../../store/knowledgeStore';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
-import { useWorkspaceStore, workspaceResourceTarget } from '../../store/workspaceStore';
-import { cleanRelationAnnotation, RELATION_LABEL_LIMIT, RELATION_NOTE_LIMIT } from '../../utils/relationAnnotation';
+import { knowledgeNetworkHref, useWorkspaceStore, workspaceResourceTarget } from '../../store/workspaceStore';
 import type { RelationEdge, RelationNode } from '../../utils/relations';
-import { buildRelationGraph, relationNodeKey, RELATION_KIND_LABELS } from '../../utils/relations';
+import { buildRelationGraph, relationNodeKey } from '../../utils/relations';
+import RelationDetails from './RelationDetails';
 import RelationGraph from './RelationGraph';
 
 const PAGE_SIZE = 6;
-
-function RelationDetails({ center, edge }: { center: RelationNode; edge: RelationEdge }) {
-  const [label, setLabel] = useState(edge.annotation?.label ?? '');
-  const [note, setNote] = useState(edge.annotation?.note ?? '');
-  const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<{ text: string; error?: boolean } | null>(null);
-  const heading = useRef<HTMLHeadingElement>(null);
-  useEffect(() => heading.current?.focus({ preventScroll: true }), []);
-  const dirty = label !== (edge.annotation?.label ?? '') || note !== (edge.annotation?.note ?? '');
-
-  const save = async (event: FormEvent) => {
-    event.preventDefault();
-    if (saving || !dirty) return;
-    setSaving(true);
-    setStatus(null);
-    try {
-      const input = { label, note };
-      const cleaned = cleanRelationAnnotation(input);
-      const { origin } = edge;
-      const knowledge = useKnowledgeStore.getState();
-      if ('linkId' in origin) knowledge.annotateLink(origin.kind, origin.linkId, input);
-      else if (origin.kind === 'entry-code') knowledge.annotateEntryCode(origin.ownerId, origin.versionId, input);
-      else await useProjectCodeStore.getState().annotateLogCode(origin.versionId, origin.ownerId, input);
-      setLabel(cleaned?.label ?? '');
-      setNote(cleaned?.note ?? '');
-      setStatus({ text: '关系已保存。' });
-    } catch (error) {
-      setStatus({ text: error instanceof Error ? error.message : '保存失败，请重试。', error: true });
-    } finally { setSaving(false); }
-  };
-
-  return (
-    <>
-      <h3 ref={heading} tabIndex={-1}>连线详情</h3>
-      <div className="relation-endpoints">
-        {[center, edge.node].map((node) => <div key={relationNodeKey(node)} data-kind={node.kind}>
-          <span>{RELATION_KIND_LABELS[node.kind]}</span><strong>{node.title}</strong>
-        </div>)}
-      </div>
-      {edge.originalNote && <p className="relation-original-note"><strong>原关联说明</strong>{edge.originalNote}</p>}
-      <form className="relation-form" aria-label="编辑关系" onSubmit={(event) => void save(event)}>
-        <label>连线标签
-          <input value={label} maxLength={RELATION_LABEL_LIMIT} placeholder="相关" disabled={saving}
-            onChange={(event) => { setLabel(event.target.value); setStatus(null); }} />
-        </label>
-        <label>补充说明（可选）
-          <textarea value={note} rows={3} maxLength={RELATION_NOTE_LIMIT} disabled={saving}
-            onChange={(event) => { setNote(event.target.value); setStatus(null); }} />
-        </label>
-        <button type="submit" className="note-button" disabled={saving || !dirty}>{saving ? '保存中…' : '保存关系'}</button>
-        {status && <p className="relation-muted" role={status.error ? 'alert' : 'status'}>{status.text}</p>}
-      </form>
-    </>
-  );
-}
 
 function RelationView({ center, edges, warning }: { center: RelationNode; edges: RelationEdge[]; warning: boolean }) {
   const [page, setPage] = useState(0);
@@ -86,7 +30,10 @@ function RelationView({ center, edges, warning }: { center: RelationNode; edges:
     <section className="module-card relation-workspace">
       <header className="relation-heading">
         <div><h2>关系视图</h2><p className="relation-muted">{edges.length} 条直接关联</p></div>
-        <a className="relation-entry-link" href={center.href} {...workspaceResourceTarget(center.href)}>← 返回当前资料</a>
+        <div className="network-actions">
+          <a className="relation-entry-link" href={knowledgeNetworkHref(center.kind === 'entry' ? center.id : undefined)}>知识网络</a>
+          <a className="relation-entry-link" href={center.href} {...workspaceResourceTarget(center.href)}>← 返回当前资料</a>
+        </div>
       </header>
       {warning && <p className="relation-muted" role="alert">部分关联资料暂时无法读取。</p>}
       <div className="relation-layout">
