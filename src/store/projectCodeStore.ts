@@ -1,14 +1,15 @@
 import { create } from 'zustand';
-import type { CodeLink, CodeProject, CodeTarget, CodeVersion, ProjectCodeData } from '../types/projectCode';
+import type { CodeLink, CodeProject, CodeTarget, CodeVersion, ProjectCodeData, ProjectDirectory } from '../types/projectCode';
 import type { RelationAnnotation } from '../types/relations';
 import {
   codeTargetKey, emptyProjectCode, normalizeRepositoryUrl, normalizeScriptPath, normalizeTutorialUrl, parseCodePermalink,
 } from '../utils/projectCode';
 import { readProjectCode, updateProjectCode } from '../utils/projectCodeStorage';
+import { projectDirectoryPaths } from '../utils/projectDirectory';
 import { cleanRelationAnnotation } from '../utils/relationAnnotation';
 import { generateId } from '../utils/storage';
 
-export type ProjectInput = Omit<CodeProject, 'id'>;
+export type ProjectInput = Pick<CodeProject, 'name' | 'tutorialUrl' | 'repositoryUrl'>;
 export interface CodeVersionInput {
   project: { id: string } | ProjectInput;
   path: string;
@@ -25,6 +26,12 @@ interface ProjectCodeStore {
   load: () => Promise<void>;
   saveVersion: (input: CodeVersionInput, target?: CodeTarget) => Promise<string>;
   saveProject: (id: string, input: ProjectInput) => Promise<void>;
+  importDirectory: (input: {
+    project: { id: string } | ProjectInput;
+    files: string[];
+    scripts: { path: string; content: string }[];
+  }) => Promise<{ projectId: string; added: number; reused: number }>;
+  saveDirectoryNote: (projectId: string, path: string, text: string) => Promise<void>;
   saveVersionDetails: (id: string, note: string, githubUrl: string) => Promise<void>;
   linkVersion: (versionId: string, target: CodeTarget, annotation?: RelationAnnotation) => Promise<void>;
   unlinkVersion: (versionId: string, target: CodeTarget) => Promise<void>;
@@ -112,7 +119,59 @@ export const useProjectCodeStore = create<ProjectCodeStore>((set, get) => {
     saveProject: (id, input) => update((data) => {
       if (!data.projects.some((project) => project.id === id)) throw new Error('这个项目已不存在。');
       const project = makeProject(id, input);
-      return { ...data, projects: data.projects.map((item) => item.id === id ? project : item) };
+      return { ...data, projects: data.projects.map((item) => item.id === id ? { ...item, ...project } : item) };
+    }),
+    importDirectory: async ({ project: input, files, scripts }) => {
+      const projectId = 'id' in input ? input.id : generateId();
+      let added = 0;
+      await update((data) => {
+        const project = 'id' in input
+          ? data.projects.find((item) => item.id === projectId)
+          : makeProject(projectId, input);
+        if (!project) throw new Error('这个项目已不存在，请重新选择。');
+        const paths = projectDirectoryPaths(files);
+        const filePaths = new Set(files);
+        const capturedAt = Date.now();
+        const directory: ProjectDirectory = {
+          capturedAt, files,
+          notes: project.directory?.notes.filter(({ path }) => paths.has(path)) ?? [],
+        };
+        const latestByPath = new Map<string, string>();
+        for (const version of data.versions) {
+          if (version.projectId !== projectId || version.content === null) continue;
+          latestByPath.set(version.path, version.content);
+        }
+        const selected = new Set<string>();
+        const versions: CodeVersion[] = [];
+        for (const { path, content } of scripts) {
+          if (!filePaths.has(path) || selected.has(path)) throw new Error('所选脚本缺失或重复，请重新选择。');
+          selected.add(path);
+          if (latestByPath.get(path) === content) continue;
+          versions.push({ id: generateId(), projectId, path, content, note: '', githubUrl: '', savedAt: capturedAt });
+        }
+        added = versions.length;
+        const updated = { ...project, directory };
+        return {
+          ...data,
+          projects: 'id' in input ? data.projects.map((item) => item.id === projectId ? updated : item) : [...data.projects, updated],
+          versions: [...data.versions, ...versions],
+        };
+      });
+      return { projectId, added, reused: scripts.length - added };
+    },
+    saveDirectoryNote: (projectId, path, input) => update((data) => {
+      const project = data.projects.find((item) => item.id === projectId);
+      const directory = project?.directory;
+      if (!directory || !directory.files.some((file) => file === path || file.startsWith(path + '/'))) {
+        throw new Error('这个路径已不在当前目录快照中，请重新选择。');
+      }
+      const text = input.trim();
+      const notes = directory.notes.filter((note) => note.path !== path);
+      if (text) notes.push({ path, text });
+      return {
+        ...data,
+        projects: data.projects.map((item) => item === project ? { ...item, directory: { ...directory, notes } } : item),
+      };
     }),
     saveVersionDetails: (id, note, githubUrl) => update((data) => {
       const version = data.versions.find((item) => item.id === id);

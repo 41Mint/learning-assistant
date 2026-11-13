@@ -73,6 +73,9 @@ export default function DataBackup() {
           <p>{pendingBackup.data.knowledge.entries.length} 个知识词条、{pendingBackup.data.knowledge.logLinks.length} 个日志关联、{pendingBackup.data.knowledge.relations.length} 个词条间关联。</p>
           <p>{pendingBackup.data.growth.outcomes.length} 项成果、{pendingBackup.data.growth.outcomes.reduce((count, outcome) => count + outcome.practices.length, 0)} 次实践。</p>
           <p>{pendingBackup.data.projectCode.projects.length} 个项目、{pendingBackup.data.projectCode.versions.length} 个代码版本、{effectiveCodeLinks(pendingBackup.data.projectCode, pendingBackup.data.growth.outcomes, pendingBackup.data.knowledge.entries).length} 条代码关联。</p>
+          {pendingBackup.data.projectCode.projects.some((project) => project.directory) && (
+            <p>{pendingBackup.data.projectCode.projects.filter((project) => project.directory).length} 份项目目录快照及其职责说明。</p>
+          )}
           <p className="mt-2 text-sm font-medium text-red-700 dark:text-red-300">恢复会替换当前数据，建议先导出当前备份。{missing.length > 0 && `该旧备份不包含${missing.join('、')}，恢复后这些内容为空。`}</p>
           <div className="mt-3 flex gap-3">
             <button type="button" disabled={busy} onClick={restore} className="note-button" style={{ backgroundColor: '#dc2626' }}>确认恢复并刷新</button>

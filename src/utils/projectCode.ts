@@ -1,4 +1,4 @@
-import type { CodeLink, CodeProject, CodeTarget, CodeVersion, ProjectCodeData } from '../types/projectCode';
+import type { CodeLink, CodeProject, CodeTarget, CodeVersion, ProjectCodeData, ProjectDirectory } from '../types/projectCode';
 import { isRelationAnnotation } from './relationAnnotation';
 import type { GrowthOutcome, GrowthPractice, KnowledgeEntry } from '../types';
 
@@ -10,12 +10,15 @@ const repositoryPattern = /^[a-z\d_.-]+$/i;
 
 export const emptyProjectCode = (): ProjectCodeData => ({ version: 1, projects: [], versions: [], links: [] });
 
+export function isProjectRelativePath(path: string): boolean {
+  return path.length <= MAX_PATH_LENGTH && !/[\\<>:"|?*]/.test(path)
+    && !Array.from(path).some((character) => character.charCodeAt(0) < 32 || character === '\u007f')
+    && path.split('/').every((part) => part && part !== '.' && part !== '..');
+}
+
 export function normalizeScriptPath(input: string): string {
   const path = input.trim().replaceAll('\\', '/');
-  const parts = path.split('/');
-  const hasControl = Array.from(path).some((character) => character.charCodeAt(0) < 32 || character === '\u007f');
-  if (path.length > MAX_PATH_LENGTH || !/\.cs$/i.test(path) || hasControl
-    || parts.some((part) => !part || part === '.' || part === '..' || /[<>:"|?*]/.test(part))) {
+  if (!isProjectRelativePath(path) || !/\.cs$/i.test(path)) {
     throw new Error('请填写项目内的 .cs 路径，例如 Assets/Scripts/InputManager.cs。');
   }
   return path;
@@ -163,10 +166,35 @@ function nonempty(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+function isDirectory(value: unknown): value is ProjectDirectory {
+  if (!isRecord(value) || typeof value.capturedAt !== 'number' || value.capturedAt < 0
+    || !Number.isFinite(new Date(value.capturedAt).getTime()) || !Array.isArray(value.files) || !value.files.length
+    || !value.files.every((path): path is string => typeof path === 'string' && isProjectRelativePath(path))
+    || !Array.isArray(value.notes)) return false;
+  const files = new Set(value.files);
+  if (files.size !== value.files.length) return false;
+  const folders = new Set<string>();
+  for (const path of files) {
+    for (let slash = path.indexOf('/'); slash >= 0; slash = path.indexOf('/', slash + 1)) {
+      const folder = path.slice(0, slash);
+      if (files.has(folder)) return false;
+      folders.add(folder);
+    }
+  }
+  const noted = new Set<string>();
+  for (const note of value.notes) {
+    if (!isRecord(note) || typeof note.path !== 'string' || (!files.has(note.path) && !folders.has(note.path))
+      || !nonempty(note.text) || note.text.length > 1000 || noted.has(note.path)) return false;
+    noted.add(note.path);
+  }
+  return true;
+}
+
 function isProject(value: unknown): value is CodeProject {
   return isRecord(value) && nonempty(value.id) && nonempty(value.name)
     && typeof value.repositoryUrl === 'string' && normalizeRepositoryUrl(value.repositoryUrl) === value.repositoryUrl
-    && typeof value.tutorialUrl === 'string' && normalizeTutorialUrl(value.tutorialUrl) === value.tutorialUrl;
+    && typeof value.tutorialUrl === 'string' && normalizeTutorialUrl(value.tutorialUrl) === value.tutorialUrl
+    && (value.directory === undefined || isDirectory(value.directory));
 }
 
 function isVersion(value: unknown): value is CodeVersion {

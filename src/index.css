@@ -389,6 +389,28 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
   background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border); border-radius: 6px;
 }
 .code-form textarea { resize: vertical; }
+.project-directory { margin-block: 14px; }
+.project-directory summary { cursor: pointer; font-weight: 600; }
+.project-directory-fields { min-width: 0; padding: 0; border: 0; }
+.project-directory-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.project-directory-tree {
+  min-width: 0; max-height: 50dvh; overflow: auto; padding: 8px;
+  border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-bg);
+}
+.project-directory-tree ul { list-style: none; margin: 0; padding-inline-start: 13px; }
+.project-directory-tree > ul { padding-inline-start: 0; }
+.project-directory-row { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 14px; overflow-wrap: anywhere; }
+.project-directory-toggle, .project-directory-name {
+  border: 0; background: transparent; color: var(--app-text); cursor: pointer; text-align: left; border-radius: 4px;
+}
+.project-directory-toggle { flex: 0 0 25px; min-height: 28px; }
+.project-directory-name { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; min-width: 0; padding: 4px; }
+.project-directory-name:hover, .project-directory-name[aria-pressed="true"] { background: var(--app-active); }
+.project-directory-name small { color: var(--app-muted); }
+.project-directory-check { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.project-directory-item { min-width: 0; overflow-wrap: anywhere; }
+.project-directory-item h4 { margin: 0; }
+@media (max-width: 760px) { .project-directory-layout { grid-template-columns: minmax(0, 1fr); } }
 .code-version h2 { overflow-wrap: anywhere; }
 .code-focus-card { max-width: 840px; margin-inline: auto; overflow-wrap: anywhere; }
 .code-preview pre { max-height: 55vh; overflow: auto; white-space: pre; }

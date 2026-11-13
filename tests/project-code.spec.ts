@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import type { ProjectCodeData } from '../src/types/projectCode';
 
 const firstDate = '2026-11-02';
 const scriptPath = 'Assets/Scripts/InputManager.cs';
@@ -46,6 +47,128 @@ async function downloadBackup(page: Page) {
   const download = await event;
   return JSON.parse(await readFile((await download.path())!, 'utf8'));
 }
+
+test('项目目录预览、批量保存、职责说明、日志回链与备份恢复', async ({ page, browser }, testInfo) => {
+  const root = testInfo.outputPath('打地鼠项目');
+  const samplePath = process.env.UNITY_SCRIPT_SAMPLE;
+  const sample = samplePath ? await readFile(samplePath, 'utf8') : firstContent;
+  for (const [relativePath, content] of [
+    [scriptPath, sample],
+    ['Assets/Scripts/Mole.cs', 'public class Mole {}'],
+    ['Assets/Scripts/Bad.cs', Buffer.from([0xff, 0xfe])],
+    ['Assets/Scenes/Game.unity', 'scene'],
+    ['Assets/Scenes/Game.unity.meta', 'meta'],
+    ['Library/Cache.cs', 'cache'],
+    ['Builds/Game.exe', 'build'],
+    ['ProjectSettings/ProjectVersion.txt', '2022.3'],
+  ] as const) {
+    const file = path.join(root, relativePath);
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, content);
+  }
+  await seedStudyContext(page);
+  await page.goto('/#code');
+  const importer = page.getByRole('form', { name: '导入项目目录' });
+  const project = page.getByRole('article', { name: '打地鼠项目', exact: true });
+  const tree = importer.getByRole('region', { name: '项目目录树' });
+  const chooseDirectory = async () => {
+    await importer.getByLabel('本地项目文件夹').setInputFiles(root);
+    await expect(tree.getByText('Assets', { exact: true })).toBeVisible();
+    await tree.getByRole('button', { name: '展开 Assets', exact: true }).click();
+    await tree.getByRole('button', { name: '展开 Assets/Scripts', exact: true }).click();
+  };
+  const readCode = () => page.evaluate(async () => {
+    const { readProjectCode } = await import('/src/utils/projectCodeStorage.ts');
+    return readProjectCode();
+  }) as Promise<ProjectCodeData>;
+  const save = importer.getByRole('button', { name: '保存目录快照' });
+  await page.getByRole('button', { name: '导入项目目录', exact: true }).click();
+  await chooseDirectory();
+  await expect(importer.getByLabel('项目名称')).toHaveValue('打地鼠项目');
+  await expect(tree.getByText('Library', { exact: true })).toHaveCount(0);
+  await expect(tree.getByText('Builds', { exact: true })).toHaveCount(0);
+  const script = tree.getByRole('checkbox', { name: `保存脚本 ${scriptPath}` });
+  const bad = tree.getByRole('checkbox', { name: '保存脚本 Assets/Scripts/Bad.cs' });
+  await script.check();
+  await bad.check();
+  await save.click();
+  await expect(importer.getByRole('alert')).toContainText('Assets/Scripts/Bad.cs');
+  expect((await readCode()).projects).toHaveLength(0);
+  await bad.uncheck();
+  await save.click();
+  await expect(project.getByRole('status')).toContainText('新增 1 个代码版本');
+  const saved = (await readCode()).versions[0];
+  expect(saved.path).toBe(scriptPath);
+  expect(saved.content).toContain('class InputManager');
+  const savedTree = project.getByRole('region', { name: '项目目录树' });
+  await savedTree.getByRole('button', { name: '展开 Assets', exact: true }).click();
+  await savedTree.getByRole('button', { name: 'Scripts', exact: true }).click();
+  await project.getByRole('textbox', { name: '职责说明', exact: true }).fill('存放本练习的玩法脚本。');
+  await project.getByRole('button', { name: '保存职责说明' }).click();
+  await expect(project.getByText('职责说明已保存。')).toBeVisible();
+  await savedTree.getByRole('button', { name: '展开 Assets/Scripts', exact: true }).click();
+  await savedTree.getByRole('button', { name: /InputManager\.cs/ }).click();
+  await project.getByRole('textbox', { name: '职责说明', exact: true }).fill('处理玩家输入。');
+  await project.getByRole('button', { name: '保存职责说明' }).click();
+  await expect(project.getByText('职责说明已保存。')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('project-directory.png') });
+  await project.getByRole('list', { name: '此路径的代码版本' }).getByRole('link').click();
+  await expect(page).toHaveURL(new RegExp('/#code/' + saved.id + '$'));
+  await expect(page.getByRole('region', { name: '脚本快照' }).locator('pre code')).toContainText('class InputManager');
+
+  await page.goto('/#history/' + firstDate);
+  const panel = page.getByRole('region', { name: '项目代码', exact: true });
+  await panel.getByText('项目代码（0）', { exact: true }).click();
+  await panel.getByRole('combobox').selectOption(saved.id);
+  await panel.getByRole('button', { name: '关联所选版本' }).click();
+  await panel.getByRole('link', { name: scriptPath, exact: true }).click();
+  await expect(page.getByRole('link', { name: /学习日志 ·/ })).toHaveAttribute('href', '#history/' + firstDate);
+  await page.goto('/#code');
+
+  await project.getByRole('button', { name: '更新目录快照' }).click();
+  await chooseDirectory();
+  await script.check();
+  await tree.getByRole('checkbox', { name: '保存脚本 Assets/Scripts/Mole.cs' }).check();
+  await save.click();
+  await expect(project.getByRole('status')).toContainText('新增 1 个代码版本 · 复用 1 个已有版本');
+  await project.getByRole('button', { name: '编辑项目资料' }).click();
+  await project.getByLabel('GitHub 仓库地址（可选）').fill(repository);
+  await project.getByRole('button', { name: '保存项目资料' }).click();
+  await expect(project.getByRole('link', { name: '打开 GitHub 仓库' })).toHaveAttribute('href', repository);
+
+  const backup = await downloadBackup(page);
+  const code: ProjectCodeData = backup.data.projectCode;
+  expect(backup.version).toBe(5);
+  expect(code.versions.map(({ path }) => path)).toEqual([scriptPath, 'Assets/Scripts/Mole.cs']);
+  expect(code.projects[0].directory).toMatchObject({
+    files: ['Assets/Scenes/Game.unity', 'Assets/Scripts/Bad.cs', scriptPath, 'Assets/Scripts/Mole.cs', 'ProjectSettings/ProjectVersion.txt'],
+    notes: [{ path: 'Assets/Scripts', text: '存放本练习的玩法脚本。' }, { path: scriptPath, text: '处理玩家输入。' }],
+  });
+  const context = await browser.newContext();
+  try {
+    const restored = await context.newPage();
+    await restored.goto('/#data');
+    const input = restored.getByLabel('选择备份文件');
+    const broken = structuredClone(backup);
+    broken.data.projectCode.projects[0].directory.files.push('../outside');
+    await input.setInputFiles({ name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(broken)) });
+    await expect(restored.getByRole('button', { name: '确认恢复并刷新' })).toHaveCount(0);
+    await expect(restored.getByRole('status')).toHaveText('项目代码数据格式不正确。');
+    await input.setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+    await expect(restored.getByText('1 份项目目录快照及其职责说明。')).toBeVisible();
+    await Promise.all([restored.waitForEvent('load'), restored.getByRole('button', { name: '确认恢复并刷新' }).click()]);
+    await restored.goto('/#code');
+    await restored.getByText('目录快照（5 个文件）').click();
+    const restoredTree = restored.getByRole('region', { name: '项目目录树' });
+    await restoredTree.getByRole('button', { name: '展开 Assets', exact: true }).click();
+    await restoredTree.getByRole('button', { name: '展开 Assets/Scripts', exact: true }).click();
+    await restoredTree.getByRole('button', { name: /InputManager\.cs/ }).click();
+    await expect(restored.getByRole('textbox', { name: '职责说明', exact: true })).toHaveValue('处理玩家输入。');
+    await expect(restored.getByRole('list', { name: '此路径的代码版本' }).getByRole('link')).toHaveAttribute('href', '#code/' + saved.id);
+  } finally {
+    await context.close();
+  }
+});
 
 test('同名脚本分版本保存，日志、词条与两次实践打开对应版本', async ({ page }) => {
   await seedStudyContext(page);

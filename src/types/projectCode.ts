@@ -1,10 +1,17 @@
 import type { RelationAnnotation } from './relations';
 
+export interface ProjectDirectory {
+  capturedAt: number;
+  files: string[];
+  notes: { path: string; text: string }[];
+}
+
 export interface CodeProject {
   id: string;
   name: string;
   tutorialUrl: string;
   repositoryUrl: string;
+  directory?: ProjectDirectory;
 }
 
 export interface CodeVersion {
