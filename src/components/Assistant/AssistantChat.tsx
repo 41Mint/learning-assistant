@@ -4,6 +4,8 @@ import ReactMarkdown from 'react-markdown';
 import { ASSISTANT_CHAT_ENDPOINT, CHAT_ANSWER_LIMIT, CHAT_HISTORY_LIMIT, CHAT_QUESTION_LIMIT } from '../../types/assistantChat';
 import type { ChatRequest } from '../../types/assistantChat';
 import { LOG_REVIEW_MAX_TEXT, reviewRecord, reviewText } from '../../types/logReview';
+import { assistantAction } from './assistantActions';
+import type { AssistantAction } from './assistantActions';
 
 export interface AssistantChatSource { id: string; date: string; text: string; draft: boolean }
 interface Turn { question: string; answer: string; source?: { id: string; date: string; draft: boolean } }
@@ -20,7 +22,11 @@ async function askAssistant(input: ChatRequest, signal: AbortSignal): Promise<st
   return answer;
 }
 
-export default function AssistantChat({ source, active }: { source?: AssistantChatSource; active: boolean }) {
+export default function AssistantChat({ source, active, onAction }: {
+  source?: AssistantChatSource;
+  active: boolean;
+  onAction: (action: AssistantAction) => void;
+}) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [question, setQuestion] = useState('');
   const [reference, setReference] = useState<string | null>(null);
@@ -44,10 +50,17 @@ export default function AssistantChat({ source, active }: { source?: AssistantCh
   const send = async (event: FormEvent) => {
     event.preventDefault();
     if (controller.current || !question.trim()) return;
+    const text = question.trim();
+    const action = assistantAction(text);
+    if (action) {
+      setError('');
+      setQuestion('');
+      onAction(action);
+      return;
+    }
     const current = new AbortController();
     controller.current = current;
     setError('');
-    const text = question.trim();
     const sourceInfo = attached ? { id: attached.id, date: attached.date, draft: attached.draft } : undefined;
     setPending({ question: text, source: sourceInfo });
     const history = turns.filter((turn) => turn.source?.id === attached?.id)
@@ -83,7 +96,10 @@ export default function AssistantChat({ source, active }: { source?: AssistantCh
   </div>;
   return <section className="assistant-chat" aria-label="自由问答">
     <div ref={transcript} className="assistant-transcript" role="log" aria-label="问答记录">
-      {!turns.length && !pending && <p className="knowledge-muted">问一个学习问题，例如「PPU 是什么？」</p>}
+      {!turns.length && !pending && <div className="knowledge-muted">
+        <p>问一个学习问题，例如「PPU 是什么？」</p>
+        <p>也可以说「打开 PPU 词条」或「整理 11-5 的日志」。</p>
+      </div>}
       {turns.map((turn, index) => <div key={index} className="assistant-turn">
         {renderQuestion(turn)}
         <div className="assistant-answer markdown-preview">
@@ -114,8 +130,8 @@ export default function AssistantChat({ source, active }: { source?: AssistantCh
           composer.current?.focus();
         }}>清空对话</button>}
         {pending
-          ? <button type="button" className="note-button secondary" onClick={cancel}>停止</button>
-          : <button type="submit" className="note-button" disabled={!question.trim()}>发送</button>}
+          ? <button key="stop" type="button" className="note-button secondary" onClick={cancel}>停止</button>
+          : <button key="send" type="submit" className="note-button" disabled={!question.trim()}>发送</button>}
       </div>
     </form>
   </section>;

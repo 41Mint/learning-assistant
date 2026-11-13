@@ -6,12 +6,13 @@ import type { ChatRequest } from '../src/types/assistantChat';
 const date = '2026-11-05';
 const text = '## Unity 素材实践\n\n我用 PPU 调整了素材导入比例。\n用 Tilemap 拼出地面。';
 
-async function openReview(page: Page, content = text) {
-  await page.addInitScript(({ date, content }) => {
+async function seedReview(page: Page, content = text, includeOlder = false) {
+  await page.addInitScript(({ date, content, includeOlder }) => {
     if (localStorage.getItem('log-review-seeded')) return;
     localStorage.setItem('log-review-seeded', '1');
     localStorage.setItem('learning-assistant:study-logs', JSON.stringify([
       { id: 'review-log', date, content, duration: 25, tags: ['原有标签'], knowledgePoints: [], createdAt: 1, updatedAt: 1 },
+      ...(includeOlder ? [{ id: 'older-log', date: '2025-11-05', content: '## 旧年学习记录', duration: 5, tags: [], knowledgePoints: [], createdAt: 1, updatedAt: 1 }] : []),
     ]));
     localStorage.setItem('learning-assistant:knowledge', JSON.stringify({
       version: 1,
@@ -21,7 +22,11 @@ async function openReview(page: Page, content = text) {
       ],
       logLinks: [{ id: 'old-link', entryId: 'scene', logId: 'review-log', note: '原有情境' }], relations: [],
     }));
-  }, { date, content });
+  }, { date, content, includeOlder });
+}
+
+async function openReview(page: Page, content = text) {
+  await seedReview(page, content);
   await page.goto('/#history/' + date);
   await page.getByRole('button', { name: '编辑 / 补充记录', exact: true }).click();
   const editor = page.getByRole('form', { name: '历史记录编辑表单' });
@@ -308,18 +313,109 @@ test('自由问答保留追问，只有显式勾选时才引用当前日志草�
   await expect(reference).not.toBeChecked();
   await expect(editor.getByRole('textbox', { name: '历史学习内容' })).toHaveValue(draft);
 
+  let received: () => void;
+  const intercepted = new Promise<void>((resolve) => { received = resolve; });
   let complete: () => void;
   const release = new Promise<void>((resolve) => { complete = resolve; });
   await page.route('**/api/assistant-chat', async (route) => {
+    received!();
     await release;
     await route.fulfill({ json: { answer: '已取消的回复' } }).catch(() => {});
   }, { times: 1 });
   await input.fill('这条随后取消');
-  const requested = page.waitForRequest('**/api/assistant-chat');
   await input.press('Enter');
-  await requested;
-  await assistant.getByRole('button', { name: '停止', exact: true }).click();
-  complete!();
-  await expect(input).toHaveValue('这条随后取消');
+  try {
+    await intercepted;
+    await assistant.getByRole('button', { name: '停止', exact: true }).click();
+    await expect(assistant.getByRole('button', { name: '发送', exact: true })).toBeEnabled();
+    await expect(input).toHaveValue('这条随后取消');
+  } finally {
+    complete!();
+  }
   await expect(assistant.getByText('已取消的回复', { exact: true })).toHaveCount(0);
+});
+
+test('从其他页面按日期找到日志，选择后整理，保护已有的另一篇草稿', async ({ page }) => {
+  await seedReview(page, text, true);
+  const requests: LogReviewRequest[] = [];
+  let chatCalls = 0;
+  await page.route('**/api/assistant-chat', async (route) => { chatCalls += 1; await route.abort(); });
+  await page.route('**/api/log-review', async (route) => {
+    const input: LogReviewRequest = route.request().postDataJSON();
+    requests.push(input);
+    await route.fulfill({ json: input.stage === 'plan' ? { queries: ['Tilemap'] } : { summary: '找到 Tilemap。', suggestions: [] } });
+  });
+  await page.goto('/#path');
+  await page.getByRole('button', { name: '打开学习智能体' }).click();
+  const assistant = page.getByRole('dialog', { name: '学习智能体' });
+  await assistant.getByRole('button', { name: '日志整理', exact: true }).click();
+  await expect(assistant.getByRole('searchbox', { name: '按日期找日志' })).toBeVisible();
+  await assistant.getByRole('button', { name: '自由问答', exact: true }).click();
+  const question = assistant.getByRole('textbox', { name: '输入问题' });
+  await question.fill('帮我整理11-5的日志');
+  await question.press('Enter');
+  const dateInput = assistant.getByRole('searchbox', { name: '按日期找日志' });
+  await expect(dateInput).toHaveValue('11-5');
+  await expect(assistant.getByRole('button', { name: '2025-11-05 · 旧年学习记录' })).toBeVisible();
+  expect(requests).toHaveLength(0);
+  await dateInput.fill('2026-11-05');
+  await expect(assistant.getByRole('button', { name: '2025-11-05 · 旧年学习记录' })).toHaveCount(0);
+  await assistant.getByRole('button', { name: '2026-11-05 · Unity 素材实践' }).click();
+  await expect(page).toHaveURL(/#history\/2026-11-05$/);
+  await expect(assistant.getByText('当前日志 · ' + date, { exact: true })).toBeVisible();
+  expect(requests).toHaveLength(0);
+  await assistant.getByRole('button', { name: '生成整理建议' }).click();
+  await expect(assistant.getByText('找到 Tilemap。', { exact: true })).toBeVisible();
+  expect(requests.map((input) => input.text)).toEqual([text, text]);
+  await assistant.getByRole('button', { name: '选择其他日期' }).click();
+  await dateInput.fill('11-5');
+  await assistant.getByRole('button', { name: '2025-11-05 · 旧年学习记录' }).click();
+  await expect(assistant.getByRole('alert')).toContainText('2026-11-05 的草稿');
+  await dateInput.fill('01-01');
+  await expect(assistant.getByRole('status')).toHaveText('没有找到这一天的日志。');
+  await assistant.getByRole('button', { name: '继续整理当前日志' }).click();
+  await expect(assistant.getByText('找到 Tilemap。', { exact: true })).toBeVisible();
+  expect(chatCalls).toBe(0);
+});
+
+test('窄屏最小化后可阅读页面并恢复输入，从问答按别名查找并打开词条', async ({ page }) => {
+  await seedReview(page);
+  let chatCalls = 0;
+  await page.route('**/api/assistant-chat', async (route) => { chatCalls += 1; await route.abort(); });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/#path');
+  await page.getByRole('button', { name: '打开学习智能体' }).click();
+  const assistant = page.getByRole('dialog', { name: '学习智能体' });
+  const restore = page.getByRole('button', { name: '恢复学习智能体' });
+  const question = assistant.getByRole('textbox', { name: '输入问题' });
+  await question.fill('帮我打开 PPU 词条');
+  await assistant.getByRole('button', { name: '最小化学习智能体' }).click();
+  await expect(assistant).toBeHidden();
+  await expect(restore).toBeFocused();
+  await page.getByText('可以尝试', { exact: true }).click();
+  await restore.click();
+  await expect(question).toHaveValue('帮我打开 PPU 词条');
+  await question.press('Enter');
+  await expect(assistant.getByRole('button', { name: '查找资料', pressed: true })).toBeVisible();
+  await expect(assistant.getByRole('searchbox', { name: '检索关键词' })).toHaveValue('ppu');
+  await assistant.getByRole('link', { name: '像素单位', exact: true }).click();
+  await expect(page).toHaveURL(/#knowledge\/pixel-unit\?find=ppu$/);
+  await expect(assistant).toBeHidden();
+  await expect(page.getByRole('heading', { name: '像素单位', exact: true })).toBeVisible();
+  await restore.click();
+  await expect(assistant.getByRole('link', { name: '像素单位', exact: true })).toBeVisible();
+  await assistant.getByRole('button', { name: '最小化学习智能体' }).click();
+  await page.getByRole('button', { name: '新建词条', exact: true }).click();
+  const entryDraft = page.getByRole('textbox', { name: '词条名称（必填）', exact: true });
+  await entryDraft.fill('未保存词条');
+  await restore.click();
+  const popupPromise = page.waitForEvent('popup');
+  await assistant.getByRole('link', { name: '像素单位', exact: true }).click();
+  const popup = await popupPromise;
+  await expect(popup.getByRole('heading', { name: '像素单位', exact: true })).toBeVisible();
+  await popup.close();
+  await expect(assistant).toBeVisible();
+  await assistant.getByRole('button', { name: '最小化学习智能体' }).click();
+  await expect(entryDraft).toHaveValue('未保存词条');
+  expect(chatCalls).toBe(0);
 });

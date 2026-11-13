@@ -128,9 +128,24 @@ function App() {
     log: activeLog,
     editing: activePage === 'today' ? Boolean(todayDraft) : Boolean(historyDraft),
   } : undefined;
+  const openReview = (log: Log): string | undefined => {
+    const saved = useStudyLogStore.getState().logs.find((item) => item.id === log.id);
+    if (!saved) return '这篇日志已不存在，请重新选择。';
+    if (todayDraft?.id === saved.id || (todayLog?.id === saved.id && historyDraft?.id !== saved.id)) {
+      if (todayDraft && todayDraft.id !== saved.id) return '今日学习还有未保存的草稿，请先保存或取消。';
+      setTodayDraft((draft) => draft ?? saved);
+      window.location.hash = 'today';
+      enterPage('today');
+    } else {
+      if (historyDraft && historyDraft.id !== saved.id) return `历史回顾还有 ${historyDraft.date} 的草稿，请先保存或取消。`;
+      setHistoryDraft((draft) => draft ?? saved);
+      useWorkspaceStore.getState().openLog(saved.date);
+      enterPage('history');
+    }
+  };
 
   return (
-    <AssistantDock activeLog={assistantLog}>
+    <AssistantDock activeLog={assistantLog} onOpenReview={openReview}>
     <div className="app-shell" data-knowledge-demo={IS_KNOWLEDGE_DEMO || undefined}>
       {IS_KNOWLEDGE_DEMO && <div className="knowledge-demo-banner">
         <strong>知识网络演示工作区</strong>

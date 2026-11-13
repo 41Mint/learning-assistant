@@ -4,7 +4,7 @@ import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
 import { hasWorkspaceEditor, searchHref, useWorkspaceStore } from '../../store/workspaceStore';
 import { logLabel } from '../../utils/growth';
-import { normalizedName } from '../../utils/knowledge';
+import { entryNames, normalizedName } from '../../utils/knowledge';
 import { codeVersionHref } from '../../utils/projectCode';
 import { codeSearchFields, entrySearchFields, includesWords, logSearchFields, searchWords } from '../../utils/resourceSearch';
 import { matchExcerpt, matchScriptLine } from '../../utils/searchMatches';
@@ -17,11 +17,12 @@ const GROUPS = [
 ] as const;
 
 type SearchPage = typeof GROUPS[number]['page'];
-type SearchScope = 'all' | SearchPage;
+export type SearchScope = 'all' | SearchPage;
 interface SearchRecord {
   href: string;
   title: string;
   detail?: string;
+  names?: string[];
   fields: string[];
   source?: string;
 }
@@ -31,13 +32,14 @@ function searchable(record: SearchRecord) {
   return { ...record, searchableText: normalizedName(fields.join('\n')) };
 }
 
-function SearchResults({ query, words, scope, includeSource, editingPages, onOpen }: {
+export function SearchResults({ query, words, scope, includeSource, editingPages, limit, onOpen }: {
   query: string;
   words: string[];
   scope: SearchScope;
   includeSource: boolean;
-  editingPages: SearchPage[];
-  onOpen: () => void;
+  editingPages?: SearchPage[];
+  limit?: number;
+  onOpen: (newTab: boolean) => void;
 }) {
   const logs = useStudyLogStore((state) => state.logs);
   const { entries, error: knowledgeError } = useKnowledgeStore();
@@ -49,7 +51,7 @@ function SearchResults({ query, words, scope, includeSource, editingPages, onOpe
         href: '#history/' + encodeURIComponent(log.date), title: logLabel(log), fields: logSearchFields(log),
       })),
       knowledge: [...entries].sort((a, b) => a.title.localeCompare(b.title, 'zh-CN')).map((entry) => searchable({
-        href: '#knowledge/' + encodeURIComponent(entry.id), title: entry.title, detail: entry.category, fields: entrySearchFields(entry),
+        href: '#knowledge/' + encodeURIComponent(entry.id), title: entry.title, detail: entry.category, fields: entrySearchFields(entry), names: entryNames(entry),
       })),
       code: [...code.versions].sort((a, b) => b.savedAt - a.savedAt).map((version) => {
         const projectName = projects.get(version.projectId) ?? '';
@@ -62,10 +64,14 @@ function SearchResults({ query, words, scope, includeSource, editingPages, onOpe
       }),
     };
   }, [logs, entries, code, includeSource]);
-  const groups = GROUPS.filter(({ page }) => scope === 'all' || scope === page).map((group) => ({
-    ...group,
-    items: records[group.page].filter(({ searchableText }) => includesWords(searchableText, words)),
-  }));
+  const exactQuery = normalizedName(query);
+  const groups = GROUPS.filter(({ page }) => scope === 'all' || scope === page).map((group) => {
+    const items = records[group.page].filter(({ searchableText }) => includesWords(searchableText, words));
+    if (limit && group.page === 'knowledge') {
+      items.sort((a, b) => Number(b.names?.includes(exactQuery) ?? false) - Number(a.names?.includes(exactQuery) ?? false));
+    }
+    return { ...group, items };
+  });
   const count = groups.reduce((total, group) => total + group.items.length, 0);
   const checkingCode = (scope === 'all' || scope === 'code') && !codeLoaded;
 
@@ -75,19 +81,23 @@ function SearchResults({ query, words, scope, includeSource, editingPages, onOpe
       {(scope === 'all' || scope === 'knowledge') && knowledgeError && <p className="search-muted">知识词条暂时无法读取。</p>}
       {(scope === 'all' || scope === 'code') && codeError && <p className="search-muted">项目代码暂时无法读取。</p>}
       {groups.filter(({ items }) => items.length > 0).map(({ page, label, items }) => {
-        const newTab = editingPages.includes(page);
+        const newTab = editingPages?.includes(page) ?? hasWorkspaceEditor(page);
         return (
           <section key={page} aria-label={label}>
             <h3>{label}（{items.length}）</h3>
             {newTab && <p className="search-muted">该页有编辑表单，结果将在新标签页打开。</p>}
-            <ul>{items.map(({ href, title, detail, fields, source }) => {
+            <ul>{items.slice(0, limit ?? items.length).map(({ href, title, detail, fields, source }) => {
               const hit = source ? matchScriptLine(source, words) : undefined;
               const excerpt = hit?.excerpt ?? matchExcerpt(fields, words);
               const target = searchHref(href, query, Boolean(hit));
               return <li key={href}>
                 <a href={target} target={newTab ? '_blank' : undefined} rel={newTab ? 'noopener' : undefined} onClick={(event) => {
-                  onOpen();
-                  if (!newTab && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && window.location.hash === target) {
+                  const inNewTab = editingPages?.includes(page) ?? hasWorkspaceEditor(page);
+                  const link = event.currentTarget;
+                  link.target = inNewTab ? '_blank' : '';
+                  link.rel = inNewTab ? 'noopener' : '';
+                  onOpen(inNewTab || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey);
+                  if (!inNewTab && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && window.location.hash === target) {
                     useWorkspaceStore.getState().syncHash();
                   }
                 }}><HighlightedText text={title} words={words} /></a>
@@ -95,6 +105,7 @@ function SearchResults({ query, words, scope, includeSource, editingPages, onOpe
                 {excerpt && <p className="search-excerpt">{hit && <span className="search-muted">第 {hit.line} 行 · </span>}<HighlightedText text={excerpt} words={words} /></p>}
               </li>;
             })}</ul>
+            {limit && items.length > limit && <p className="search-muted">显示前 {limit} 条，可补充关键词缩小范围。</p>}
           </section>
         );
       })}

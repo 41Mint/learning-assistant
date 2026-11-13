@@ -409,6 +409,10 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 }
 .assistant-launcher[data-dev] { bottom: 142px; }
 .assistant-launcher[data-dragging] { cursor: grabbing; }
+.assistant-minimized-mark {
+  position: absolute; top: -3px; right: -3px; display: grid; place-items: center; width: 18px; height: 18px;
+  border: 1px solid var(--app-border); border-radius: 50%; background: var(--app-surface); color: var(--app-text); line-height: 1;
+}
 .assistant-drawer {
   position: fixed; inset: auto; z-index: 1000001; margin: 0; max-width: none; max-height: none; padding: 0; overflow: hidden;
   border: 1px solid var(--app-border); border-radius: 12px; background: var(--app-surface); color: var(--app-text);
@@ -444,7 +448,18 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 }
 .assistant-resize:focus-visible { outline-offset: -3px; }
 .assistant-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px 16px; }
-.assistant-context { margin: 0 0 10px; font-weight: 650; }
+.assistant-context { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin: 0 0 10px; font-weight: 650; }
+.assistant-review-picker, .assistant-search { display: grid; gap: 8px; font-size: 14px; }
+.assistant-review-picker p { margin: 0; }
+.assistant-review-logs { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.assistant-review-logs button, .assistant-search-scope select {
+  padding: 7px 9px; border: 1px solid var(--app-border); border-radius: 6px;
+  color: var(--app-text); background: var(--app-bg);
+}
+.assistant-review-logs button { width: 100%; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
+.assistant-review-logs button:hover { background: var(--app-active); }
+.assistant-search-scope { display: flex; align-items: center; gap: 8px; }
+.assistant-search .search-results { overflow: visible; }
 .assistant-chat-host, .assistant-chat { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .assistant-chat-host[hidden], .assistant-body[hidden] { display: none; }
 .assistant-transcript { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px 14px; }
