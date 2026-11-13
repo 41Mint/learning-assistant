@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
 import type { KnowledgeEntry } from '../../types';
 import { useKnowledgeStore } from '../../store/knowledgeStore';
+import type { SaveKnowledgeEntry } from '../../store/knowledgeStore';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
 import { logLabel } from '../../utils/growth';
@@ -11,10 +12,11 @@ import FocusEditor from '../common/FocusEditor';
 import MarkdownFields from '../common/MarkdownFields';
 import ReferenceChoices from '../common/ReferenceChoices';
 
-export default function KnowledgeEditor({ entry, categories, initialCategory, onSave, onCancel }: {
+export default function KnowledgeEditor({ entry, categories, initialCategory, saveEntry: saveOverride, onSave, onCancel }: {
   entry?: KnowledgeEntry;
   categories: string[];
   initialCategory?: string;
+  saveEntry?: SaveKnowledgeEntry;
   onSave: (id: string) => void;
   onCancel: () => void;
 }) {
@@ -39,7 +41,7 @@ export default function KnowledgeEditor({ entry, categories, initialCategory, on
 
   const save = () => {
     try {
-      const id = saveEntry({ title, aliases: aliases.split(/[,，\n]/), category, content }, {
+      const id = (saveOverride ?? saveEntry)({ title, aliases: aliases.split(/[,，\n]/), category, content }, {
         id: entry?.id,
         references: { logIds, entryIds, codeVersionIds: codeSelection ?? undefined },
       });

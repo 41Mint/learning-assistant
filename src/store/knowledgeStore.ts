@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { KnowledgeData, KnowledgeEntry } from '../types';
+import type { KnowledgeData, KnowledgeEntry, KnowledgeLogLink, KnowledgeRelation } from '../types';
 import type { RelationAnnotation } from '../types/relations';
 import { emptyKnowledge, normalizedName, otherEntryId, validateKnowledge } from '../utils/knowledge';
 import { entryCodeIds } from '../utils/projectCode';
@@ -15,11 +15,43 @@ interface EntrySaveOptions {
   references?: { logIds: string[]; entryIds: string[]; codeVersionIds?: string[] };
 }
 
+export type SaveKnowledgeEntry = (input: EntryInput, options?: EntrySaveOptions) => string;
+
+export interface EntryCategoryChange { id: string; from: string; to: string }
+
+export interface EntryEditSnapshot {
+  entry: KnowledgeEntry;
+  logLinks: KnowledgeLogLink[];
+  relations: KnowledgeRelation[];
+}
+
+export function entryEditSnapshot(data: KnowledgeData, id: string): EntryEditSnapshot | undefined {
+  const entry = data.entries.find((item) => item.id === id);
+  if (!entry) return;
+  return {
+    entry,
+    logLinks: data.logLinks.filter((link) => link.entryId === id),
+    relations: data.relations.filter((relation) => otherEntryId(relation, id) !== undefined),
+  };
+}
+
+export function sameEntryEdit(first: EntryEditSnapshot, second: EntryEditSnapshot): boolean {
+  const byId = (a: { id: string }, b: { id: string }) => a.id.localeCompare(b.id);
+  const comparable = ({ entry, logLinks, relations }: EntryEditSnapshot) => JSON.stringify({
+    entry: [entry.id, entry.title, entry.aliases, entry.category, entry.content, entry.createdAt, entry.codeVersionIds, entry.codeAnnotations],
+    logLinks: [...logLinks].sort(byId),
+    relations: [...relations].sort(byId),
+  });
+  return comparable(first) === comparable(second);
+}
+
 interface KnowledgeStore extends KnowledgeData {
   isLoaded: boolean;
   error: string;
   loadKnowledge: () => void;
-  saveEntry: (input: EntryInput, options?: EntrySaveOptions) => string;
+  saveEntry: SaveKnowledgeEntry;
+  applyEntryCategories: (changes: EntryCategoryChange[]) => void;
+  restoreEntryEdit: (expected: EntryEditSnapshot, replacement: EntryEditSnapshot) => void;
   deleteEntry: (id: string) => void;
   linkLog: (entryId: string, logId: string, note: string, annotation?: RelationAnnotation) => void;
   unlinkLog: (id: string) => void;
@@ -81,6 +113,33 @@ export const useKnowledgeStore = create<KnowledgeStore>((set, get) => {
       }
       persist(next);
       return item.id;
+    },
+    applyEntryCategories: (changes) => {
+      if (!changes.length) return;
+      const next = data();
+      const byId = new Map(next.entries.map((entry) => [entry.id, entry]));
+      for (const { id, from } of changes) {
+        if (byId.get(id)?.category !== from) throw new Error('词条分类已有其他修改，请核对后再操作。');
+      }
+      const destinations = new Map(changes.map(({ id, to }) => [id, to]));
+      const updatedAt = Date.now();
+      next.entries = next.entries.map((entry) => {
+        const category = destinations.get(entry.id);
+        return category === undefined || category === entry.category ? entry : { ...entry, category, updatedAt };
+      });
+      persist(next);
+    },
+    restoreEntryEdit: (expected, replacement) => {
+      const next = data();
+      const id = expected.entry.id;
+      const current = entryEditSnapshot(next, id);
+      if (!current || id !== replacement.entry.id || !sameEntryEdit(current, expected)) {
+        throw new Error('词条或关联已有其他修改，请核对后再操作。');
+      }
+      next.entries = next.entries.map((entry) => entry.id === id ? replacement.entry : entry);
+      next.logLinks = [...next.logLinks.filter((link) => link.entryId !== id), ...replacement.logLinks];
+      next.relations = [...next.relations.filter((relation) => otherEntryId(relation, id) === undefined), ...replacement.relations];
+      persist(next);
     },
     deleteEntry: (id) => persist({
       ...data(), entries: get().entries.filter((item) => item.id !== id),

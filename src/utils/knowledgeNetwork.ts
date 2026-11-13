@@ -1,5 +1,5 @@
 import type { RelationConnection, RelationNode } from './relations';
-import { RELATION_KIND_LABELS } from './relations';
+import { relationNodeKey, RELATION_KIND_LABELS } from './relations';
 
 export interface NetworkLayers { log: boolean; code: boolean }
 
@@ -104,6 +104,37 @@ export function focusKnowledgeNetwork(network: NetworkView, node: RelationNode |
   };
 }
 
+export function filterKnowledgeSelection(network: NetworkView, keys: ReadonlySet<string>, showIntermediate: boolean): NetworkView {
+  const selected = new Set(network.nodes.filter((node) => keys.has(relationNodeKey(node))));
+  const visible = new Set(selected);
+  const connections = new Set(network.connections.filter(({ first, second }) => selected.has(first) && selected.has(second)));
+  if (showIntermediate && selected.size >= 2) {
+    const directNeighbors = adjacency([...connections]);
+    const candidates = new Map<RelationNode, { endpoint: RelationNode; connection: RelationConnection }[]>();
+    for (const connection of network.connections) {
+      const { first, second } = connection;
+      if (selected.has(first) === selected.has(second)) continue;
+      const [endpoint, intermediate] = selected.has(first) ? [first, second] : [second, first];
+      const links = candidates.get(intermediate) ?? [];
+      links.push({ endpoint, connection });
+      candidates.set(intermediate, links);
+    }
+    for (const [intermediate, links] of candidates) {
+      for (const { endpoint, connection } of links) {
+        const neighbors = directNeighbors.get(endpoint);
+        if (!links.some((other) => other.endpoint !== endpoint && !neighbors?.includes(other.endpoint))) continue;
+        visible.add(intermediate);
+        connections.add(connection);
+      }
+    }
+  }
+  return {
+    entries: network.entries.filter((entry) => visible.has(entry)),
+    nodes: network.nodes.filter((node) => visible.has(node)),
+    connections: network.connections.filter((connection) => connections.has(connection)),
+  };
+}
+
 export const NETWORK_NODE_WIDTH = 146;
 export const NETWORK_NODE_HEIGHT = 48;
 const COLUMN_GAP = 64;
@@ -114,13 +145,48 @@ const GROUP_GAP = 24;
 
 export interface Position { x: number; y: number }
 export interface NetworkBounds { left: number; top: number; right: number; bottom: number }
+export interface NetworkLayoutEdits {
+  nodes: ReadonlyMap<string, Position>;
+  modules: ReadonlyMap<string, Position>;
+}
+export type NetworkMoveTarget = { kind: 'nodes'; keys: string[] } | { kind: 'module'; key: string };
+export const emptyNetworkLayout: NetworkLayoutEdits = { nodes: new Map(), modules: new Map() };
+
+export function networkModuleKey(kind: RelationNode['kind'], category?: string): string {
+  return JSON.stringify([kind, kind === 'entry' ? category ?? '' : '']);
+}
+
+export function translateNetworkLayout(edits: NetworkLayoutEdits, target: NetworkMoveTarget, delta: Position): NetworkLayoutEdits {
+  if (!delta.x && !delta.y) return edits;
+  const field = target.kind === 'module' ? 'modules' : 'nodes';
+  const keys = target.kind === 'module' ? [target.key] : target.keys;
+  const offsets = new Map(edits[field]);
+  for (const key of keys) {
+    const before = offsets.get(key);
+    const x = (before?.x ?? 0) + delta.x;
+    const y = (before?.y ?? 0) + delta.y;
+    if (Math.abs(x) < 0.001 && Math.abs(y) < 0.001) offsets.delete(key);
+    else offsets.set(key, { x, y });
+  }
+  return { ...edits, [field]: offsets };
+}
+
+export function renameModuleOffset(edits: NetworkLayoutEdits, from: string, to: string, merge: boolean): NetworkLayoutEdits {
+  const key = networkModuleKey('entry', from);
+  const offset = edits.modules.get(key);
+  if (!offset) return edits;
+  const modules = new Map(edits.modules);
+  modules.delete(key);
+  if (!merge) modules.set(networkModuleKey('entry', to), offset);
+  return { ...edits, modules };
+}
 
 export function layoutKnowledgeNetwork(nodes: RelationNode[], connections: RelationConnection[], aspectRatio: number) {
   const neighbors = adjacency(connections);
 
   const byCategory = new Map<string, RelationNode[]>();
   for (const node of nodes) {
-    const key = JSON.stringify([node.kind, node.kind === 'entry' ? node.detail ?? '' : '']);
+    const key = networkModuleKey(node.kind, node.detail);
     const group = byCategory.get(key) ?? [];
     group.push(node);
     byCategory.set(key, group);
@@ -177,6 +243,35 @@ export function layoutKnowledgeNetwork(nodes: RelationNode[], connections: Relat
     return placed;
   });
   const bounds: NetworkBounds = { left: 0, top: 0, right: Math.max(width, 1), bottom: y + rowHeight + GROUP_PADDING };
+  return { positions, panels, bounds };
+}
+
+export function applyNetworkLayout(automatic: ReturnType<typeof layoutKnowledgeNetwork>, edits: NetworkLayoutEdits) {
+  if (!automatic.panels.length || (!edits.nodes.size && !edits.modules.size)) return automatic;
+  const bounds: NetworkBounds = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
+  const include = ({ x, y }: Position, width: number, height: number) => {
+    bounds.left = Math.min(bounds.left, x - GROUP_PADDING);
+    bounds.top = Math.min(bounds.top, y - GROUP_PADDING);
+    bounds.right = Math.max(bounds.right, x + width + GROUP_PADDING);
+    bounds.bottom = Math.max(bounds.bottom, y + height + GROUP_PADDING);
+  };
+  const positions = new Map<RelationNode, Position>();
+  for (const [node, position] of automatic.positions) {
+    const module = edits.modules.get(networkModuleKey(node.kind, node.detail));
+    const offset = edits.nodes.get(relationNodeKey(node));
+    const moved = {
+      x: position.x + (module?.x ?? 0) + (offset?.x ?? 0),
+      y: position.y + (module?.y ?? 0) + (offset?.y ?? 0),
+    };
+    positions.set(node, moved);
+    include(moved, NETWORK_NODE_WIDTH, NETWORK_NODE_HEIGHT);
+  }
+  const panels = automatic.panels.map((panel) => {
+    const offset = edits.modules.get(panel.key);
+    const moved = offset ? { ...panel, x: panel.x + offset.x, y: panel.y + offset.y } : panel;
+    include(moved, moved.width, moved.height);
+    return moved;
+  });
   return { positions, panels, bounds };
 }
 

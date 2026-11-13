@@ -7,9 +7,10 @@ interface ReferenceChoicesProps {
   selected: string[];
   onChange: (ids: string[]) => void;
   emptyText?: string;
+  initiallyOpen?: boolean;
 }
 
-export default function ReferenceChoices({ title, options, selected, onChange, emptyText = '暂无可选记录。' }: ReferenceChoicesProps) {
+export default function ReferenceChoices({ title, options, selected, onChange, emptyText = '暂无可选记录。', initiallyOpen }: ReferenceChoicesProps) {
   const [query, setQuery] = useState('');
   const words = searchWords(query);
   const optionIds = new Set(options.map((option) => option.id));
@@ -18,7 +19,7 @@ export default function ReferenceChoices({ title, options, selected, onChange, e
   const choices = words.length ? allChoices.filter(({ label, fields = [] }) => matchesWords([label, ...fields], words)) : allChoices;
 
   return (
-    <details className="reference-choices">
+    <details className="reference-choices" open={initiallyOpen}>
       <summary>{title}（{selected.length}）</summary>
       {options.length > 0 && (
         <input className="search-input" type="search" aria-label={'筛选' + title} placeholder="按关键词筛选"

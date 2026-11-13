@@ -3,6 +3,7 @@ import type { ButtonHTMLAttributes } from 'react';
 import type { NetworkLayers } from '../../utils/knowledgeNetwork';
 import { relationNodeKey, RELATION_KIND_LABELS } from '../../utils/relations';
 import type { RelationNode } from '../../utils/relations';
+import type { HistoryDirection } from './useNetworkHistory';
 
 const icons = {
   search: 'M15.5 15.5 21 21M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z',
@@ -11,6 +12,8 @@ const icons = {
   add: 'M12 5v14M5 12h14',
   expand: 'M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5',
   collapse: 'M4 9h5V4M15 4v5h5M20 15h-5v5M9 20v-5H4',
+  undo: 'M9 5 4 10l5 5M4 10h10a5 5 0 0 1 0 10h-3',
+  redo: 'm15 5 5 5-5 5M20 10H10a5 5 0 0 0 0 10h3',
   reset: 'M4 10a8 8 0 1 1 1.5 7.5M4 4v6h6',
 };
 
@@ -43,12 +46,15 @@ interface Props {
   linkDisabled: boolean;
   onToggleLink: () => void;
   onNewEntry: () => void;
+  historyAvailable: Record<HistoryDirection, boolean>;
+  onHistory: (direction: HistoryDirection) => void;
   fullscreen: boolean;
   onFullscreen: () => void;
 }
 
 export default function NetworkToolbar({ query, results, onQuery, onLocate, layers, categories, visibleModules, crossOnly, hops, canFocus,
-  onToggleLayer, onModules, onCrossOnly, onHops, linkStep, linkDisabled, onToggleLink, onNewEntry, fullscreen, onFullscreen }: Props) {
+  onToggleLayer, onModules, onCrossOnly, onHops, linkStep, linkDisabled, onToggleLink, onNewEntry,
+  historyAvailable, onHistory, fullscreen, onFullscreen }: Props) {
   const [panel, setPanel] = useState<'search' | 'filters' | null>(null);
   const tools = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -102,6 +108,10 @@ export default function NetworkToolbar({ query, results, onQuery, onLocate, laye
     <NetworkToolButton icon="add" label="新建词条" aria-haspopup="dialog" disabled={Boolean(linkStep)}
       onClick={() => { closePanel(); onNewEntry(); }} />
     <NetworkToolButton icon={fullscreen ? 'collapse' : 'expand'} label={fullscreen ? '退出全屏' : '全屏画布'} onClick={onFullscreen} />
+    <NetworkToolButton icon="undo" label="撤销画布操作" title="撤销 · Ctrl+Z" aria-keyshortcuts="Control+Z Meta+Z"
+      disabled={!historyAvailable.undo || Boolean(linkStep)} onClick={() => onHistory('undo')} />
+    <NetworkToolButton icon="redo" label="重做画布操作" title="重做 · Ctrl+Shift+Z" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y"
+      disabled={!historyAvailable.redo || Boolean(linkStep)} onClick={() => onHistory('redo')} />
     {linkStep ? <span className="network-tool-status" role="status">{linkStep}</span> : filterStatus && (
       <span className="network-tool-status" title={filterStatus}>{filterStatus}</span>
     )}
