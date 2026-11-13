@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import type { KnowledgeData, KnowledgeEntry, KnowledgeLogLink, KnowledgeRelation } from '../types';
 import type { RelationAnnotation } from '../types/relations';
-import { emptyKnowledge, normalizedName, otherEntryId, validateKnowledge } from '../utils/knowledge';
+import type { LogReviewSuggestion } from '../types/logReview';
+import { emptyKnowledge, entryNames, normalizedName, otherEntryId, validateKnowledge } from '../utils/knowledge';
 import { entryCodeIds } from '../utils/projectCode';
 import { cleanRelationAnnotation } from '../utils/relationAnnotation';
 import { generateId, STORAGE_KEYS } from '../utils/storage';
@@ -54,6 +55,7 @@ interface KnowledgeStore extends KnowledgeData {
   restoreEntryEdit: (expected: EntryEditSnapshot, replacement: EntryEditSnapshot) => void;
   deleteEntry: (id: string) => void;
   linkLog: (entryId: string, logId: string, note: string, annotation?: RelationAnnotation) => void;
+  saveReviewedLog: (logId: string, content: string, originalContent: string, suggestions: LogReviewSuggestion[]) => void;
   unlinkLog: (id: string) => void;
   relate: (sourceId: string, targetId: string, annotation?: RelationAnnotation) => void;
   removeRelation: (id: string) => void;
@@ -146,6 +148,59 @@ export const useKnowledgeStore = create<KnowledgeStore>((set, get) => {
       logLinks: get().logLinks.filter((item) => item.entryId !== id),
       relations: get().relations.filter((item) => item.sourceId !== id && item.targetId !== id),
     }),
+    saveReviewedLog: (logId, content, originalContent, suggestions) => {
+      const study = useStudyLogStore.getState();
+      const log = study.logs.find(({ id }) => id === logId);
+      if (!log || log.content !== originalContent) throw new Error('日志已有修改，请重新打开后再整理。');
+      const tags = new Set(log.tags.map(normalizedName));
+      const addedTags: string[] = [];
+      const next = data();
+      const names = new Map(next.entries.flatMap((entry) => entryNames(entry).map((name) => [name, entry.id] as const)));
+      const entryIds = new Set(next.entries.map(({ id }) => id));
+      const linked = new Set(next.logLinks.filter((link) => link.logId === logId).map((link) => link.entryId));
+      const created: KnowledgeEntry[] = [];
+      const links: KnowledgeLogLink[] = [];
+      for (const suggestion of suggestions) {
+        if (suggestion.kind === 'tag') {
+          const tag = suggestion.tag.trim();
+          if (!tag || tags.has(normalizedName(tag))) continue;
+          tags.add(normalizedName(tag));
+          addedTags.push(tag);
+          continue;
+        }
+        let entryId: string;
+        if (suggestion.kind === 'entry') {
+          const title = suggestion.title.trim();
+          if (!title || !suggestion.content.trim()) throw new Error('请为所选新词条填写名称和正文。');
+          const existing = names.get(normalizedName(title));
+          if (existing) throw new Error(`「${title}」与已有或所选词条名称重复，请修改后保存。`);
+          entryId = generateId();
+          names.set(normalizedName(title), entryId);
+          const now = Date.now();
+          created.push({ id: entryId, title, category: suggestion.category.trim(), content: suggestion.content.trim(), aliases: [], createdAt: now, updatedAt: now });
+        } else {
+          entryId = suggestion.entryId;
+          if (!entryIds.has(entryId)) throw new Error('所选关联的词条已不存在，请重新获取建议。');
+        }
+        if (linked.has(entryId)) continue;
+        linked.add(entryId);
+        links.push({ id: generateId(), logId, entryId, note: suggestion.kind === 'link' ? suggestion.note.trim() : '' });
+      }
+      if (!links.length) { study.updateLogContent(logId, content, originalContent, addedTags); return; }
+      if (get().error) throw new Error(get().error);
+      next.entries = [...next.entries, ...created];
+      next.logLinks = [...next.logLinks, ...links];
+      validateKnowledge(next, new Set(study.logs.map(({ id }) => id)));
+      const previous = localStorage.getItem(STORAGE_KEYS.KNOWLEDGE);
+      localStorage.setItem(STORAGE_KEYS.KNOWLEDGE, JSON.stringify(next));
+      try { study.updateLogContent(logId, content, originalContent, addedTags); }
+      catch (error) {
+        if (previous === null) localStorage.removeItem(STORAGE_KEYS.KNOWLEDGE);
+        else localStorage.setItem(STORAGE_KEYS.KNOWLEDGE, previous);
+        throw error;
+      }
+      set(next);
+    },
     linkLog: (entryId, logId, note, annotation) => {
       const existing = get().logLinks.find((item) => item.entryId === entryId && item.logId === logId);
       persist({ ...data(), logLinks: existing

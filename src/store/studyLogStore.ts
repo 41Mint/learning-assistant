@@ -49,7 +49,7 @@ interface StudyLogStore {
   // 保存日志
   saveLog: (log: StudyLog) => void;
   appendToDate: (date: string, content: string) => void;
-  updateLogContent: (id: string, content: string, originalContent?: string) => void;
+  updateLogContent: (id: string, content: string, originalContent?: string, addedTags?: string[]) => void;
 
   // 更新当前日志内容
   updateContent: (content: string) => void;
@@ -141,13 +141,14 @@ export const useStudyLogStore = create<StudyLogStore>((set, get) => ({
     get().saveLog({ ...log, content: emptyHeading ? content : `${log.content.trimEnd()}\n\n---\n\n${content}` });
   },
 
-  updateLogContent: (id, content, originalContent) => {
+  updateLogContent: (id, content, originalContent, addedTags) => {
     const log = get().logs.find((candidate) => candidate.id === id);
     if (!log) throw new Error('这条记录不存在，请重新打开后再编辑。');
     if (originalContent !== undefined && log.content !== originalContent) {
       throw new Error('这篇正文已有新的保存内容。请先复制本次草稿，再重新打开记录核对。');
     }
-    get().saveLog({ ...log, content });
+    const tags = addedTags?.length ? [...new Set([...log.tags, ...addedTags])] : log.tags;
+    get().saveLog({ ...log, content, tags });
   },
 
   updateContent: (content: string) => {

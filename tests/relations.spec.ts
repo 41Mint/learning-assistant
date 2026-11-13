@@ -89,6 +89,7 @@ test('独立关系图复用旧关联，四类连线的说明可从两端查看�
   await expect.poll(() => graph.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('relations-mobile.png'), fullPage: true });
 
+  await page.getByRole('navigation', { name: '主要功能' }).getByRole('button', { name: '页面菜单' }).click();
   await page.getByRole('link', { name: '数据管理', exact: true }).click();
   const pending = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出完整备份', exact: true }).click();

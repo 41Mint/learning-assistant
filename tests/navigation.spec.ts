@@ -2,9 +2,16 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
 async function navigate(page: Page, label: string) {
-  const link = page.getByRole('navigation', { name: '主要功能' }).getByRole('link', { name: label, exact: true });
+  const navigation = page.getByRole('navigation', { name: '主要功能' });
+  const menu = navigation.getByRole('button', { name: '页面菜单' });
+  const compact = await menu.isVisible();
+  if (compact) await menu.click();
+  const link = navigation.getByRole('link', { name: label, exact: true });
   await link.click();
-  await expect(link).toHaveAttribute('aria-current', 'page');
+  if (compact) {
+    await expect(menu).toContainText(label);
+    await expect(menu).toHaveAttribute('aria-expanded', 'false');
+  } else await expect(link).toHaveAttribute('aria-current', 'page');
 }
 
 test('主要入口分开呈现，刷新和浏览器前后退保留入口', async ({ page }) => {
@@ -92,6 +99,21 @@ test('历史草稿在切换入口后保留，长笔记可用固定导航直接�
 test('窄屏六个入口可操作，页面无横向溢出', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
+  const nav = page.getByRole('navigation', { name: '主要功能' });
+  const menu = nav.getByRole('button', { name: '页面菜单' });
+  await expect(nav.getByRole('link')).toHaveCount(0);
+  await expect(nav.getByRole('button', { name: '检索资料' })).toBeVisible();
+  const closed = (await nav.boundingBox())!;
+  await menu.press('Enter');
+  await expect(nav.getByRole('link')).toHaveCount(6);
+  expect((await nav.boundingBox())!.height).toBe(closed.height);
+  await page.screenshot({ path: testInfo.outputPath('mobile-menu.png') });
+  await nav.getByRole('link', { name: '历史回顾', exact: true }).press('Escape');
+  await expect(menu).toBeFocused();
+  await expect(nav.getByRole('link')).toHaveCount(0);
+  await menu.click();
+  await page.getByRole('heading', { name: '游戏开发学习助手' }).click();
+  await expect(menu).toHaveAttribute('aria-expanded', 'false');
   for (const label of ['今日学习', '成长记录', '历史回顾', '知识词条', '知识网络', '数据管理']) {
     await navigate(page, label);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

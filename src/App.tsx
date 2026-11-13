@@ -12,6 +12,7 @@ import ProjectCodeWorkspace from './components/ProjectCode/ProjectCodeWorkspace'
 import ResourceSearch from './components/Search/ResourceSearch';
 import RelationsWorkspace from './components/Relations/RelationsWorkspace';
 import KnowledgeNetwork from './components/Relations/KnowledgeNetwork';
+import AssistantDock from './components/Assistant/AssistantDock';
 import type { StudyLog as Log } from './types';
 import { usePomodoroStore } from './store/pomodoroStore';
 import { useStudyLogStore } from './store/studyLogStore';
@@ -64,12 +65,19 @@ function App() {
   const [networkVisited, setNetworkVisited] = useState(activePage === 'network');
   const [todayDraft, setTodayDraft] = useState<Log | null>(null);
   const [historyDraft, setHistoryDraft] = useState<Log | null>(null);
+  const [navOpen, setNavOpen] = useState(false);
+  const nav = useRef<HTMLElement>(null);
+  const navTrigger = useRef<HTMLButtonElement>(null);
   const processedPomodorosRef = useRef(usePomodoroStore.getState().completedPomodoros);
   const completedPomodoros = usePomodoroStore((state) => state.completedPomodoros);
   const addDuration = useStudyLogStore((state) => state.addDuration);
+  const todayLog = useStudyLogStore((state) => state.currentLog);
+  const historyDate = useWorkspaceStore((state) => state.historyDate);
+  const historyLog = useStudyLogStore((state) => state.logs.find((log) => log.date === historyDate));
   const updateStreak = useStreakStore((state) => state.updateStreak);
   const currentGoal = useCurrentGoalStore((state) => state.goal);
   const enterPage = useCallback((page: PageId) => {
+    setNavOpen(false);
     setActivePage(page);
     if (page === 'network') setNetworkVisited(true);
   }, []);
@@ -88,6 +96,21 @@ function App() {
 
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, [activePage]);
 
+  useEffect(() => {
+    if (!navOpen) return;
+    const dismiss = (event: PointerEvent) => {
+      if (event.target instanceof Node && !nav.current?.contains(event.target)) setNavOpen(false);
+    };
+    const desktop = window.matchMedia('(min-width: 721px)');
+    const resize = () => { if (desktop.matches) setNavOpen(false); };
+    document.addEventListener('pointerdown', dismiss);
+    desktop.addEventListener('change', resize);
+    return () => {
+      document.removeEventListener('pointerdown', dismiss);
+      desktop.removeEventListener('change', resize);
+    };
+  }, [navOpen]);
+
   // 当完成番茄钟时，自动增加学习时长并更新Streak
   useEffect(() => {
     const newlyCompleted = completedPomodoros - processedPomodorosRef.current;
@@ -98,7 +121,16 @@ function App() {
     }
   }, [completedPomodoros, currentGoal, addDuration, updateStreak]);
 
+  const activeLog = activePage === 'today' ? todayDraft ?? todayLog
+    : activePage === 'history' ? historyDraft ?? historyLog : undefined;
+  const assistantLog = activeLog ? {
+    kind: activePage === 'today' ? 'today' as const : 'history' as const,
+    log: activeLog,
+    editing: activePage === 'today' ? Boolean(todayDraft) : Boolean(historyDraft),
+  } : undefined;
+
   return (
+    <AssistantDock activeLog={assistantLog}>
     <div className="app-shell" data-knowledge-demo={IS_KNOWLEDGE_DEMO || undefined}>
       {IS_KNOWLEDGE_DEMO && <div className="knowledge-demo-banner">
         <strong>知识网络演示工作区</strong>
@@ -113,14 +145,29 @@ function App() {
         {(activePage !== 'today' || todayDraft) && <SessionStatus editingToday={Boolean(todayDraft)} inToday={activePage === 'today'} />}
       </header>
 
-      <nav className="app-navigation" aria-label="主要功能">
-        {PAGES.filter((page) => page.id !== 'code' && page.id !== 'relations').map((page) => (
+      <nav ref={nav} className="app-navigation" data-open={navOpen || undefined} aria-label="主要功能"
+        onKeyDown={(event) => {
+          if (!navOpen || event.key !== 'Escape' || event.defaultPrevented) return;
+          event.preventDefault();
+          setNavOpen(false);
+          navTrigger.current?.focus();
+        }}>
+        <button ref={navTrigger} type="button" className="app-navigation-toggle" aria-label="页面菜单"
+          aria-expanded={navOpen} aria-controls="app-navigation-links" onClick={() => setNavOpen(!navOpen)}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+            <path d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+          <span>{PAGES.find((page) => page.id === activePage)?.label}</span>
+        </button>
+        <div className="app-navigation-links" id="app-navigation-links">
+          {PAGES.filter((page) => page.id !== 'code' && page.id !== 'relations').map((page) => (
           <a
             key={page.id}
             href={`#${page.id}`}
             aria-current={activePage === page.id || (activePage === 'code' && page.id === 'path') ? 'page' : undefined}
             onClick={(event) => {
               event.preventDefault();
+              if (navOpen) navTrigger.current?.focus({ preventScroll: true });
               enterPage(page.id);
               if (window.location.hash !== `#${page.id}`) window.location.hash = page.id;
               window.scrollTo({ top: 0, behavior: 'instant' });
@@ -128,8 +175,11 @@ function App() {
           >
             {page.label}
           </a>
-        ))}
-        <ResourceSearch />
+          ))}
+        </div>
+        <div className="app-navigation-search" onPointerDown={() => setNavOpen(false)}>
+          <ResourceSearch />
+        </div>
       </nav>
 
       <main>
@@ -166,6 +216,7 @@ function App() {
       </main>
       <DevTools />
     </div>
+    </AssistantDock>
   );
 }
 
