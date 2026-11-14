@@ -43,7 +43,7 @@ test('统一检索分组、筛选并打开日志、词条和脚本版本', async
   await trigger.click();
   await expect(query).toBeFocused();
   await query.fill('　ＴＩＬＥＭＡＰ　');
-  await expect(dialog.getByRole('status')).toHaveText('3 条匹配结果');
+  await expect(dialog.getByRole('status')).toHaveText('4 条匹配结果');
   await expect(dialog.getByRole('region', { name: '学习日志' })).toContainText('在 Tilemap 里绘制瓦片');
   await expect(dialog.getByRole('region', { name: '知识词条' })).toContainText('瓦片地图');
   await page.setViewportSize({ width: 390, height: 844 });

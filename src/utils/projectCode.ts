@@ -124,7 +124,7 @@ export function codeVersionLabel(version: CodeVersion, projectName?: string): st
   ].filter(Boolean).join(' · ');
 }
 
-export function practiceCodeIds(outcomeId: string, practice: GrowthPractice, links: CodeLink[]): string[] {
+export function practiceCodeIds(outcomeId: string, practice: Pick<GrowthPractice, 'id' | 'codeVersionIds'>, links: CodeLink[]): string[] {
   // 先前保存的实践关联仍可读。明确保存的空选择也优先于旧关联。
   return practice.codeVersionIds ?? links
     .filter(({ target }) => target.kind === 'practice' && target.outcomeId === outcomeId && target.id === practice.id)

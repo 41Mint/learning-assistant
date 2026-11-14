@@ -451,6 +451,7 @@ test('同名脚本分版本保存，日志、词条与两次实践打开对应�
 
   await page.getByRole('navigation', { name: '主要功能' }).getByRole('link', { name: '成长记录' }).click();
   const outcome = page.getByRole('article', { name: '点击目标时增加分数' });
+  await outcome.getByRole('link', { name: '点击目标时增加分数', exact: true }).click();
   const firstPractice = outcome.locator('.growth-practices > li').filter({ hasText: '第一次实现点击' });
   const secondPractice = outcome.locator('.growth-practices > li').filter({ hasText: '第二次调整判断' });
   for (const [practice, note, href] of [[firstPractice, '本地初次实现', firstHref], [secondPractice, '提交后的第二版', secondHref]] as const) {
@@ -515,10 +516,11 @@ test('实践编辑统一保存三类资料，旧代码关联可预选、取消�
     }, { kind: 'practice', id: 'first-practice', outcomeId: 'click-outcome' });
   }, { script: scriptPath, code: firstContent });
   await page.reload();
+  await page.getByRole('link', { name: '点击目标时增加分数', exact: true }).click();
   const old = page.getByRole('article', { name: '点击目标时增加分数' }).locator('.growth-practices > li').filter({ hasText: '第一次实现点击' });
   const codeLink = old.getByRole('link', { name: '代码 · ' + scriptPath, exact: true });
   await expect(codeLink).toHaveAttribute('href', '#code/' + versionId);
-  const recent = page.getByRole('region', { name: '最近做到' });
+  const recent = page.getByRole('region', { name: '已完成' });
   const form = page.getByRole('form', { name: '实践记录表单' });
   const choice = form.getByRole('checkbox', { name: /可选的代码版本/ });
   const save = form.getByRole('button', { name: '保存实践', exact: true });
@@ -553,7 +555,7 @@ test('实践编辑统一保存三类资料，旧代码关联可预选、取消�
   await save.click();
   const added = recent.getByRole('article', { name: '一次保存所有资料', exact: true });
   await expect(added.locator('[data-practice-focus]')).toBeFocused();
-  await expect(added.getByRole('link')).toHaveCount(3);
+  await expect(added.getByRole('list', { name: '关联资料' }).getByRole('link')).toHaveCount(3);
   await added.getByRole('link', { name: '代码 · ' + scriptPath, exact: true }).click();
   const backlinks = page.getByRole('region', { name: '引用记录', exact: true });
   await expect(backlinks.getByRole('link', { name: /成长实践 · 一次保存所有资料/ })).toBeVisible();
@@ -578,7 +580,7 @@ test('v5 备份带回本地文本、仅链接版本和关联，v4 继续恢复�
   await form.getByRole('button', { name: '保存版本' }).click();
   await expect(panel.getByRole('link', { name: scriptPath, exact: true })).toHaveCount(2);
   const secondHref = await panel.getByRole('link', { name: scriptPath, exact: true }).last().getAttribute('href');
-  await page.goto('/#path');
+  await page.goto('/#path/click-outcome/first-practice');
   const practice = page.locator('.growth-practices > li').filter({ hasText: '第一次实现点击' });
   await practice.getByRole('button', { name: '编辑实践', exact: true }).click();
   const editor = page.getByRole('form', { name: '实践记录表单' });
@@ -641,6 +643,7 @@ test('v5 备份带回本地文本、仅链接版本和关联，v4 继续恢复�
     await restored.goto('/#code');
     await expect(restored.getByText(/还没有项目/)).toBeVisible();
     await restored.getByRole('link', { name: '返回成长记录', exact: true }).click();
+    await restored.getByRole('link', { name: '点击目标时增加分数', exact: true }).click();
     await expect(restored.getByRole('article', { name: '点击目标时增加分数' })).toContainText('第一次实现点击');
   } finally {
     await context.close();

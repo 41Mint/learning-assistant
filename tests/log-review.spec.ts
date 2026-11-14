@@ -392,7 +392,7 @@ test('窄屏最小化后可阅读页面并恢复输入，从问答按别名查�
   await assistant.getByRole('button', { name: '最小化学习智能体' }).click();
   await expect(assistant).toBeHidden();
   await expect(restore).toBeFocused();
-  await page.getByText('可以尝试', { exact: true }).click();
+  await page.getByRole('link', { name: '待尝试', exact: true }).click();
   await restore.click();
   await expect(question).toHaveValue('帮我打开 PPU 词条');
   await question.press('Enter');

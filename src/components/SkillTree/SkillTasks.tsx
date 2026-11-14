@@ -12,6 +12,7 @@ export default function SkillTasks({ skillId }: SkillTasksProps) {
   const { goal, setCurrentGoal, clearCurrentGoal } = useCurrentGoalStore();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [adding, setAdding] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [editingDescription, setEditingDescription] = useState('');
@@ -29,6 +30,7 @@ export default function SkillTasks({ skillId }: SkillTasksProps) {
     addTask(skillId, title.trim(), description.trim());
     setTitle('');
     setDescription('');
+    setAdding(false);
   };
 
   const handleToggle = (taskId: string) => {
@@ -122,9 +124,10 @@ export default function SkillTasks({ skillId }: SkillTasksProps) {
   };
 
   return (
-    <div className="mt-4 border-t border-gray-200 pt-3 dark:border-gray-700">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-medium text-gray-600 dark:text-gray-300">自定义任务 {isLoaded && `· ${completedTasks.length}/${skillTasks.length} 已完成`}</span>
+    <div className="growth-task-list">
+      <div className="growth-heading">
+        <strong>自定义任务 <small>{isLoaded && `${completedTasks.length}/${skillTasks.length} 已完成`}</small></strong>
+        {!adding && <button type="button" className="note-button secondary" onClick={() => setAdding(true)}>添加任务</button>}
       </div>
 
       {pendingTasks.length > 0 && (
@@ -141,24 +144,24 @@ export default function SkillTasks({ skillId }: SkillTasksProps) {
         </details>
       )}
 
-      <div className="mt-3 space-y-2">
+      {adding && <form className="growth-task-form" data-preserves-on-navigation onSubmit={(event) => { event.preventDefault(); handleAdd(); }}>
           <input
+            autoFocus aria-label="任务名称"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            onKeyDown={(event) => event.key === 'Enter' && handleAdd()}
             placeholder="添加一个可执行任务"
             className="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
           />
           <input
+            aria-label="任务说明"
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             placeholder="补充说明（可选）"
             className="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
           />
-          <button type="button" onClick={handleAdd} className="rounded bg-gray-700 px-3 py-1.5 text-sm text-white hover:bg-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500">
-            添加任务
-          </button>
-      </div>
+          <div className="code-actions"><button type="submit" className="note-button" disabled={!title.trim()}>保存任务</button>
+            <button type="button" className="note-button secondary" onClick={() => setAdding(false)}>取消</button></div>
+      </form>}
     </div>
   );
 }

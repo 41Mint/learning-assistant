@@ -9,30 +9,35 @@ import DataBackup from './components/DataManagement/DataBackup';
 import DevTools from './components/DevTools/DevTools';
 import KnowledgeBase from './components/Knowledge/KnowledgeBase';
 import ProjectCodeWorkspace from './components/ProjectCode/ProjectCodeWorkspace';
-import ResourceSearch from './components/Search/ResourceSearch';
+import WorkspaceNavigation from './components/common/WorkspaceNavigation';
 import RelationsWorkspace from './components/Relations/RelationsWorkspace';
 import KnowledgeNetwork from './components/Relations/KnowledgeNetwork';
 import AssistantDock from './components/Assistant/AssistantDock';
 import type { AssistantStart } from './components/Assistant/AssistantGuide';
 import type { GrowthDraft } from './components/Growth/GrowthPracticeForm';
-import type { StudyLog as Log } from './types';
+import type { GrowthExerciseDraft } from './components/Growth/GrowthExerciseForm';
+import type { SavedExercise, StudyLog as Log } from './types';
 import { usePomodoroStore } from './store/pomodoroStore';
 import { useStudyLogStore } from './store/studyLogStore';
 import { useStreakStore } from './store/streakStore';
 import { useCurrentGoalStore } from './store/currentGoalStore';
+import { useGrowthStore } from './store/growthStore';
 import { readWorkspaceHash, useWorkspaceStore } from './store/workspaceStore';
 import { IS_KNOWLEDGE_DEMO } from './utils/workspaceMode';
 import { generateId } from './utils/storage';
+import { GROWTH_PRESETS } from './data/growthPresets';
+import { normalizedName } from './utils/knowledge';
+import { growthExercises } from './utils/growth';
 
 const PAGES = [
-  { id: 'today', label: '今日学习', description: '随时开始专注，记录今天的学习。' },
-  { id: 'path', label: '成长记录', description: '回看做成的事，记录每一次新的实践。' },
-  { id: 'history', label: '历史回顾', description: '按日期回看、补充笔记，了解学习投入。' },
-  { id: 'knowledge', label: '知识词条', description: '整理自己的理解与疑问，从知识找回学习情境。' },
-  { id: 'network', label: '知识网络', description: '在画布上查看和整理词条、学习日志与代码的关联。' },
-  { id: 'data', label: '数据管理', description: '导出完整备份，或从备份恢复学习资料。' },
-  { id: 'code', label: '项目代码', description: '回看具体版本的脚本和引用它们的学习经历。' },
-  { id: 'relations', label: '关系视图', description: '查看当前资料与其他学习资料的直接关联。' },
+  { id: 'today', label: '今日学习' },
+  { id: 'path', label: '成长记录' },
+  { id: 'history', label: '历史回顾' },
+  { id: 'knowledge', label: '知识词条' },
+  { id: 'network', label: '知识网络' },
+  { id: 'data', label: '数据管理' },
+  { id: 'code', label: '项目代码' },
+  { id: 'relations', label: '关系视图' },
 ] as const;
 type PageId = typeof PAGES[number]['id'];
 
@@ -69,10 +74,9 @@ function App() {
   const [todayDraft, setTodayDraft] = useState<Log | null>(null);
   const [historyDraft, setHistoryDraft] = useState<Log | null>(null);
   const [growthDraft, setGrowthDraft] = useState<GrowthDraft | null>(null);
+  const [exerciseDraft, setExerciseDraft] = useState<GrowthExerciseDraft>();
   const [addingCode, setAddingCode] = useState(false);
-  const [navOpen, setNavOpen] = useState(false);
-  const nav = useRef<HTMLElement>(null);
-  const navTrigger = useRef<HTMLButtonElement>(null);
+  const growthView = useWorkspaceStore((state) => state.growthView);
   const processedPomodorosRef = useRef(usePomodoroStore.getState().completedPomodoros);
   const completedPomodoros = usePomodoroStore((state) => state.completedPomodoros);
   const addDuration = useStudyLogStore((state) => state.addDuration);
@@ -82,7 +86,6 @@ function App() {
   const updateStreak = useStreakStore((state) => state.updateStreak);
   const currentGoal = useCurrentGoalStore((state) => state.goal);
   const enterPage = useCallback((page: PageId) => {
-    setNavOpen(false);
     setActivePage(page);
     if (page === 'network') setNetworkVisited(true);
   }, []);
@@ -100,21 +103,6 @@ function App() {
   }, [enterPage]);
 
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, [activePage]);
-
-  useEffect(() => {
-    if (!navOpen) return;
-    const dismiss = (event: PointerEvent) => {
-      if (event.target instanceof Node && !nav.current?.contains(event.target)) setNavOpen(false);
-    };
-    const desktop = window.matchMedia('(min-width: 721px)');
-    const resize = () => { if (desktop.matches) setNavOpen(false); };
-    document.addEventListener('pointerdown', dismiss);
-    desktop.addEventListener('change', resize);
-    return () => {
-      document.removeEventListener('pointerdown', dismiss);
-      desktop.removeEventListener('change', resize);
-    };
-  }, [navOpen]);
 
   // 当完成番茄钟时，自动增加学习时长并更新Streak
   useEffect(() => {
@@ -150,64 +138,44 @@ function App() {
   };
   const startFromAssistant = (page: AssistantStart) => {
     if (page === 'today' && todayLog) setTodayDraft((draft) => draft ?? todayLog);
-    if (page === 'path') setGrowthDraft((draft) => draft ?? { outcome: { id: generateId(), title: '', domains: [] }, preset: false });
+    if (page === 'path' && !exerciseDraft) setGrowthDraft((draft) => draft ?? { outcome: { id: generateId(), title: '', domains: [] }, preset: false });
     if (page === 'code') setAddingCode(true);
     window.location.hash = page;
     enterPage(page);
   };
+  const recordRecommendation = ({ id, title, domains, action, sources }: SavedExercise) => {
+    const { outcomes, exercises, hiddenPresetIds, groups } = useGrowthStore.getState();
+    const saved = outcomes.find((item) => item.id === id || normalizedName(item.title) === normalizedName(title));
+    const exercise = growthExercises({ exercises, hiddenPresetIds }).find((item) => item.id === id || normalizedName(item.title) === normalizedName(title));
+    const existing = saved ?? exercise;
+    const group = groups.find(({ cardIds }) => cardIds.includes(existing?.id ?? id));
+    setGrowthDraft((draft) => draft ?? {
+      outcome: { id: existing?.id ?? id, title: existing?.title ?? title, domains: existing?.domains ?? domains,
+        description: saved?.description ?? exercise?.action ?? action },
+      preset: GROWTH_PRESETS.some((item) => item.id === existing?.id),
+      suggestedSources: exercises.find((item) => item.id === exercise?.id)?.sources ?? sources,
+    });
+    window.location.assign(group ? '#path?' + new URLSearchParams({ group: group.id }) : '#path');
+    enterPage('path');
+  };
+  const pageLabel = activePage === 'path' && growthView === 'topics' ? '参考路径与任务'
+    : PAGES.find((item) => item.id === activePage)?.label;
 
   return (
-    <AssistantDock activePage={activePage} activeLog={assistantLog} onOpenReview={openReview} onStart={startFromAssistant}>
+    <AssistantDock activePage={activePage} activeLog={assistantLog} onOpenReview={openReview} onStart={startFromAssistant}
+      onRecordRecommendation={recordRecommendation} editingGrowth={Boolean(growthDraft || exerciseDraft)}>
     <div className="app-shell" data-knowledge-demo={IS_KNOWLEDGE_DEMO || undefined}>
+      <header className="app-header">
+        <a className="app-brand" href="#today" aria-label="游戏开发学习助手首页" title="游戏开发学习助手"><img src="/learning-assistant.svg" alt="" width="28" height="28" /></a>
+        <WorkspaceNavigation activePage={activePage} activeLabel={pageLabel ?? '页面菜单'} growthView={growthView} />
+        <h1>{pageLabel}</h1>
+        {(activePage !== 'today' || todayDraft) && <SessionStatus editingToday={Boolean(todayDraft)} inToday={activePage === 'today'} />}
+      </header>
+      <div className="app-content">
       {IS_KNOWLEDGE_DEMO && <div className="knowledge-demo-banner">
         <strong>知识网络演示工作区</strong>
         <a href={window.location.pathname + '#network'}>返回个人知识网络</a>
       </div>}
-      <header className="app-header">
-        <div>
-          <p className="app-eyebrow">LEARNING ASSISTANT</p>
-          <h1>游戏开发学习助手</h1>
-          <p className="app-description">{PAGES.find((page) => page.id === activePage)?.description}</p>
-        </div>
-        {(activePage !== 'today' || todayDraft) && <SessionStatus editingToday={Boolean(todayDraft)} inToday={activePage === 'today'} />}
-      </header>
-
-      <nav ref={nav} className="app-navigation" data-open={navOpen || undefined} aria-label="主要功能"
-        onKeyDown={(event) => {
-          if (!navOpen || event.key !== 'Escape' || event.defaultPrevented) return;
-          event.preventDefault();
-          setNavOpen(false);
-          navTrigger.current?.focus();
-        }}>
-        <button ref={navTrigger} type="button" className="app-navigation-toggle" aria-label="页面菜单"
-          aria-expanded={navOpen} aria-controls="app-navigation-links" onClick={() => setNavOpen(!navOpen)}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
-            <path d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-          <span>{PAGES.find((page) => page.id === activePage)?.label}</span>
-        </button>
-        <div className="app-navigation-links" id="app-navigation-links">
-          {PAGES.filter((page) => page.id !== 'code' && page.id !== 'relations').map((page) => (
-          <a
-            key={page.id}
-            href={`#${page.id}`}
-            aria-current={activePage === page.id || (activePage === 'code' && page.id === 'path') ? 'page' : undefined}
-            onClick={(event) => {
-              event.preventDefault();
-              if (navOpen) navTrigger.current?.focus({ preventScroll: true });
-              enterPage(page.id);
-              if (window.location.hash !== `#${page.id}`) window.location.hash = page.id;
-              window.scrollTo({ top: 0, behavior: 'instant' });
-            }}
-          >
-            {page.label}
-          </a>
-          ))}
-        </div>
-        <div className="app-navigation-search" onPointerDown={() => setNavOpen(false)}>
-          <ResourceSearch />
-        </div>
-      </nav>
 
       <main>
         {/* 保留各模块挂载，切换入口时维持计时、日期选择和未保存草稿。 */}
@@ -216,7 +184,8 @@ function App() {
           <StudyLog draft={todayDraft} setDraft={setTodayDraft} />
         </section>
         <section id="path" className="workspace-panel" aria-label="成长记录" hidden={activePage !== 'path'}>
-          <GrowthWorkspace draft={growthDraft} setDraft={setGrowthDraft} />
+          <GrowthWorkspace active={activePage === 'path'} draft={growthDraft} setDraft={setGrowthDraft}
+            exerciseDraft={exerciseDraft} setExerciseDraft={setExerciseDraft} />
         </section>
         <section id="history" className="workspace-panel history-layout" aria-label="历史回顾" hidden={activePage !== 'history'} data-editing={Boolean(historyDraft) || undefined}>
           <History draft={historyDraft} setDraft={setHistoryDraft} />
@@ -241,6 +210,7 @@ function App() {
           <RelationsWorkspace />
         </section>}
       </main>
+      </div>
       <DevTools />
     </div>
     </AssistantDock>

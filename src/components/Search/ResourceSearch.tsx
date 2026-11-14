@@ -1,9 +1,11 @@
 import { useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useGrowthStore } from '../../store/growthStore';
 import { useKnowledgeStore } from '../../store/knowledgeStore';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
-import { hasWorkspaceEditor, searchHref, useWorkspaceStore } from '../../store/workspaceStore';
-import { logLabel } from '../../utils/growth';
+import { growthBoardHref, hasWorkspaceEditor, searchHref, useWorkspaceStore } from '../../store/workspaceStore';
+import { growthExercises, logLabel } from '../../utils/growth';
 import { entryNames, normalizedName } from '../../utils/knowledge';
 import { codeVersionHref } from '../../utils/projectCode';
 import { codeSearchFields, entrySearchFields, includesWords, logSearchFields, searchWords } from '../../utils/resourceSearch';
@@ -14,6 +16,7 @@ const GROUPS = [
   { page: 'history', label: '学习日志' },
   { page: 'knowledge', label: '知识词条' },
   { page: 'code', label: '代码版本' },
+  { page: 'path', label: '实践卡片与卡组' },
 ] as const;
 
 type SearchPage = typeof GROUPS[number]['page'];
@@ -44,8 +47,16 @@ export function SearchResults({ query, words, scope, includeSource, editingPages
   const logs = useStudyLogStore((state) => state.logs);
   const { entries, error: knowledgeError } = useKnowledgeStore();
   const { data: code, isLoaded: codeLoaded, error: codeError } = useProjectCodeStore();
+  const { outcomes, exercises, hiddenPresetIds, groups: growthGroups } = useGrowthStore();
   const records = useMemo(() => {
     const projects = new Map(code.projects.map((project) => [project.id, project.name]));
+    const completed = new Set(outcomes.map(({ id }) => id));
+    const cardGroups = new Map(growthGroups.flatMap((group) => group.cardIds.map((id) => [id, group] as const)));
+    const cards = [
+      ...outcomes.map(({ id, title, domains, description, practices }) => ({ id, title, fields: [...domains, description ?? '', ...practices.map(({ note }) => note)] })),
+      ...growthExercises({ exercises, hiddenPresetIds }).filter(({ id }) => !completed.has(id))
+        .map(({ id, title, domains, action, done }) => ({ id, title, fields: [...domains, action, done] })),
+    ];
     return {
       history: [...logs].sort((a, b) => b.date.localeCompare(a.date)).map((log) => searchable({
         href: '#history/' + encodeURIComponent(log.date), title: logLabel(log), fields: logSearchFields(log),
@@ -62,8 +73,21 @@ export function SearchResults({ query, words, scope, includeSource, editingPages
           source: includeSource ? version.content ?? undefined : undefined,
         });
       }),
+      path: [
+        ...growthGroups.map(({ id, name, cardIds }) => searchable({
+          href: growthBoardHref('all', id), title: name, detail: `卡组 · ${cardIds.length} 张卡片`, fields: [name],
+        })),
+        ...cards.map(({ id, title, fields }) => {
+          const group = cardGroups.get(id);
+          const status = completed.has(id) ? '已完成' : '待尝试';
+          return searchable({
+            href: growthBoardHref(completed.has(id) ? 'recent' : 'try', group?.id, id), title,
+            detail: [status, group?.name].filter(Boolean).join(' · '), fields: [title, group?.name ?? '', ...fields],
+          });
+        }),
+      ],
     };
-  }, [logs, entries, code, includeSource]);
+  }, [logs, entries, code, outcomes, exercises, hiddenPresetIds, growthGroups, includeSource]);
   const exactQuery = normalizedName(query);
   const groups = GROUPS.filter(({ page }) => scope === 'all' || scope === page).map((group) => {
     const items = records[group.page].filter(({ searchableText }) => includesWords(searchableText, words));
@@ -113,7 +137,7 @@ export function SearchResults({ query, words, scope, includeSource, editingPages
   );
 }
 
-export default function ResourceSearch() {
+export default function ResourceSearch({ triggerContent = '检索' }: { triggerContent?: ReactNode }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
@@ -132,7 +156,7 @@ export default function ResourceSearch() {
 
   return (
     <>
-      <button type="button" className="open-resource-search" aria-label="检索资料" aria-haspopup="dialog" onClick={open}>检索</button>
+      <button type="button" className="open-resource-search" title="检索资料" aria-label="检索资料" aria-haspopup="dialog" onClick={open}>{triggerContent}</button>
       <dialog ref={dialog} className="resource-search" aria-labelledby="resource-search-title"
         onClose={() => setEditingPages(null)} onKeyDown={(event) => {
           if (event.key === 'Escape' && !event.nativeEvent.isComposing) {
@@ -154,7 +178,7 @@ export default function ResourceSearch() {
           <input type="checkbox" checked={includeSource} onChange={(event) => setIncludeSource(event.target.checked)} />
           搜索脚本正文（本地快照）
         </label>}
-        {words.length === 0 && <p className="search-muted">输入关键词，在日志、词条与代码版本中查找。</p>}
+        {words.length === 0 && <p className="search-muted">输入关键词查找日志、词条、代码或实践卡片。</p>}
         {editingPages && words.length > 0 && <SearchResults query={query} words={words} scope={scope} includeSource={scope === 'code' && includeSource} editingPages={editingPages} onOpen={close} />}
       </dialog>
     </>

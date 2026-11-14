@@ -1,7 +1,7 @@
 import { normalizedName } from '../../utils/knowledge';
 import { formatDate, getTodayDate, isCalendarDate } from '../../utils/storage';
 
-export type AssistantAction = { kind: 'review'; date: string } | { kind: 'findEntry' | 'findPractice'; query: string } | { kind: 'code' };
+export type AssistantAction = { kind: 'review'; date: string } | { kind: 'findEntry' | 'findPractice'; query: string } | { kind: 'code' | 'recommend' };
 
 export function isAssistantGuideQuestion(text: string): boolean {
   return /^(?:请问\s*)?(?:(?:你|智能体|助手)(?:可以|能|会|有什么)(?:帮我)?(?:做什么|干什么|做些什么|功能)|(?:怎么|如何)使用(?:这个)?(?:项目|应用|助手|智能体)|(?:这个)?(?:项目|应用)?有什么功能|使用指南)[。？！?!]*$/.test(text.trim());
@@ -13,6 +13,7 @@ const reviewFirst = new RegExp(`^(?:整理|梳理)\\s*(?:学习)?(?:日志|记�
 
 export function assistantAction(text: string): AssistantAction | undefined {
   const request = normalizedName(text).replace(/[。！？!?]+$/, '').replace(/^(?:请(?:你)?\s*)?(?:(?:帮我|为我)\s*)?/, '');
+  if (/^(?:推荐|生成)\s*(?:一个|一些|几个|一批)?\s*(?:练习|实践)(?:建议|候选)?$/.test(request)) return { kind: 'recommend' };
   if (/^(?:解释|看一下|问一下|分析)\s*(?:一段|这段)?\s*代码$/.test(request)) return { kind: 'code' };
   const review = request.match(datedReview) ?? request.match(reviewFirst);
   if (review) return { kind: 'review', date: review[1] ?? '' };

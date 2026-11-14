@@ -20,6 +20,7 @@ export default function AssistantSearch({ query, scope, onQuery, onScope, onNavi
         <option value="knowledge">知识词条</option>
         <option value="history">学习日志</option>
         <option value="code">代码版本</option>
+        <option value="path">实践卡片与卡组</option>
       </select>
     </label>
     {words.length > 0 && <SearchResults query={query} words={words} scope={scope} includeSource={false} limit={6}

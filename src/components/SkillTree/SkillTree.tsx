@@ -8,6 +8,7 @@ export default function SkillTree() {
   const { completedIds, isLoaded, loadSkillTree, toggleCompleted } = useSkillTreeStore();
   const { goal, setCurrentGoal, clearCurrentGoal } = useCurrentGoalStore();
   const [notice, setNotice] = useState('');
+  const [selected, setSelected] = useState(SKILL_PATH[0].id);
 
   useEffect(() => { loadSkillTree(); }, [loadSkillTree]);
 
@@ -23,17 +24,22 @@ export default function SkillTree() {
 
   return (
     <div className="growth-reference-path">
-      <p className="growth-muted">可以按需要浏览主题、安排任务或设置当前目标。原有完成记录显示在对应主题中。</p>
       {notice && <p role="status">{notice}</p>}
-      {SKILL_CATEGORIES.map((category) => (
-        <section key={category.id}>
-          <h3>{category.title}</h3>
-          <div className="growth-preset-grid">
-            {SKILL_PATH.filter((node) => node.category === category.id).map((node) => {
+      <div className="growth-topic-layout">
+        <nav className="growth-topic-nav" aria-label="参考主题">
+          {SKILL_CATEGORIES.map((category) => <div key={category.id}>
+            <h3>{category.title}</h3>
+            {SKILL_PATH.filter((node) => node.category === category.id).map((node) => <button key={node.id} type="button"
+              aria-pressed={selected === node.id} onClick={() => setSelected(node.id)}>{node.name}
+              {completedIds.includes(node.id) && <span aria-label="已完成">✓</span>}</button>)}
+          </div>)}
+        </nav>
+        <div className="growth-topic-detail">
+            {SKILL_PATH.map((node) => {
               const completed = completedIds.includes(node.id);
               const related = node.prerequisites.map((id) => getSkillNode(id)?.name).filter(Boolean);
               return (
-                <article key={node.id} className="growth-card" aria-label={node.name}>
+                <article key={node.id} className="growth-card growth-topic" hidden={selected !== node.id} aria-label={node.name}>
                   <h4>{node.name}</h4>
                   <p>{node.description}</p>
                   {related.length > 0 && <p className="growth-muted">可参考 {related.join('、')}</p>}
@@ -51,9 +57,8 @@ export default function SkillTree() {
                 </article>
               );
             })}
-          </div>
-        </section>
-      ))}
+        </div>
+      </div>
     </div>
   );
 }

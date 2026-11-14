@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent, ReactNode } from 'react';
-import type { StudyLog } from '../../types';
+import type { GrowthDomain, SavedExercise, StudyLog } from '../../types';
+import { useGrowthStore } from '../../store/growthStore';
 import { getStorageItem, setStorageItem } from '../../utils/storage';
 import { STORAGE_PREFIX } from '../../utils/workspaceMode';
 import AssistantChat from './AssistantChat';
@@ -8,11 +9,12 @@ import AssistantReviewPicker from './AssistantReviewPicker';
 import AssistantSearch from './AssistantSearch';
 import AssistantPractice from './AssistantPractice';
 import AssistantCodePicker from './AssistantCodePicker';
+import GrowthSuggestions from './GrowthSuggestions';
 import type { AssistantStart } from './AssistantGuide';
 import type { AssistantAction } from './assistantActions';
 import type { SearchScope } from '../Search/ResourceSearch';
 import { AssistantSlots } from './assistantSlots';
-import type { AssistantCodeReference, AssistantLogDraft, AssistantLogKind } from './assistantSlots';
+import type { AssistantCodeReference, AssistantGrowthCard, AssistantLogDraft, AssistantLogKind } from './assistantSlots';
 import { assistantViewport, boundFrame, boundPosition, defaultFrame, resizeFrame, windowGap } from './assistantGeometry';
 import type { Frame, Point } from './assistantGeometry';
 
@@ -22,14 +24,16 @@ type DragKind = 'launcher' | 'move' | 'resize';
 interface Gesture { kind: DragKind; pointer: number; start: Point; origin: Frame; moved: boolean }
 interface Menu extends Point { trigger: HTMLElement; launcher: boolean }
 const modes = [
-  ['chat', '自由问答'], ['review', '日志整理'], ['search', '查找资料'], ['practice', '回看实践'],
+  ['chat', '自由问答'], ['review', '日志整理'], ['search', '查找资料'], ['practice', '回看实践'], ['recommend', '推荐练习'],
 ] as const;
 
-export default function AssistantDock({ activePage, activeLog, onOpenReview, onStart, children }: {
+export default function AssistantDock({ activePage, activeLog, onOpenReview, onStart, onRecordRecommendation, editingGrowth, children }: {
   activePage: string;
   activeLog?: { kind: AssistantLogKind; log: StudyLog; editing: boolean };
   onOpenReview: (log: StudyLog) => string | undefined;
   onStart: (page: AssistantStart) => void;
+  onRecordRecommendation: (item: SavedExercise) => void;
+  editingGrowth: boolean;
   children: ReactNode;
 }) {
   const [today, setToday] = useState<HTMLDivElement | null>(null);
@@ -44,7 +48,11 @@ export default function AssistantDock({ activePage, activeLog, onOpenReview, onS
   const [searchScope, setSearchScope] = useState<SearchScope>('all');
   const [practiceQuery, setPracticeQuery] = useState('');
   const [practiceRequest, setPracticeRequest] = useState(0);
+  const [recommendationDomain, setRecommendationDomain] = useState<GrowthDomain | ''>('');
+  const growthLoaded = useGrowthStore((state) => state.isLoaded);
+  const growthError = useGrowthStore((state) => state.error);
   const [codeExcerpt, setCodeExcerpt] = useState<AssistantCodeReference>();
+  const [growthCard, setGrowthCard] = useState<AssistantGrowthCard>();
   const [pickingCode, setPickingCode] = useState(false);
   const [viewport, setViewport] = useState(assistantViewport);
   const [position, setPosition] = useState<Point | null>(() => {
@@ -90,15 +98,33 @@ export default function AssistantDock({ activePage, activeLog, onOpenReview, onS
     close();
     setMinimized(true);
   };
+  const openGrowthRecommendations = useCallback((domain?: GrowthDomain) => {
+    if (domain) setRecommendationDomain(domain);
+    setMode('recommend');
+    setMenu(undefined);
+    setMinimized(false);
+    setOpen(true);
+  }, []);
   const askAboutCode = useCallback((excerpt: AssistantCodeReference) => {
     setCodeExcerpt(excerpt);
+    setGrowthCard(undefined);
     setPickingCode(false);
     setMode('chat');
     setMenu(undefined);
     setMinimized(false);
     setOpen(true);
   }, []);
-  const slots = useMemo(() => ({ today, history, close, setLogDraft, askAboutCode }), [today, history, close, setLogDraft, askAboutCode]);
+  const askAboutGrowthCard = useCallback((card: AssistantGrowthCard) => {
+    setGrowthCard(card);
+    setCodeExcerpt(undefined);
+    setPickingCode(false);
+    setMode('chat');
+    setMenu(undefined);
+    setMinimized(false);
+    setOpen(true);
+  }, []);
+  const slots = useMemo(() => ({ today, history, close, setLogDraft, askAboutCode, openGrowthRecommendations, askAboutGrowthCard }),
+    [today, history, close, setLogDraft, askAboutCode, openGrowthRecommendations, askAboutGrowthCard]);
 
   useEffect(() => {
     const resize = () => {
@@ -170,7 +196,9 @@ export default function AssistantDock({ activePage, activeLog, onOpenReview, onS
     setOpen(true);
   };
   const runAction = (action: AssistantAction) => {
-    if (action.kind === 'review') {
+    if (action.kind === 'recommend') {
+      openGrowthRecommendations();
+    } else if (action.kind === 'review') {
       setMode('review');
       setDateQuery(action.date);
       setChoosingLog(Boolean(action.date));
@@ -299,6 +327,7 @@ export default function AssistantDock({ activePage, activeLog, onOpenReview, onS
         </div>
         <div className="assistant-chat-host" hidden={tab !== 'chat' || pickingCode}>
           <AssistantChat source={source} active={open && tab === 'chat' && !pickingCode} onAction={runAction}
+            growthCard={growthCard} onRemoveGrowthCard={() => setGrowthCard(undefined)}
             codeExcerpt={codeExcerpt} onRemoveCode={() => setCodeExcerpt(undefined)} onPickCode={() => setPickingCode(true)}
             page={activePage} onStart={(page) => { minimize(); onStart(page); }} onTool={(tool) => {
               if (tool === 'code') setPickingCode(true);
@@ -329,6 +358,11 @@ export default function AssistantDock({ activePage, activeLog, onOpenReview, onS
         </div>}
         <div className="assistant-body" hidden={tab !== 'practice'}>
           <AssistantPractice key={practiceRequest} query={practiceQuery} onQuery={setPracticeQuery} onNavigate={minimize} active={open && tab === 'practice'} />
+        </div>
+        <div className="assistant-body" hidden={tab !== 'recommend'}>
+          <GrowthSuggestions domain={recommendationDomain} onDomain={setRecommendationDomain}
+            onNavigate={minimize} recordDisabledReason={editingGrowth ? '请先保存或取消正在编辑的卡片或实践。' : growthError || (!growthLoaded ? '正在加载成长记录…' : undefined)}
+            onRecord={(item) => { minimize(); onRecordRecommendation(item); }} />
         </div>
       </div>
       {!viewport.compact && <button type="button" className="assistant-resize" aria-label="调整智能体窗口大小"

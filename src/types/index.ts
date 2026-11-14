@@ -109,12 +109,31 @@ export interface GrowthOutcome {
   id: string;
   title: string;
   domains: GrowthDomain[];
+  description?: string;
   practices: GrowthPractice[];
+}
+
+export interface SavedExercise {
+  id: string;
+  title: string;
+  domains: GrowthDomain[];
+  action: string;
+  done: string;
+  sources: Required<Pick<GrowthPractice, 'logIds' | 'entryIds' | 'codeVersionIds'>>;
+}
+
+export interface GrowthGroup {
+  id: string;
+  name: string;
+  cardIds: string[];
 }
 
 export interface GrowthData {
   version: 1;
   outcomes: GrowthOutcome[];
+  exercises: SavedExercise[];
+  hiddenPresetIds: string[];
+  groups: GrowthGroup[];
 }
 
 // 设置

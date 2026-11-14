@@ -16,6 +16,8 @@ export interface GrowthDraft {
   outcome: Omit<GrowthOutcome, 'practices'>;
   practice?: GrowthPractice;
   preset: boolean;
+  suggestedSources?: Pick<GrowthPractice, 'logIds' | 'entryIds' | 'codeVersionIds'>;
+  groupId?: string;
 }
 
 function toggleSelection<T>(values: T[], value: T) {
@@ -25,11 +27,13 @@ function toggleSelection<T>(values: T[], value: T) {
 export default function GrowthPracticeForm({ draft, onClose }: { draft: GrowthDraft; onClose: (savedId?: string) => void }) {
   const [title, setTitle] = useState(draft.outcome.title);
   const [domains, setDomains] = useState(draft.outcome.domains);
+  const [description, setDescription] = useState(() => draft.outcome.description
+    ?? useGrowthStore.getState().exercises.find(({ id }) => id === draft.outcome.id)?.action ?? '');
   const [date, setDate] = useState(draft.practice?.date ?? getTodayDate);
   const [note, setNote] = useState(draft.practice?.note ?? '');
-  const [logIds, setLogIds] = useState(draft.practice?.logIds ?? []);
-  const [entryIds, setEntryIds] = useState(draft.practice?.entryIds ?? []);
-  const [codeSelection, setCodeSelection] = useState<string[] | null>(null);
+  const [logIds, setLogIds] = useState(draft.practice?.logIds ?? draft.suggestedSources?.logIds ?? []);
+  const [entryIds, setEntryIds] = useState(draft.practice?.entryIds ?? draft.suggestedSources?.entryIds ?? []);
+  const [codeSelection, setCodeSelection] = useState<string[] | null>(draft.suggestedSources?.codeVersionIds ?? null);
   const [error, setError] = useState('');
   const logs = useStudyLogStore((state) => state.logs);
   const entries = useKnowledgeStore((state) => state.entries);
@@ -50,8 +54,9 @@ export default function GrowthPracticeForm({ draft, onClose }: { draft: GrowthDr
       const id = draft.practice?.id ?? generateId();
       const codeVersionIds = codeSelection ?? draft.practice?.codeVersionIds;
       savePractice(
-        { id: draft.outcome.id, title: title.trim(), domains },
+        { id: draft.outcome.id, title: title.trim(), domains, description: draft.preset ? draft.outcome.description : description.trim() },
         { id, date, note: note.trim(), logIds, entryIds, codeVersionIds },
+        draft.groupId,
       );
       onClose(id);
     } catch (error) {
@@ -82,6 +87,9 @@ export default function GrowthPracticeForm({ draft, onClose }: { draft: GrowthDr
           </fieldset>
         </>
       )}
+      {!draft.preset && <label className="growth-field">卡片说明（可选）
+        <textarea rows={3} maxLength={1200} value={description} onChange={(event) => setDescription(event.target.value)} />
+      </label>}
       <label className="growth-field">实践日期
         <input type="date" value={date} max={getTodayDate()} onChange={(event) => setDate(event.target.value)} required />
       </label>

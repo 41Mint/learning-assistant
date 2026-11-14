@@ -10,6 +10,12 @@ export interface SearchLocation {
   inSource: boolean;
 }
 
+export const GROWTH_VIEWS = [
+  { id: 'recent', label: '已完成', href: '#path' },
+  { id: 'try', label: '待尝试', href: '#path/try' },
+] as const;
+export type GrowthView = typeof GROWTH_VIEWS[number]['id'] | 'topics' | 'all';
+
 export function readWorkspaceHash() {
   const [path, query = ''] = window.location.hash.slice(1).split('?');
   const [page, value = '', detail = ''] = path.split('/');
@@ -22,8 +28,15 @@ export function readWorkspaceHash() {
       ? { page, id, words, inSource: page === 'code' && params.get('source') === '1' } : null;
     const relation: RelationNodeRef | null = page === 'relations' && decodedDetail && (id === 'log' || id === 'entry' || id === 'code')
       ? { kind: id, id: decodedDetail } : null;
-    return { page, id, detail: decodedDetail, search, relation };
-  } catch { return { page, id: '', detail: '', search: null, relation: null }; }
+    const groupId = page === 'path' ? params.get('group') : null;
+    const cardId = page === 'path' ? params.get('card') : null;
+    const exerciseId = page === 'path' && id === 'try' ? decodedDetail || null : null;
+    const practiceTarget = page === 'path' && id && decodedDetail && !exerciseId
+      ? { outcomeId: id, practiceId: decodedDetail } : null;
+    const growthView: GrowthView = page === 'path' && (id === 'try' || (!decodedDetail && id === 'topics')) ? id
+      : groupId && !id && params.get('view') === 'all' ? 'all' : 'recent';
+    return { page, id, search, relation, growthView, groupId, cardId, exerciseId, practiceTarget };
+  } catch { return { page, id: '', search: null, relation: null, growthView: 'recent' as GrowthView, groupId: null, cardId: null, exerciseId: null, practiceTarget: null }; }
 }
 const initial = readWorkspaceHash();
 const isDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(new Date(`${value}T12:00:00`).getTime());
@@ -33,9 +46,24 @@ export function practiceHref(outcomeId: string, practiceId: string): string {
 }
 
 export function searchHref(href: string, query: string, inSource = false): string {
-  const params = new URLSearchParams({ find: query.trim() });
+  const [path, queryString] = href.split('?');
+  const params = new URLSearchParams(queryString);
+  params.set('find', query.trim());
   if (inSource) params.set('source', '1');
-  return href + '?' + params;
+  return path + '?' + params;
+}
+
+export function growthBoardHref(view: 'recent' | 'try' | 'all', groupId?: string | null, cardId?: string) {
+  const path = view === 'try' ? '#path/try' : '#path';
+  const params = new URLSearchParams();
+  if (groupId) params.set('group', groupId);
+  if (groupId && view === 'all') params.set('view', 'all');
+  if (cardId) params.set('card', cardId);
+  return params.size ? `${path}?${params}` : path;
+}
+
+export function exerciseHref(id: string, groupId?: string) {
+  return '#path/try/' + encodeURIComponent(id) + (groupId ? '?' + new URLSearchParams({ group: groupId }) : '');
 }
 
 export function relationHref({ kind, id }: RelationNodeRef): string {
@@ -47,7 +75,7 @@ export function knowledgeNetworkHref(entryId?: string): string {
 }
 
 export function hasWorkspaceEditor(page: string): boolean {
-  return Boolean(document.getElementById(page)?.querySelector('form'));
+  return Boolean(document.getElementById(page)?.querySelector('form:not([data-preserves-on-navigation])'));
 }
 
 export function workspaceResourceTarget(href: string) {
@@ -59,6 +87,11 @@ interface WorkspaceStore {
   entryId: string | null;
   codeVersionId: string | null;
   practiceTarget: { outcomeId: string; practiceId: string } | null;
+  growthOutcomeId: string | null;
+  growthGroupId: string | null;
+  growthCardId: string | null;
+  growthExerciseId: string | null;
+  growthView: GrowthView;
   search: SearchLocation | null;
   relationTarget: RelationNodeRef | null;
   networkEntryRequest: { id: string } | null;
@@ -70,13 +103,17 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   historyDate: initial.page === 'history' && isDate(initial.id) ? initial.id : getTodayDate(),
   entryId: initial.page === 'knowledge' && initial.id ? initial.id : null,
   codeVersionId: initial.page === 'code' && initial.id ? initial.id : null,
-  practiceTarget: initial.page === 'path' && initial.id && initial.detail
-    ? { outcomeId: initial.id, practiceId: initial.detail } : null,
+  practiceTarget: initial.practiceTarget,
+  growthOutcomeId: initial.page === 'path' && initial.growthView === 'recent' ? initial.id || null : null,
+  growthGroupId: initial.groupId,
+  growthCardId: initial.cardId,
+  growthExerciseId: initial.exerciseId,
+  growthView: initial.growthView,
   search: initial.search,
   relationTarget: initial.relation,
   networkEntryRequest: initial.page === 'network' && initial.id ? { id: initial.id } : null,
   syncHash: () => {
-    const { page, id, detail, search, relation } = readWorkspaceHash();
+    const { page, id, search, relation, growthView, groupId, cardId, exerciseId, practiceTarget } = readWorkspaceHash();
     const selection: Partial<WorkspaceStore> = { search, relationTarget: relation };
     if (page === 'network' && id && window.history.state?.knowledgeNetworkEntry !== id) {
       // Back and Forward revisit an existing entry, while a new link requests focus.
@@ -86,7 +123,14 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
     if (page === 'knowledge' && id) selection.entryId = id;
     if (page === 'history' && isDate(id)) selection.historyDate = id;
     if (page === 'code') selection.codeVersionId = id || null;
-    if (page === 'path') selection.practiceTarget = id && detail ? { outcomeId: id, practiceId: detail } : null;
+    if (page === 'path') {
+      selection.practiceTarget = practiceTarget;
+      selection.growthOutcomeId = growthView === 'recent' ? id || null : null;
+      selection.growthView = growthView;
+      selection.growthGroupId = groupId;
+      selection.growthCardId = cardId;
+      selection.growthExerciseId = exerciseId;
+    }
     set(selection);
   },
   openLog: (date) => { set({ historyDate: date, search: null }); window.location.hash = `history/${date}`; },

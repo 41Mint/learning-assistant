@@ -720,8 +720,9 @@ test('整组拖动带动模块成员和连线，拖动与复位可按步撤销�
   expect(dx).toBeGreaterThan(0);
   expect(dy).toBeGreaterThan(0);
   for (const [id, , category] of terms) {
-    expect(moved[id].x - before[id].x).toBeCloseTo(category === '渲染' ? dx : 0, 5);
-    expect(moved[id].y - before[id].y).toBeCloseTo(category === '渲染' ? dy : 0, 5);
+    // Edge rounds the positions read back from inline CSS.
+    expect(moved[id].x - before[id].x).toBeCloseTo(category === '渲染' ? dx : 0, 3);
+    expect(moved[id].y - before[id].y).toBeCloseTo(category === '渲染' ? dy : 0, 3);
   }
   expect(await graph.locator('.network-line').evaluateAll((lines) => lines.map((line) => line.getAttribute('d')))).not.toEqual(linesBefore);
 
@@ -769,8 +770,9 @@ test('Shift 多选和框选可共同移动节点，并批量分类与撤销', as
   const dy = moved.sprite.y - before.sprite.y;
   expect(dx).toBeGreaterThan(0);
   for (const id of ['pointer', 'singleton']) {
-    expect(moved[id].x - before[id].x).toBeCloseTo(dx, 5);
-    expect(moved[id].y - before[id].y).toBeCloseTo(dy, 5);
+    // CSS serialization rounds positions with different magnitudes independently.
+    expect(moved[id].x - before[id].x).toBeCloseTo(dx, 2);
+    expect(moved[id].y - before[id].y).toBeCloseTo(dy, 2);
   }
   expect(moved.ppu).toEqual(before.ppu);
   expect(moved['渲染']).toEqual(before['渲染']);

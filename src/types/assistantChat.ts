@@ -23,6 +23,11 @@ export interface ChatScript {
   parts: ChatCodeRange[];
   notes: string[];
 }
+export interface ChatGrowthCard {
+  title: string;
+  domains: string[];
+  description: string;
+}
 
 export interface ChatRequest {
   question: string;
@@ -30,4 +35,5 @@ export interface ChatRequest {
   log?: ChatLog;
   code?: ChatCode;
   script?: ChatScript;
+  growthCard?: ChatGrowthCard;
 }

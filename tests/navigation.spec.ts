@@ -11,7 +11,9 @@ async function navigate(page: Page, label: string) {
   if (compact) {
     await expect(menu).toContainText(label);
     await expect(menu).toHaveAttribute('aria-expanded', 'false');
-  } else await expect(link).toHaveAttribute('aria-current', 'page');
+  } else {
+    await expect(link).toHaveAttribute('aria-current', 'page');
+  }
 }
 
 test('主要入口分开呈现，刷新和浏览器前后退保留入口', async ({ page }) => {
@@ -20,7 +22,7 @@ test('主要入口分开呈现，刷新和浏览器前后退保留入口', async
   await expect(page.getByRole('heading', { name: '📅 学习历史' })).toBeHidden();
   await navigate(page, '成长记录');
   await expect(page).toHaveURL(/#path$/);
-  await expect(page.getByRole('heading', { name: '最近做到' })).toBeVisible();
+  await expect(page.getByRole('region', { name: '已完成' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '📝 今日学习记录' })).toBeHidden();
   await navigate(page, '数据管理');
   await expect(page.getByRole('button', { name: '导出完整备份', exact: true })).toBeVisible();
@@ -91,7 +93,7 @@ test('历史草稿在切换入口后保留，长笔记可用固定导航直接�
   await page.getByRole('button', { name: '取消编辑', exact: true }).click();
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   const navigationBox = await page.getByRole('navigation', { name: '主要功能' }).boundingBox();
-  expect(navigationBox?.y).toBeLessThan(20);
+  expect(navigationBox?.y).toBeLessThanOrEqual(56);
   await navigate(page, '数据管理');
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
 });
@@ -105,14 +107,14 @@ test('窄屏六个入口可操作，页面无横向溢出', async ({ page }, tes
   await expect(nav.getByRole('button', { name: '检索资料' })).toBeVisible();
   const closed = (await nav.boundingBox())!;
   await menu.press('Enter');
-  await expect(nav.getByRole('link')).toHaveCount(6);
+  await expect(nav.getByRole('link')).toHaveCount(8);
   expect((await nav.boundingBox())!.height).toBe(closed.height);
   await page.screenshot({ path: testInfo.outputPath('mobile-menu.png') });
   await nav.getByRole('link', { name: '历史回顾', exact: true }).press('Escape');
   await expect(menu).toBeFocused();
   await expect(nav.getByRole('link')).toHaveCount(0);
   await menu.click();
-  await page.getByRole('heading', { name: '游戏开发学习助手' }).click();
+  await nav.getByRole('button', { name: '关闭页面菜单', exact: true }).click({ position: { x: 370, y: 300 } });
   await expect(menu).toHaveAttribute('aria-expanded', 'false');
   for (const label of ['今日学习', '成长记录', '历史回顾', '知识词条', '知识网络', '数据管理']) {
     await navigate(page, label);
@@ -124,4 +126,41 @@ test('窄屏六个入口可操作，页面无横向溢出', async ({ page }, tes
   await page.screenshot({ path: testInfo.outputPath('desktop-history.png') });
   await navigate(page, '今日学习');
   await page.screenshot({ path: testInfo.outputPath('desktop-today.png') });
+});
+
+test('贴左图标侧栏悬停覆盖展开，子页支持刷新和历史记录', async ({ page }, testInfo) => {
+  await page.goto('/#today');
+  const nav = page.getByRole('navigation', { name: '主要功能' });
+  const growth = nav.getByRole('link', { name: '成长记录', exact: true });
+  const group = nav.getByRole('group', { name: '成长记录子页' });
+  await expect(group.getByRole('link')).toHaveCount(2);
+  const compact = (await nav.boundingBox())!;
+  expect(compact).toMatchObject({ x: 0, y: 56, width: 58 });
+  const main = page.getByRole('main');
+  const original = await main.boundingBox();
+  await expect(group.getByText('项目代码')).toBeHidden();
+  await expect(group.getByRole('link', { name: '项目代码' })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('desktop-rail.png') });
+  await growth.hover();
+  await expect(group.getByText('项目代码')).toBeVisible();
+  expect((await nav.boundingBox())?.width).toBeGreaterThan(compact.width);
+  expect(await main.boundingBox()).toEqual(original);
+  await page.screenshot({ path: testInfo.outputPath('desktop-rail-expanded.png') });
+  await page.mouse.move(400, 100);
+  await expect(group.getByText('项目代码')).toBeHidden();
+  expect(await main.boundingBox()).toEqual(original);
+  await page.getByRole('link', { name: '游戏开发学习助手首页' }).focus();
+  await page.keyboard.press('Tab');
+  await expect(group.getByText('项目代码')).toBeVisible();
+  const topics = nav.getByRole('link', { name: '参考路径与任务', exact: true });
+  await topics.click();
+  await expect(page).toHaveURL(/#path\/topics$/);
+  await expect(group.getByText('参考路径与任务')).toBeHidden();
+  await page.reload();
+  await expect(topics).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('region', { name: '参考路径与任务' })).toBeVisible();
+  await nav.getByRole('link', { name: '项目代码', exact: true }).click();
+  await expect(page).toHaveURL(/#code$/);
+  await page.goBack();
+  await expect(topics).toHaveAttribute('aria-current', 'page');
 });
