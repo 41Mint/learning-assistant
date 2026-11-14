@@ -1,6 +1,9 @@
 import { useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useCurrentGoalStore } from '../../store/currentGoalStore';
+import { GROWTH_DRAG_TYPE, useGrowthDragStore } from '../../store/growthDragStore';
+import type { GrowthDrag } from '../../store/growthDragStore';
+import type { DragEventHandler } from 'react';
 import type { ChatGrowthCard } from '../../types/assistantChat';
 import { AssistantSlots } from '../Assistant/assistantSlots';
 
@@ -9,19 +12,23 @@ export interface GrowthCardAction {
   run?: (trigger: HTMLButtonElement) => void;
 }
 
-export default function GrowthCard({ id, card, recordLabel, onRecord, actions, children, href, highlighted }: {
+export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, actions, children, href, highlighted, drag, onDragOver, onDrop }: {
   id: string;
   card: ChatGrowthCard;
   recordLabel: string;
   onRecord?: (trigger: HTMLButtonElement) => void;
+  onAsk?: () => void;
   actions?: GrowthCardAction[];
   children: ReactNode;
   href?: string;
   highlighted?: boolean;
+  drag?: GrowthDrag;
+  onDragOver?: DragEventHandler<HTMLElement>;
+  onDrop?: DragEventHandler<HTMLElement>;
 }) {
   const menu = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const { askAboutGrowthCard } = useContext(AssistantSlots);
+  const { askAboutGrowth } = useContext(AssistantSlots);
   const goal = useCurrentGoalStore((state) => state.goal);
   const setGoal = useCurrentGoalStore((state) => state.setCurrentGoal);
   const [error, setError] = useState('');
@@ -62,14 +69,27 @@ export default function GrowthCard({ id, card, recordLabel, onRecord, actions, c
     action(trigger.current);
   };
 
-  return <article className="growth-card growth-summary" aria-label={card.title} data-card-focus={highlighted || undefined} onContextMenu={(event) => {
+  return <article className="growth-card growth-summary" aria-label={card.title} data-card-focus={highlighted || undefined}
+    draggable={Boolean(drag)} onDragOver={onDragOver} onDrop={onDrop}
+    onDragStart={(event) => {
+      if (!drag || (event.target instanceof Element && event.target.closest('button'))) {
+        event.preventDefault();
+        return;
+      }
+      menu.current?.hidePopover();
+      event.dataTransfer.setData(GROWTH_DRAG_TYPE, '');
+      event.dataTransfer.effectAllowed = 'move';
+      useGrowthDragStore.setState({ drag });
+    }}
+    onDragEnd={() => useGrowthDragStore.setState({ drag: undefined })}
+    onContextMenu={(event) => {
     if (event.shiftKey && event.button === 2) return;
     event.preventDefault();
     const box = trigger.current?.getBoundingClientRect();
     showMenu(event.clientX || box?.left || 0, event.clientY || box?.bottom || 0, event.button !== 2);
   }}>
     <div className="growth-card-heading">
-      <h3>{href ? <a href={href}>{card.title}</a> : card.title}</h3>
+      <h3>{href ? <a href={href} draggable={false}>{card.title}</a> : card.title}</h3>
       <button ref={trigger} type="button" className="growth-card-menu-button" aria-label="卡片操作" title="卡片操作" aria-expanded={menuOpen}
         onClick={(event) => {
           const box = event.currentTarget.getBoundingClientRect();
@@ -97,7 +117,10 @@ export default function GrowthCard({ id, card, recordLabel, onRecord, actions, c
           setError('学习目标保存失败，请重试。');
         }
       })}>{current ? '已设为学习目标' : '设为学习目标'}</button>
-      <button type="button" onClick={() => act(() => askAboutGrowthCard({ id, ...card, title: card.title.slice(0, 100), description: card.description.slice(0, 1200) }))}>询问智能体</button>
+      <button type="button" onClick={() => act(() => {
+        onAsk?.();
+        askAboutGrowth({ id, kind: 'card', card: { ...card, title: card.title.slice(0, 100), description: card.description.slice(0, 1200) } });
+      })}>询问智能体</button>
     </div>
   </article>;
 }

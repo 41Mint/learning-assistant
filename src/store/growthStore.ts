@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { GROWTH_PRESETS } from '../data/growthPresets';
-import type { GrowthData, GrowthOutcome, GrowthPractice, SavedExercise } from '../types';
+import type { GrowthData, GrowthGroup, GrowthOutcome, GrowthPractice, SavedExercise } from '../types';
 import { emptyGrowth, growthExercises, validateGrowth } from '../utils/growth';
 import { normalizedName } from '../utils/knowledge';
 import { generateId, getTodayDate, STORAGE_KEYS } from '../utils/storage';
@@ -10,25 +10,35 @@ type OutcomeDetails = Omit<GrowthOutcome, 'practices'>;
 interface GrowthStore extends GrowthData {
   isLoaded: boolean;
   error: string;
+  previousArrangement?: Pick<GrowthData, 'groups' | 'exercises'>;
   loadGrowth: () => void;
-  savePractice: (outcome: OutcomeDetails, practice: GrowthPractice, groupId?: string) => void;
+  savePractice: (outcome: OutcomeDetails, practice: GrowthPractice, groupId?: string, exercise?: SavedExercise) => void;
   removePractice: (outcomeId: string, practiceId: string) => void;
-  saveExercise: (exercise: SavedExercise) => void;
+  saveExercise: (exercise: SavedExercise, groupId?: string) => boolean;
   editExercise: (exercise: SavedExercise, groupId?: string) => void;
   removeExercise: (id: string) => void;
   restorePreset: (id: string) => void;
-  saveGroup: (name: string, id?: string) => string;
+  saveGroup: (name: string, id?: string, cardIds?: string[], exercise?: SavedExercise) => string;
   removeGroup: (id: string) => void;
   moveCard: (cardId: string, groupId: string | null) => void;
+  undoArrangement: () => void;
+}
+
+function placeCards(groups: GrowthGroup[], cardIds: string[], groupId?: string | null) {
+  if (groupId && !groups.some(({ id }) => id === groupId)) throw new Error('找不到目标卡组。');
+  return groups.map((group) => ({
+    ...group,
+    cardIds: group.id === groupId ? [...new Set([...group.cardIds, ...cardIds])] : group.cardIds.filter((id) => !cardIds.includes(id)),
+  }));
 }
 
 export const useGrowthStore = create<GrowthStore>((set, get) => {
-  const persist = (change: Partial<GrowthData>) => {
+  const persist = (change: Partial<GrowthData>, undoable = false) => {
     const { isLoaded, error, outcomes, exercises, hiddenPresetIds, groups } = get();
     if (!isLoaded || error) throw new Error(error || '成长记录正在加载。');
     const data = validateGrowth({ version: 1, outcomes, exercises, hiddenPresetIds, groups, ...change });
     localStorage.setItem(STORAGE_KEYS.GROWTH, JSON.stringify(data));
-    set(data);
+    set({ ...data, previousArrangement: undoable ? { groups, exercises } : undefined });
   };
 
   return {
@@ -45,9 +55,9 @@ export const useGrowthStore = create<GrowthStore>((set, get) => {
         set({ isLoaded: true, error: '成长记录读取失败，已保留浏览器中的原始数据。' });
       }
     },
-    savePractice: (outcome, practice, groupId) => {
+    savePractice: (outcome, practice, groupId, exercise) => {
       if (practice.date > getTodayDate()) throw new Error('实践日期不能晚于今天。');
-      const { outcomes, groups } = get();
+      const { outcomes, groups, exercises } = get();
       const existing = outcomes.find((item) => item.id === outcome.id);
       const previous = existing?.practices ?? [];
       const practices = previous.some((item) => item.id === practice.id)
@@ -55,6 +65,7 @@ export const useGrowthStore = create<GrowthStore>((set, get) => {
         : [...previous, practice];
       const next = { ...existing, ...outcome, practices };
       persist({ outcomes: existing ? outcomes.map((item) => item.id === outcome.id ? next : item) : [...outcomes, next],
+        exercises: exercise && !exercises.some(({ id }) => id === exercise.id) ? [...exercises, exercise] : exercises,
         groups: groupId && !existing ? groups.map((group) => group.id === groupId
           ? { ...group, cardIds: [...new Set([...group.cardIds, outcome.id])] } : group) : groups });
     },
@@ -68,12 +79,14 @@ export const useGrowthStore = create<GrowthStore>((set, get) => {
         ...group, cardIds: group.cardIds.filter((id) => id !== outcomeId),
       })) });
     },
-    saveExercise: (exercise) => {
+    saveExercise: (exercise, groupId) => {
       const data = get();
       const existing = [...data.outcomes, ...growthExercises(data)].find(({ id, title }) =>
         id === exercise.id || normalizedName(title) === normalizedName(exercise.title));
-      if (existing) return;
-      persist({ exercises: [...data.exercises, exercise] });
+      if (existing) return false;
+      persist({ exercises: [...data.exercises, exercise],
+        groups: groupId ? placeCards(data.groups, [exercise.id], groupId) : data.groups }, true);
+      return true;
     },
     editExercise: (exercise, groupId) => {
       const { exercises, outcomes, groups, hiddenPresetIds } = get();
@@ -108,8 +121,9 @@ export const useGrowthStore = create<GrowthStore>((set, get) => {
       });
     },
     restorePreset: (id) => persist({ hiddenPresetIds: get().hiddenPresetIds.filter((hiddenId) => hiddenId !== id) }),
-    saveGroup: (name, id) => {
-      const { groups } = get();
+    saveGroup: (name, id, cardIds = [], exercise) => {
+      const data = get();
+      const { groups } = data;
       const value = name.trim();
       if (!value) throw new Error('请输入卡组名称。');
       if (groups.some((group) => group.id !== id && normalizedName(group.name) === normalizedName(value))) {
@@ -117,18 +131,24 @@ export const useGrowthStore = create<GrowthStore>((set, get) => {
       }
       const groupId = id ?? generateId();
       if (id && !groups.some((group) => group.id === id)) throw new Error('找不到这个卡组。');
-      persist({ groups: id ? groups.map((group) => group.id === id ? { ...group, name: value } : group)
-        : [...groups, { id: groupId, name: value, cardIds: [] }] });
+      const next = id ? groups.map((group) => group.id === id ? { ...group, name: value } : group)
+        : [...groups, { id: groupId, name: value, cardIds: [] }];
+      if (exercise && [...data.outcomes, ...growthExercises(data)].some((card) =>
+        card.id === exercise.id || normalizedName(card.title) === normalizedName(exercise.title))) throw new Error('已有同名卡片。');
+      persist({ groups: cardIds.length ? placeCards(next, cardIds, groupId) : next,
+        exercises: exercise ? [...data.exercises, exercise] : data.exercises }, true);
       return groupId;
     },
-    removeGroup: (id) => persist({ groups: get().groups.filter((group) => group.id !== id) }),
+    removeGroup: (id) => persist({ groups: get().groups.filter((group) => group.id !== id) }, true),
     moveCard: (cardId, groupId) => {
       const { groups } = get();
-      if (groupId && !groups.some(({ id }) => id === groupId)) throw new Error('找不到目标卡组。');
-      persist({ groups: groups.map((group) => ({
-        ...group,
-        cardIds: group.id === groupId ? [...group.cardIds.filter((id) => id !== cardId), cardId] : group.cardIds.filter((id) => id !== cardId),
-      })) });
+      const current = groups.find(({ cardIds }) => cardIds.includes(cardId));
+      if ((current?.id ?? null) === groupId) return;
+      persist({ groups: placeCards(groups, [cardId], groupId) }, true);
+    },
+    undoArrangement: () => {
+      const { previousArrangement } = get();
+      if (previousArrangement) persist(previousArrangement);
     },
   };
 });

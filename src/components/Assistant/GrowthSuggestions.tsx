@@ -81,7 +81,7 @@ export default function GrowthSuggestions({ domain, onDomain, onRecord, onNaviga
         entryIds: sources.filter(({ kind }) => kind === 'entry').map(({ id }) => id),
         codeVersionIds: sources.filter(({ kind }) => kind === 'code').map(({ id }) => id),
       } };
-      return <GrowthCard key={id} id={existing?.id ?? id}
+      return <GrowthCard key={id} id={existing?.id ?? id} drag={existing ? undefined : { exercise }}
         card={{ title: item.title, domains, description: `${item.action}\n完成条件：${item.done}` }} recordLabel={completed ? '追加实践' : '我做到了'}
         onRecord={recordDisabledReason ? undefined : () => onRecord(exercise)}
         actions={[{ label: completed ? '已完成' : existing ? '已在待尝试' : '加入待尝试', run: existing ? undefined : () => {

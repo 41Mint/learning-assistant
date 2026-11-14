@@ -4,7 +4,7 @@ import { useGrowthStore } from '../../store/growthStore';
 import { useKnowledgeStore } from '../../store/knowledgeStore';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
-import type { GrowthOutcome, GrowthPractice } from '../../types';
+import type { GrowthOutcome, GrowthPractice, SavedExercise } from '../../types';
 import { logLabel } from '../../utils/growth';
 import { codeVersionLabel, practiceCodeIds } from '../../utils/projectCode';
 import { codeSearchFields, entrySearchFields, logSearchFields } from '../../utils/resourceSearch';
@@ -18,6 +18,7 @@ export interface GrowthDraft {
   preset: boolean;
   suggestedSources?: Pick<GrowthPractice, 'logIds' | 'entryIds' | 'codeVersionIds'>;
   groupId?: string;
+  exercise?: SavedExercise;
 }
 
 function toggleSelection<T>(values: T[], value: T) {
@@ -57,6 +58,7 @@ export default function GrowthPracticeForm({ draft, onClose }: { draft: GrowthDr
         { id: draft.outcome.id, title: title.trim(), domains, description: draft.preset ? draft.outcome.description : description.trim() },
         { id, date, note: note.trim(), logIds, entryIds, codeVersionIds },
         draft.groupId,
+        draft.exercise,
       );
       onClose(id);
     } catch (error) {

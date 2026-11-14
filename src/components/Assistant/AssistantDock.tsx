@@ -14,7 +14,7 @@ import type { AssistantStart } from './AssistantGuide';
 import type { AssistantAction } from './assistantActions';
 import type { SearchScope } from '../Search/ResourceSearch';
 import { AssistantSlots } from './assistantSlots';
-import type { AssistantCodeReference, AssistantGrowthCard, AssistantLogDraft, AssistantLogKind } from './assistantSlots';
+import type { AssistantCodeReference, AssistantGrowthReference, AssistantLogDraft, AssistantLogKind } from './assistantSlots';
 import { assistantViewport, boundFrame, boundPosition, defaultFrame, resizeFrame, windowGap } from './assistantGeometry';
 import type { Frame, Point } from './assistantGeometry';
 
@@ -52,7 +52,7 @@ export default function AssistantDock({ activePage, activeLog, onOpenReview, onS
   const growthLoaded = useGrowthStore((state) => state.isLoaded);
   const growthError = useGrowthStore((state) => state.error);
   const [codeExcerpt, setCodeExcerpt] = useState<AssistantCodeReference>();
-  const [growthCard, setGrowthCard] = useState<AssistantGrowthCard>();
+  const [growthReference, setGrowthReference] = useState<AssistantGrowthReference>();
   const [pickingCode, setPickingCode] = useState(false);
   const [viewport, setViewport] = useState(assistantViewport);
   const [position, setPosition] = useState<Point | null>(() => {
@@ -107,15 +107,15 @@ export default function AssistantDock({ activePage, activeLog, onOpenReview, onS
   }, []);
   const askAboutCode = useCallback((excerpt: AssistantCodeReference) => {
     setCodeExcerpt(excerpt);
-    setGrowthCard(undefined);
+    setGrowthReference(undefined);
     setPickingCode(false);
     setMode('chat');
     setMenu(undefined);
     setMinimized(false);
     setOpen(true);
   }, []);
-  const askAboutGrowthCard = useCallback((card: AssistantGrowthCard) => {
-    setGrowthCard(card);
+  const askAboutGrowth = useCallback((reference: AssistantGrowthReference) => {
+    setGrowthReference(reference);
     setCodeExcerpt(undefined);
     setPickingCode(false);
     setMode('chat');
@@ -123,8 +123,8 @@ export default function AssistantDock({ activePage, activeLog, onOpenReview, onS
     setMinimized(false);
     setOpen(true);
   }, []);
-  const slots = useMemo(() => ({ today, history, close, setLogDraft, askAboutCode, openGrowthRecommendations, askAboutGrowthCard }),
-    [today, history, close, setLogDraft, askAboutCode, openGrowthRecommendations, askAboutGrowthCard]);
+  const slots = useMemo(() => ({ today, history, close, setLogDraft, askAboutCode, openGrowthRecommendations, askAboutGrowth }),
+    [today, history, close, setLogDraft, askAboutCode, openGrowthRecommendations, askAboutGrowth]);
 
   useEffect(() => {
     const resize = () => {
@@ -327,7 +327,7 @@ export default function AssistantDock({ activePage, activeLog, onOpenReview, onS
         </div>
         <div className="assistant-chat-host" hidden={tab !== 'chat' || pickingCode}>
           <AssistantChat source={source} active={open && tab === 'chat' && !pickingCode} onAction={runAction}
-            growthCard={growthCard} onRemoveGrowthCard={() => setGrowthCard(undefined)}
+            growthReference={growthReference} onRemoveGrowthReference={() => setGrowthReference(undefined)}
             codeExcerpt={codeExcerpt} onRemoveCode={() => setCodeExcerpt(undefined)} onPickCode={() => setPickingCode(true)}
             page={activePage} onStart={(page) => { minimize(); onStart(page); }} onTool={(tool) => {
               if (tool === 'code') setPickingCode(true);

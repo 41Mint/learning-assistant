@@ -7,7 +7,7 @@ import { LOG_REVIEW_MAX_TEXT, reviewRecord, reviewText } from '../../types/logRe
 import { assistantAction, isAssistantGuideQuestion } from './assistantActions';
 import type { AssistantAction } from './assistantActions';
 import { isScriptReference } from './assistantSlots';
-import type { AssistantCodeExcerpt, AssistantCodeReference, AssistantGrowthCard } from './assistantSlots';
+import type { AssistantCodeExcerpt, AssistantCodeReference, AssistantGrowthReference } from './assistantSlots';
 import AssistantGuide from './AssistantGuide';
 import type { AssistantStart } from './AssistantGuide';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
@@ -34,15 +34,15 @@ async function askAssistant(input: ChatRequest, signal: AbortSignal): Promise<st
   return answer;
 }
 
-export default function AssistantChat({ source, active, onAction, codeExcerpt, onRemoveCode, onPickCode, growthCard, onRemoveGrowthCard, page, onTool, onStart }: {
+export default function AssistantChat({ source, active, onAction, codeExcerpt, onRemoveCode, onPickCode, growthReference, onRemoveGrowthReference, page, onTool, onStart }: {
   source?: AssistantChatSource;
   active: boolean;
   onAction: (action: AssistantAction) => void;
   codeExcerpt?: AssistantCodeReference;
   onRemoveCode: () => void;
   onPickCode: () => void;
-  growthCard?: AssistantGrowthCard;
-  onRemoveGrowthCard: () => void;
+  growthReference?: AssistantGrowthReference;
+  onRemoveGrowthReference: () => void;
   page: string;
   onTool: (tool: 'review' | 'search' | 'practice' | 'code') => void;
   onStart: (page: AssistantStart) => void;
@@ -66,7 +66,10 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
   const controller = useRef<AbortController | null>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
   const transcript = useRef<HTMLDivElement>(null);
-  const availableLogId = codeExcerpt || growthCard ? undefined : source?.id;
+  const growthCard = growthReference?.kind === 'card' ? growthReference.card : undefined;
+  const growthGroup = growthReference?.kind === 'group' ? growthReference.group : undefined;
+  const growthLabel = growthGroup ? `卡组「${growthGroup.name}」` : growthCard?.title;
+  const availableLogId = codeExcerpt || growthReference ? undefined : source?.id;
   if (sourceId !== availableLogId) {
     setSourceId(availableLogId);
     setReference(null);
@@ -89,7 +92,7 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
       return;
     }
     const action = assistantAction(text);
-    if (action && ((!codeExcerpt && !growthCard) || action.kind === 'recommend')) {
+    if (action && ((!codeExcerpt && !growthReference) || action.kind === 'recommend')) {
       setError('');
       setQuestion('');
       onAction(action);
@@ -103,7 +106,7 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
     controller.current = current;
     setError('');
     const sourceInfo = codeExcerpt && codeLabel ? { id: 'code:' + codeExcerpt.id, label: codeLabel }
-      : growthCard ? { id: 'growth:' + growthCard.id, label: growthCard.title }
+      : growthReference && growthLabel ? { id: `growth:${growthReference.kind}:${growthReference.id}`, label: growthLabel }
       : attached ? { id: 'log:' + attached.id, label: attached.date + (attached.draft ? ' · 草稿' : '') } : undefined;
     setPending({ question: text, source: sourceInfo });
     const history = turns.filter((turn) => !turn.guide && turn.source?.id === sourceInfo?.id)
@@ -115,8 +118,7 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
     const log = attached && { date: attached.date, text: attached.text.slice(0, LOG_REVIEW_MAX_TEXT) };
     const code = fragment && { path: fragment.path, text: fragment.text, startLine: fragment.startLine, endLine: fragment.endLine, context: includedContext };
     try {
-      const card = growthCard && { title: growthCard.title, domains: growthCard.domains, description: growthCard.description };
-      const answer = await askAssistant({ question: text, history, log, code, script, growthCard: card }, current.signal);
+      const answer = await askAssistant({ question: text, history, log, code, script, growthCard, growthGroup }, current.signal);
       if (current.signal.aborted) return;
       setTurns((previous) => [...previous, { question: text, answer, source: sourceInfo }]);
       setQuestion('');
@@ -141,7 +143,7 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
   </div>;
   return <section className="assistant-chat" aria-label="自由问答">
     <div ref={transcript} className="assistant-transcript" role="log" aria-label="问答记录">
-      {!turns.length && !pending && !codeExcerpt && !growthCard && <AssistantGuide page={page} onAction={onTool} onStart={onStart} />}
+      {!turns.length && !pending && !codeExcerpt && !growthReference && <AssistantGuide page={page} onAction={onTool} onStart={onStart} />}
       {turns.map((turn, index) => <div key={index} className="assistant-turn">
         {renderQuestion(turn)}
         {turn.guide ? <AssistantGuide page={page} onAction={onTool} onStart={onStart} /> : <div className="assistant-answer markdown-preview">
@@ -164,12 +166,14 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
           : '脚本快照已不可用，请重新选择。'
           : includedContext ? '发送时会附上片段和所示范围的上下文。' : '发送时仅附上选中的代码片段。'}</p>
       </div>}
-      {growthCard && <div className="assistant-code-context">
-        <p>引用 {growthCard.title}</p>
-        <button type="button" className="knowledge-text-button" disabled={Boolean(pending)} onClick={onRemoveGrowthCard}>移除卡片</button>
-        <p className="knowledge-muted">发送时附上卡片标题、领域及当前说明。</p>
+      {growthReference && <div className="assistant-code-context">
+        <p>引用 {growthLabel}</p>
+        <button type="button" className="knowledge-text-button" disabled={Boolean(pending)} onClick={onRemoveGrowthReference}>{growthGroup ? '移除卡组' : '移除卡片'}</button>
+        <p className="knowledge-muted">{growthGroup ? growthGroup.totalCards
+          ? `发送时附上卡组名称和 ${growthGroup.cards.length === growthGroup.totalCards ? growthGroup.totalCards : `前 ${growthGroup.cards.length} 张（共 ${growthGroup.totalCards} 张）`}卡片的标题、领域、状态和说明摘要。`
+          : '此卡组暂无卡片，发送时附上卡组名称。' : '发送时附上卡片标题、领域及当前说明。'}</p>
       </div>}
-      {source && !codeExcerpt && !growthCard && <label className="assistant-reference">
+      {source && !codeExcerpt && !growthReference && <label className="assistant-reference">
         <input type="checkbox" checked={Boolean(attached)} disabled={Boolean(pending) || !source.text.trim()}
           onChange={(event) => setReference(event.target.checked ? source.id : null)} />
         引用当前日志 · {source.date}{source.draft ? '（草稿）' : ''}
@@ -180,7 +184,8 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
         setError('');
         composer.current?.focus();
       }}>{suggestedQuestion}</button>}
-      {growthCard && ['这张卡片要我做到什么？', '这个练习可以怎么开始？'].map((prompt) => (
+      {growthReference && (growthGroup ? ['这个卡组叫什么更合适？', '组内卡片的分类合适吗？']
+        : ['这张卡片要我做到什么？', '这个练习可以怎么开始？']).map((prompt) => (
         <button key={prompt} type="button" className="assistant-prompt" disabled={Boolean(pending)} onClick={() => {
           setQuestion(prompt);
           setError('');

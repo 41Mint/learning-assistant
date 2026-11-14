@@ -5,6 +5,8 @@ export const CHAT_HISTORY_LIMIT = 8;
 export const CHAT_CODE_LIMIT = 8000;
 export const CHAT_CODE_CONTEXT_LIMIT = 4000;
 export const CHAT_SCRIPT_LIMIT = 24000;
+export const CHAT_GROUP_CARD_LIMIT = 30;
+export const CHAT_GROUP_DESCRIPTION_LIMIT = 240;
 export const ASSISTANT_REQUEST_BYTES = 256 * 1024;
 
 export interface ChatMessage {
@@ -28,6 +30,11 @@ export interface ChatGrowthCard {
   domains: string[];
   description: string;
 }
+export interface ChatGrowthGroup {
+  name: string;
+  totalCards: number;
+  cards: (ChatGrowthCard & { completed: boolean })[];
+}
 
 export interface ChatRequest {
   question: string;
@@ -36,4 +43,5 @@ export interface ChatRequest {
   code?: ChatCode;
   script?: ChatScript;
   growthCard?: ChatGrowthCard;
+  growthGroup?: ChatGrowthGroup;
 }
