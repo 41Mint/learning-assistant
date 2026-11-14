@@ -74,7 +74,7 @@ export function parseBackup(value: unknown): BackupFile {
   if (currentGoal && !(
     currentGoal.version === 1 && (currentGoal.skillId === null || typeof currentGoal.skillId === 'string')
     || currentGoal.version === 2 && (currentGoal.goal === null || isRecord(currentGoal.goal)
-      && ['skill', 'task'].includes(String(currentGoal.goal.type)) && typeof currentGoal.goal.id === 'string' && typeof currentGoal.goal.label === 'string')
+      && ['skill', 'task', 'practice'].includes(String(currentGoal.goal.type)) && typeof currentGoal.goal.id === 'string' && typeof currentGoal.goal.label === 'string')
   )) throw new Error('当前学习目标格式不正确。');
   const streak = optionalRecord(raw.streak);
   if (streak && (!number(streak.currentStreak) || !number(streak.longestStreak) || !number(streak.totalDays)

@@ -2,6 +2,10 @@ export const ASSISTANT_CHAT_ENDPOINT = '/api/assistant-chat';
 export const CHAT_QUESTION_LIMIT = 2000;
 export const CHAT_ANSWER_LIMIT = 12000;
 export const CHAT_HISTORY_LIMIT = 8;
+export const CHAT_CODE_LIMIT = 8000;
+export const CHAT_CODE_CONTEXT_LIMIT = 4000;
+export const CHAT_SCRIPT_LIMIT = 24000;
+export const ASSISTANT_REQUEST_BYTES = 256 * 1024;
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -9,9 +13,21 @@ export interface ChatMessage {
 }
 
 export interface ChatLog { date: string; text: string }
+export interface ChatCodeRange { startLine: number; endLine: number; text: string }
+export interface ChatCode extends ChatCodeRange { path: string; context?: ChatCodeRange }
+export interface ChatScript {
+  path: string;
+  project: string;
+  totalLines: number;
+  sampled: boolean;
+  parts: ChatCodeRange[];
+  notes: string[];
+}
 
 export interface ChatRequest {
   question: string;
   history: ChatMessage[];
   log?: ChatLog;
+  code?: ChatCode;
+  script?: ChatScript;
 }

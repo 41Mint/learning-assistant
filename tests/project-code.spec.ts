@@ -3,6 +3,7 @@ import type { Page } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { ProjectCodeData } from '../src/types/projectCode';
+import type { ChatRequest } from '../src/types/assistantChat';
 
 const firstDate = '2026-11-02';
 const scriptPath = 'Assets/Scripts/InputManager.cs';
@@ -47,6 +48,247 @@ async function downloadBackup(page: Page) {
   const download = await event;
   return JSON.parse(await readFile((await download.path())!, 'utf8'));
 }
+
+test('智能体从历史实践定位关联代码，确认目标后沿用番茄钟与备份', async ({ page, browser }) => {
+  await seedStudyContext(page);
+  await page.goto('/#history/' + firstDate);
+  const { form } = await openLogCodeForm(page);
+  await form.getByLabel('项目名称').fill('打地鼠');
+  await form.getByLabel('本地 .cs 文件').setInputFiles({ name: 'InputManager.cs', mimeType: 'text/plain', buffer: Buffer.from(secondContent) });
+  await form.getByRole('button', { name: '保存版本', exact: true }).click();
+  await expect(form).toBeHidden();
+  const code = await page.evaluate(async () => {
+    const { readProjectCode } = await import('/src/utils/projectCodeStorage.ts');
+    return readProjectCode();
+  }) as ProjectCodeData;
+  const version = code.versions[0];
+  await page.evaluate((versionId) => {
+    const key = 'learning-assistant:growth';
+    const stored = JSON.parse(localStorage.getItem(key)!);
+    stored.outcomes[0].practices[0].codeVersionIds = [versionId];
+    localStorage.setItem(key, JSON.stringify(stored));
+    localStorage.setItem('learning-assistant:current-goal', JSON.stringify({ version: 2, goal: { id: 'unity-foundations', type: 'skill', label: '原目标' } }));
+  }, version.id);
+  await page.reload();
+  await page.goto('/#today');
+  const launcher = page.getByRole('button', { name: '打开学习智能体' });
+  const restore = page.getByRole('button', { name: '恢复学习智能体' });
+  const assistant = page.getByRole('dialog', { name: '学习智能体' });
+  await launcher.click();
+  const question = assistant.getByRole('textbox', { name: '输入问题' });
+  await question.fill('上次我怎么实现点击目标的？');
+  await question.press('Enter');
+  const query = assistant.getByRole('searchbox', { name: '查找实践' });
+  await expect(query).toHaveValue('点击目标');
+  await expect(assistant.getByRole('button', { name: /点击目标时增加分数/ })).toHaveCount(2);
+  await query.fill('没有这项成果');
+  await expect(assistant.getByRole('status')).toContainText('没有找到匹配');
+  await query.fill('hits');
+  await assistant.getByRole('button', { name: /点击目标时增加分数.*2026-11-02/ }).click();
+  await expect(assistant.getByRole('link', { name: /日志 ·.*点击判断笔记/ })).toBeVisible();
+  await expect(assistant.getByRole('link', { name: '词条 · 点击判断' })).toBeVisible();
+  await assistant.getByRole('link', { name: /InputManager\.cs.*第 2 行/ }).click();
+  await expect(page).toHaveURL(/#code\/.+\?find=hits&source=1$/);
+  await expect(page.getByText('命中第 2 行', { exact: true })).toBeVisible();
+  await restore.click();
+  await assistant.getByRole('button', { name: '设为当前目标', exact: true }).click();
+  await expect(assistant.getByText('确认后将替换当前目标「原目标」。')).toBeVisible();
+  await assistant.getByRole('button', { name: '取消', exact: true }).click();
+  await assistant.getByRole('button', { name: '设为当前目标', exact: true }).click();
+  await expect(assistant.getByText('确认后将替换当前目标「原目标」。')).toBeVisible();
+  const goal = '验证松开鼠标后停止计分';
+  await assistant.getByLabel('这次要做什么').fill(goal);
+  await assistant.getByRole('button', { name: '确认设定', exact: true }).click();
+  await expect(assistant.getByRole('status')).toHaveText('已设为当前目标，可在今日学习查看。');
+  await assistant.getByRole('link', { name: '打开原实践' }).click();
+  await expect(page).toHaveURL(/#path\/click-outcome\/first-practice$/);
+  await page.goto('/#today');
+  await expect(page.getByText(goal, { exact: true })).toBeVisible();
+  await page.getByTitle('开发者工具 (可拖动)').click();
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: /模拟完成 1 个番茄钟/ }).click();
+  await expect.poll(() => page.evaluate((goal) => JSON.parse(localStorage.getItem('learning-assistant:study-logs')!)
+    .some((log: { tags: string[] }) => log.tags.includes(`目标：${goal}`)), goal)).toBe(true);
+  const backup = await downloadBackup(page);
+  expect(backup.data.currentGoal.goal).toEqual({ type: 'practice', id: '#path/click-outcome/first-practice', label: goal });
+  const other = await browser.newPage();
+  try {
+    await other.goto('/#data');
+    await other.getByLabel('选择备份文件').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+    await Promise.all([other.waitForEvent('load'), other.getByRole('button', { name: '确认恢复并刷新' }).click()]);
+    await other.goto('/#today');
+    await expect(other.getByText(goal, { exact: true })).toBeVisible();
+  } finally { await other.close(); }
+});
+
+test('解释选中的代码只在发送时附带片段和行号，移除后恢复普通问答', async ({ page }) => {
+  await seedStudyContext(page);
+  const calls: ChatRequest[] = [];
+  await page.route('**/api/assistant-chat', async (route) => {
+    calls.push(route.request().postDataJSON());
+    await route.fulfill({ json: { answer: `解释 ${calls.length}` } });
+  });
+  await page.goto('/#history/' + firstDate);
+  const { form } = await openLogCodeForm(page);
+  await form.getByLabel('项目名称').fill('打地鼠');
+  await form.getByLabel('本地 .cs 文件').setInputFiles({ name: 'InputManager.cs', mimeType: 'text/plain', buffer: Buffer.from(firstContent.replaceAll('\n', '\r\n')) });
+  await form.getByRole('button', { name: '保存版本', exact: true }).click();
+  await expect(form).toBeHidden();
+  await page.getByRole('link', { name: /InputManager\.cs/ }).click();
+  const line = page.locator('[data-code-line="2"]');
+  await expect(line).toContainText('private int hits');
+  const fragment = '  private int hits = 1;\n}';
+  await page.getByRole('region', { name: '脚本快照' }).locator('pre > code').evaluate((code, fragment) => {
+    const offset = code.textContent!.indexOf(fragment);
+    if (offset < 0) throw new Error('找不到测试选区：' + JSON.stringify(code.textContent));
+    const range = document.createRange();
+    range.selectNodeContents(code);
+    const walker = document.createTreeWalker(code, NodeFilter.SHOW_TEXT);
+    let at = 0;
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const end = at + node.textContent!.length;
+      if (offset >= at && offset < end) range.setStart(node, offset - at);
+      if (offset + fragment.length <= end) { range.setEnd(node, offset + fragment.length - at); break; }
+      at = end;
+    }
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }, fragment);
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe(fragment);
+  await line.evaluate((element) => {
+    const { left, top } = element.getBoundingClientRect();
+    element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: left + 90, clientY: top + 8 }));
+  });
+  const askMenu = page.getByRole('group', { name: '询问智能体', exact: true });
+  await expect(askMenu.getByRole('button', { name: '询问脚本用途', exact: true })).toBeVisible();
+  await askMenu.getByRole('button', { name: '询问所选代码', exact: true }).click();
+  const assistant = page.getByRole('dialog', { name: '学习智能体' });
+  await expect(assistant.getByText('引用 InputManager.cs · 第 2–3 行', { exact: true })).toBeVisible();
+  expect(calls).toHaveLength(0);
+  const question = assistant.getByRole('textbox', { name: '输入问题' });
+  await question.fill('这段代码是做什么的？');
+  await question.press('Enter');
+  await expect(assistant.getByText('解释 1', { exact: true })).toBeVisible();
+  expect(calls[0]).toEqual({ question: '这段代码是做什么的？', history: [], code: { path: 'InputManager.cs', startLine: 2, endLine: 3, text: fragment } });
+  const context = assistant.getByRole('checkbox', { name: /附带上下文/ });
+  await context.check();
+  await question.fill('第一行为什么声明为 private？');
+  await question.press('Enter');
+  await expect(assistant.getByText('解释 2', { exact: true })).toBeVisible();
+  expect(calls[1].code?.context).toEqual({ startLine: 1, endLine: 7, text: firstContent.trimEnd() });
+  await assistant.getByRole('button', { name: '移除代码片段' }).click();
+  await question.fill('C# 中 int 是什么？');
+  await question.press('Enter');
+  await expect(assistant.getByText('解释 3', { exact: true })).toBeVisible();
+  expect(calls[2]).toEqual({ question: 'C# 中 int 是什么？', history: [] });
+  await assistant.getByRole('button', { name: '引用代码', exact: true }).click();
+  await assistant.getByLabel('起始行').fill('2');
+  await assistant.getByLabel('结束行').fill('3');
+  await expect(assistant.getByLabel('片段预览')).toContainText('private int hits');
+  await assistant.getByRole('button', { name: '引用到问答' }).click();
+  await expect(assistant.getByRole('checkbox', { name: /附带上下文/ })).not.toBeChecked();
+  expect(calls).toHaveLength(3);
+  await assistant.getByRole('button', { name: '关闭学习智能体' }).click();
+  await page.evaluate(() => window.getSelection()?.removeAllRanges());
+  await line.click({ position: { x: 90, y: 8 } });
+  await expect(line).toHaveAttribute('aria-current', 'true');
+  await expect(page.locator('[data-code-line="3"]')).not.toHaveAttribute('aria-current', 'true');
+  await line.click({ button: 'right', position: { x: 90, y: 8 } });
+  const askLine = askMenu.getByRole('button', { name: '询问当前行', exact: true });
+  await expect(askLine).not.toBeFocused();
+  await askMenu.getByRole('button', { name: '询问脚本用途', exact: true }).hover();
+  await expect(askLine).toHaveCSS('outline-style', 'none');
+  await page.getByRole('heading', { name: '脚本快照' }).click();
+  await expect(askMenu).toBeHidden();
+  const preview = page.getByRole('group', { name: '代码预览' });
+  await preview.press('Shift+F10');
+  await expect(askLine).toBeFocused();
+  await expect(askLine).toHaveCSS('outline-offset', '-2px');
+  await page.keyboard.press('Escape');
+  await expect(askMenu).toBeHidden();
+  await expect(preview).toBeFocused();
+  await line.click({ button: 'right', position: { x: 90, y: 8 } });
+  await askLine.click();
+  await expect(assistant.getByText('引用 InputManager.cs · 第 2 行', { exact: true })).toBeVisible();
+});
+
+test('询问脚本用途发送完整的常规脚本及说明，长脚本展示取样范围', async ({ page }) => {
+  await seedStudyContext(page);
+  const normal = ['class InputManager {', ...Array.from({ length: 120 }, (_, index) => `  // 输入和计分状态，记录 ${index}。${' abcdef'.repeat(9)}`), '}'].join('\n');
+  const large = ['class ScoreManager {', ...Array.from({ length: 800 }, (_, index) => `  // 计分状态 ${index} ${'abcdefghij'.repeat(5)}`), '}'].join('\n');
+  const calls: ChatRequest[] = [];
+  await page.route('**/api/assistant-chat', async (route) => {
+    calls.push(route.request().postDataJSON());
+    const details = Array.from({ length: 20 }, (_, index) => `第 ${index + 1} 项，解释脚本职责。`).join('\n\n');
+    await route.fulfill({ json: { answer: calls.length === 1 ? `脚本说明 1\n\n${details}` : '脚本说明 2' } });
+  });
+  await page.goto('/#history/' + firstDate);
+  const { form } = await openLogCodeForm(page);
+  await form.getByLabel('项目名称').fill('打地鼠');
+  await form.getByLabel('版本说明（可选）').fill('将鼠标输入转成计分操作');
+  await form.getByLabel('本地 .cs 文件').setInputFiles({ name: 'InputManager.cs', mimeType: 'text/plain', buffer: Buffer.from(normal) });
+  await form.getByRole('button', { name: '保存版本', exact: true }).click();
+  await expect(form).toBeHidden();
+  await page.getByRole('link', { name: /InputManager\.cs/ }).click();
+  const codeLine = page.locator('[data-code-line="2"]');
+  await codeLine.click({ button: 'right', position: { x: 90, y: 8 } });
+  const askMenu = page.getByRole('group', { name: '询问智能体', exact: true });
+  await expect(askMenu).toBeVisible();
+  const codeScroll = page.getByRole('group', { name: '代码预览' }).locator('pre');
+  await codeScroll.evaluate((element) => { element.scrollTop += 100; });
+  await expect(askMenu).toBeHidden();
+  await codeLine.click({ button: 'right', position: { x: 90, y: 8 } });
+  await page.goto('/#history/' + firstDate);
+  await page.getByRole('link', { name: /InputManager\.cs/ }).click();
+  await expect(askMenu).toBeHidden();
+  await codeLine.click({ button: 'right', position: { x: 90, y: 8 } });
+  await askMenu.getByRole('button', { name: '询问脚本用途', exact: true }).click();
+  const assistant = page.getByRole('dialog', { name: '学习智能体' });
+  const composer = assistant.getByRole('form', { name: '发送问题' });
+  const transcript = assistant.getByRole('log', { name: '问答记录' });
+  await expect(assistant.getByText(/会发送完整脚本（122 行）/)).toBeVisible();
+  expect(calls).toHaveLength(0);
+  await composer.getByRole('button', { name: '这个脚本在项目中负责什么？', exact: true }).click();
+  await assistant.getByRole('button', { name: '发送', exact: true }).click();
+  await expect(assistant.getByText('脚本说明 1', { exact: true })).toBeVisible();
+  expect(calls[0]).toEqual({ question: '这个脚本在项目中负责什么？', history: [], script: {
+    path: 'InputManager.cs', project: '打地鼠', totalLines: 122, sampled: false,
+    parts: [{ startLine: 1, endLine: 122, text: normal }], notes: ['将鼠标输入转成计分操作'],
+  } });
+  await expect.poll(() => transcript.evaluate((area) => area.scrollTop)).toBeGreaterThan(0);
+  await assistant.getByRole('button', { name: '关闭学习智能体' }).click();
+  await codeLine.click({ button: 'right', position: { x: 90, y: 8 } });
+  await askMenu.getByRole('button', { name: '询问当前行', exact: true }).click();
+  const prompt = composer.getByRole('button', { name: '这段代码是做什么的？', exact: true });
+  await expect(prompt).toBeInViewport();
+  await expect(transcript.getByRole('button', { name: '这段代码是做什么的？', exact: true })).toHaveCount(0);
+  await prompt.click();
+  await expect(composer.getByRole('textbox', { name: '输入问题' })).toHaveValue('这段代码是做什么的？');
+  await expect(composer.getByRole('textbox', { name: '输入问题' })).toBeFocused();
+  expect(calls).toHaveLength(1);
+  await assistant.getByRole('button', { name: '关闭学习智能体' }).click();
+  await page.goto('/#history/' + firstDate);
+  await page.reload();
+  const second = await openLogCodeForm(page, 1);
+  await second.form.getByLabel('本地 .cs 文件').setInputFiles({ name: 'ScoreManager.cs', mimeType: 'text/plain', buffer: Buffer.from(large) });
+  await second.form.getByRole('button', { name: '保存版本', exact: true }).click();
+  await expect(second.form).toBeHidden();
+  await page.getByRole('button', { name: '打开学习智能体' }).click();
+  await assistant.getByRole('button', { name: '引用代码', exact: true }).click();
+  const version = assistant.getByLabel('脚本版本');
+  await version.selectOption(await version.locator('option').filter({ hasText: 'ScoreManager.cs' }).getAttribute('value') ?? '');
+  await assistant.getByRole('button', { name: '询问脚本用途', exact: true }).click();
+  await expect(assistant.getByText(/脚本较长，会发送首尾两段/)).toBeVisible();
+  await assistant.getByRole('textbox', { name: '输入问题' }).fill('这个脚本的职责是什么？');
+  await assistant.getByRole('button', { name: '发送', exact: true }).click();
+  await expect(assistant.getByText('脚本说明 2', { exact: true })).toBeVisible();
+  const script = calls[1].script!;
+  expect(script).toMatchObject({ path: 'ScoreManager.cs', sampled: true, totalLines: 802 });
+  expect(script.parts[0].text).toBe(large.slice(0, 12000));
+  expect(script.parts[1].text).toBe(large.slice(-12000));
+  expect(calls[1].history).toEqual([]);
+});
 
 test('项目目录预览、批量保存、职责说明、日志回链与备份恢复', async ({ page, browser }, testInfo) => {
   const root = testInfo.outputPath('打地鼠项目');

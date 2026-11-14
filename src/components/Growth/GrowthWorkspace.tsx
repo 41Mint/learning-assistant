@@ -45,10 +45,9 @@ function PracticeSources({ outcomeId, practice }: { outcomeId: string; practice:
   );
 }
 
-export default function GrowthWorkspace() {
+export default function GrowthWorkspace({ draft, setDraft }: { draft: GrowthDraft | null; setDraft: (draft: GrowthDraft | null) => void }) {
   const { outcomes, isLoaded, error, loadGrowth, removePractice } = useGrowthStore();
   const [domain, setDomain] = useState<GrowthDomain | ''>('');
-  const [draft, setDraft] = useState<GrowthDraft | null>(null);
   const [notice, setNotice] = useState<{ text: string; saved?: { outcomeId: string; id: string } } | null>(null);
   const practiceTarget = useWorkspaceStore((state) => state.practiceTarget);
   const focusedPractice = useRef<HTMLLIElement>(null);

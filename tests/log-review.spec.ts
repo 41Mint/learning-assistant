@@ -419,3 +419,21 @@ test('窄屏最小化后可阅读页面并恢复输入，从问答按别名查�
   await expect(entryDraft).toHaveValue('未保存词条');
   expect(chatCalls).toBe(0);
 });
+
+test('空工作区提供可操作的入门引导，能力问题在本地回答', async ({ page }) => {
+  let requests = 0;
+  await page.route('**/api/assistant-chat', async (route) => { requests += 1; await route.abort(); });
+  await page.goto('/#path');
+  await page.getByRole('button', { name: '打开学习智能体' }).click();
+  const assistant = page.getByRole('dialog', { name: '学习智能体' });
+  const guide = assistant.getByRole('region', { name: '开始使用学习智能体' });
+  await expect(guide.getByRole('button', { name: /记录第一次实践/ })).toBeVisible();
+  const question = assistant.getByRole('textbox', { name: '输入问题' });
+  await question.fill('你能做什么');
+  await question.press('Enter');
+  await expect(guide.getByRole('button', { name: /保存一个脚本/ })).toBeVisible();
+  await guide.getByRole('button', { name: /保存一个脚本/ }).click();
+  await expect(page).toHaveURL(/#code$/);
+  await expect(page.getByRole('form', { name: '保存代码版本' })).toBeVisible();
+  expect(requests).toBe(0);
+});

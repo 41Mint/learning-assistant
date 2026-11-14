@@ -451,7 +451,7 @@ export default function KnowledgeNetworkCanvas({
           style={{ left: selectionBox.left, top: selectionBox.top, width: selectionBox.right - selectionBox.left,
             height: selectionBox.bottom - selectionBox.top }} />}
       </div>
-      {menu && <div ref={contextMenu} className="network-context-menu" role="menu" aria-label="画布操作" style={{ left: menu.x, top: menu.y }}
+      {menu && <div ref={contextMenu} className="workspace-context-menu" role="menu" aria-label="画布操作" style={{ left: menu.x, top: menu.y }}
         onKeyDown={(event) => {
           if (event.key !== 'Escape') return;
           event.preventDefault();
@@ -461,14 +461,14 @@ export default function KnowledgeNetworkCanvas({
         {menu.target.kind === 'blank' && <button type="button" role="menuitem" onClick={() => { closeMenu(); onNewEntry(); }}>新建词条</button>}
         {menuEntry !== undefined && <button type="button" role="menuitem" onClick={() => { closeMenu(); onEditEntry(menuEntry); }}>编辑词条</button>}
         {menuCategory !== undefined && <>
-          <div className="network-context-menu-title">{menuCategory || '未分类'}</div>
+          <div className="workspace-context-menu-title">{menuCategory || '未分类'}</div>
           <button type="button" role="menuitem" onClick={() => { closeMenu(); onRenameModule(menuCategory); }}>重命名分类</button>
           <button type="button" role="menuitem" onClick={() => { closeMenu(); onEditMembers(menuCategory); }}>整理成员</button>
           <button type="button" role="menuitem" onClick={() => { closeMenu(); onHideModule(menuCategory); }}>隐藏此模块</button>
           <button type="button" role="menuitem" onClick={() => { closeMenu(); onOnlyModule(menuCategory); }}>仅显示此模块</button>
         </>}
         {menuLayer && <>
-          <div className="network-context-menu-title">{RELATION_KIND_LABELS[menuLayer]}</div>
+          <div className="workspace-context-menu-title">{RELATION_KIND_LABELS[menuLayer]}</div>
           <button type="button" role="menuitem" onClick={() => { closeMenu(); onHideLayer(menuLayer); }}>隐藏此模块</button>
         </>}
       </div>}

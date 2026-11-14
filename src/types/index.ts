@@ -1,4 +1,4 @@
-import type { RelationAnnotation } from './relations';
+import type { RelationAnnotation } from './relations.ts';
 
 // 番茄钟状态
 export interface PomodoroState {

@@ -1,6 +1,6 @@
-import type { CodeLink, CodeProject, CodeTarget, CodeVersion, ProjectCodeData, ProjectDirectory } from '../types/projectCode';
-import { isRelationAnnotation } from './relationAnnotation';
-import type { GrowthOutcome, GrowthPractice, KnowledgeEntry } from '../types';
+import type { CodeLink, CodeProject, CodeTarget, CodeVersion, ProjectCodeData, ProjectDirectory } from '../types/projectCode.ts';
+import { isRelationAnnotation } from './relationAnnotation.ts';
+import type { GrowthOutcome, GrowthPractice, KnowledgeEntry } from '../types/index.ts';
 
 export const MAX_SCRIPT_BYTES = 512 * 1024;
 const MAX_PATH_LENGTH = 1024;

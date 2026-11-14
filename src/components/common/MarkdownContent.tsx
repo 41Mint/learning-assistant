@@ -6,6 +6,7 @@ import type { PluggableList } from 'unified';
 import { getImage, IMAGE_PREFIX } from '../../utils/imageStorage';
 import type { StoredImage } from '../../utils/imageStorage';
 import { rehypeSearchMatches } from '../../utils/rehypeSearchMatches';
+import { rehypeCodeLines } from '../../utils/rehypeCodeLines';
 
 function MarkdownImage({ src, alt, image }: { src?: string; alt?: string; image?: StoredImage }) {
   const [resolved, setResolved] = useState<{ source: string; url?: string; failed?: boolean } | null>(null);
@@ -27,15 +28,17 @@ function MarkdownImage({ src, alt, image }: { src?: string; alt?: string; image?
   return <a href={url} target="_blank" rel="noreferrer" title="在新标签页查看原图"><img src={url} alt={alt ?? ''} loading="lazy" /></a>;
 }
 
-export default function MarkdownContent({ content, images, searchWords }: { content: string; images?: StoredImage[]; searchWords?: string[] }) {
+export default function MarkdownContent({ content, images, searchWords, codeLines, activeCodeLine }: { content: string; images?: StoredImage[]; searchWords?: string[]; codeLines?: boolean; activeCodeLine?: number }) {
   const plugins: PluggableList = [[rehypeHighlight, { ignoreMissing: true }]];
   if (searchWords?.length) plugins.push([rehypeSearchMatches, searchWords]);
+  if (codeLines) plugins.push(rehypeCodeLines);
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       rehypePlugins={plugins}
       urlTransform={(url, key) => key === 'src' && url.startsWith(IMAGE_PREFIX) ? url : defaultUrlTransform(url)}
       components={{
+        span: ({ node, ...props }) => <span {...props} aria-current={node?.properties.dataCodeLine === activeCodeLine && activeCodeLine !== undefined ? 'true' : undefined} />,
         img: ({ src, alt }) => <MarkdownImage src={typeof src === 'string' ? src : undefined} alt={alt} image={typeof src === 'string' ? images?.find((image) => `${IMAGE_PREFIX}${image.id}` === src) : undefined} />,
         a: ({ href, children }) => href && /^https?:\/\//i.test(href)
           ? <a href={href} target="_blank" rel="noreferrer">{children}</a>

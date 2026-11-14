@@ -13,6 +13,8 @@ import ResourceSearch from './components/Search/ResourceSearch';
 import RelationsWorkspace from './components/Relations/RelationsWorkspace';
 import KnowledgeNetwork from './components/Relations/KnowledgeNetwork';
 import AssistantDock from './components/Assistant/AssistantDock';
+import type { AssistantStart } from './components/Assistant/AssistantGuide';
+import type { GrowthDraft } from './components/Growth/GrowthPracticeForm';
 import type { StudyLog as Log } from './types';
 import { usePomodoroStore } from './store/pomodoroStore';
 import { useStudyLogStore } from './store/studyLogStore';
@@ -20,6 +22,7 @@ import { useStreakStore } from './store/streakStore';
 import { useCurrentGoalStore } from './store/currentGoalStore';
 import { readWorkspaceHash, useWorkspaceStore } from './store/workspaceStore';
 import { IS_KNOWLEDGE_DEMO } from './utils/workspaceMode';
+import { generateId } from './utils/storage';
 
 const PAGES = [
   { id: 'today', label: '今日学习', description: '随时开始专注，记录今天的学习。' },
@@ -65,6 +68,8 @@ function App() {
   const [networkVisited, setNetworkVisited] = useState(activePage === 'network');
   const [todayDraft, setTodayDraft] = useState<Log | null>(null);
   const [historyDraft, setHistoryDraft] = useState<Log | null>(null);
+  const [growthDraft, setGrowthDraft] = useState<GrowthDraft | null>(null);
+  const [addingCode, setAddingCode] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const nav = useRef<HTMLElement>(null);
   const navTrigger = useRef<HTMLButtonElement>(null);
@@ -143,9 +148,16 @@ function App() {
       enterPage('history');
     }
   };
+  const startFromAssistant = (page: AssistantStart) => {
+    if (page === 'today' && todayLog) setTodayDraft((draft) => draft ?? todayLog);
+    if (page === 'path') setGrowthDraft((draft) => draft ?? { outcome: { id: generateId(), title: '', domains: [] }, preset: false });
+    if (page === 'code') setAddingCode(true);
+    window.location.hash = page;
+    enterPage(page);
+  };
 
   return (
-    <AssistantDock activeLog={assistantLog} onOpenReview={openReview}>
+    <AssistantDock activePage={activePage} activeLog={assistantLog} onOpenReview={openReview} onStart={startFromAssistant}>
     <div className="app-shell" data-knowledge-demo={IS_KNOWLEDGE_DEMO || undefined}>
       {IS_KNOWLEDGE_DEMO && <div className="knowledge-demo-banner">
         <strong>知识网络演示工作区</strong>
@@ -204,7 +216,7 @@ function App() {
           <StudyLog draft={todayDraft} setDraft={setTodayDraft} />
         </section>
         <section id="path" className="workspace-panel" aria-label="成长记录" hidden={activePage !== 'path'}>
-          <GrowthWorkspace />
+          <GrowthWorkspace draft={growthDraft} setDraft={setGrowthDraft} />
         </section>
         <section id="history" className="workspace-panel history-layout" aria-label="历史回顾" hidden={activePage !== 'history'} data-editing={Boolean(historyDraft) || undefined}>
           <History draft={historyDraft} setDraft={setHistoryDraft} />
@@ -223,7 +235,7 @@ function App() {
           <KnowledgeNetwork active={activePage === 'network'} />
         </section>}
         <section id="code" className="workspace-panel" aria-label="项目代码" hidden={activePage !== 'code'}>
-          <ProjectCodeWorkspace />
+          <ProjectCodeWorkspace adding={addingCode} setAdding={setAddingCode} />
         </section>
         {activePage === 'relations' && <section id="relations" className="workspace-panel" aria-label="关系视图">
           <RelationsWorkspace />

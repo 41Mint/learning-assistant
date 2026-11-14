@@ -1,4 +1,4 @@
-import type { RelationAnnotation } from './relations';
+import type { RelationAnnotation } from './relations.ts';
 
 export interface ProjectDirectory {
   capturedAt: number;

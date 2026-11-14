@@ -6,10 +6,13 @@ import { STORAGE_PREFIX } from '../../utils/workspaceMode';
 import AssistantChat from './AssistantChat';
 import AssistantReviewPicker from './AssistantReviewPicker';
 import AssistantSearch from './AssistantSearch';
+import AssistantPractice from './AssistantPractice';
+import AssistantCodePicker from './AssistantCodePicker';
+import type { AssistantStart } from './AssistantGuide';
 import type { AssistantAction } from './assistantActions';
 import type { SearchScope } from '../Search/ResourceSearch';
 import { AssistantSlots } from './assistantSlots';
-import type { AssistantLogDraft, AssistantLogKind } from './assistantSlots';
+import type { AssistantCodeReference, AssistantLogDraft, AssistantLogKind } from './assistantSlots';
 import { assistantViewport, boundFrame, boundPosition, defaultFrame, resizeFrame, windowGap } from './assistantGeometry';
 import type { Frame, Point } from './assistantGeometry';
 
@@ -19,12 +22,14 @@ type DragKind = 'launcher' | 'move' | 'resize';
 interface Gesture { kind: DragKind; pointer: number; start: Point; origin: Frame; moved: boolean }
 interface Menu extends Point { trigger: HTMLElement; launcher: boolean }
 const modes = [
-  ['chat', '自由问答'], ['review', '日志整理'], ['search', '查找资料'],
+  ['chat', '自由问答'], ['review', '日志整理'], ['search', '查找资料'], ['practice', '回看实践'],
 ] as const;
 
-export default function AssistantDock({ activeLog, onOpenReview, children }: {
+export default function AssistantDock({ activePage, activeLog, onOpenReview, onStart, children }: {
+  activePage: string;
   activeLog?: { kind: AssistantLogKind; log: StudyLog; editing: boolean };
   onOpenReview: (log: StudyLog) => string | undefined;
+  onStart: (page: AssistantStart) => void;
   children: ReactNode;
 }) {
   const [today, setToday] = useState<HTMLDivElement | null>(null);
@@ -37,6 +42,10 @@ export default function AssistantDock({ activeLog, onOpenReview, children }: {
   const [dateQuery, setDateQuery] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchScope, setSearchScope] = useState<SearchScope>('all');
+  const [practiceQuery, setPracticeQuery] = useState('');
+  const [practiceRequest, setPracticeRequest] = useState(0);
+  const [codeExcerpt, setCodeExcerpt] = useState<AssistantCodeReference>();
+  const [pickingCode, setPickingCode] = useState(false);
   const [viewport, setViewport] = useState(assistantViewport);
   const [position, setPosition] = useState<Point | null>(() => {
     const stored = getStorageItem<Point | null>(positionKey, null);
@@ -81,7 +90,15 @@ export default function AssistantDock({ activeLog, onOpenReview, children }: {
     close();
     setMinimized(true);
   };
-  const slots = useMemo(() => ({ today, history, close, setLogDraft }), [today, history, close, setLogDraft]);
+  const askAboutCode = useCallback((excerpt: AssistantCodeReference) => {
+    setCodeExcerpt(excerpt);
+    setPickingCode(false);
+    setMode('chat');
+    setMenu(undefined);
+    setMinimized(false);
+    setOpen(true);
+  }, []);
+  const slots = useMemo(() => ({ today, history, close, setLogDraft, askAboutCode }), [today, history, close, setLogDraft, askAboutCode]);
 
   useEffect(() => {
     const resize = () => {
@@ -157,10 +174,17 @@ export default function AssistantDock({ activeLog, onOpenReview, children }: {
       setMode('review');
       setDateQuery(action.date);
       setChoosingLog(Boolean(action.date));
-    } else {
+    } else if (action.kind === 'findEntry') {
       setMode('search');
       setSearchQuery(action.query);
       setSearchScope('knowledge');
+    } else if (action.kind === 'findPractice') {
+      setMode('practice');
+      setPracticeQuery(action.query);
+      setPracticeRequest((request) => request + 1);
+    } else {
+      setMode('chat');
+      setPickingCode(true);
     }
     window.requestAnimationFrame(() => {
       const input = dialog.current?.querySelector<HTMLElement>('.assistant-body:not([hidden]) input[type="search"]');
@@ -273,9 +297,18 @@ export default function AssistantDock({ activeLog, onOpenReview, children }: {
           {modes.map(([value, label]) => <button key={value} type="button" aria-pressed={tab === value}
             onClick={() => setMode(value)}>{label}</button>)}
         </div>
-        <div className="assistant-chat-host" hidden={tab !== 'chat'}>
-          <AssistantChat source={source} active={open && tab === 'chat'} onAction={runAction} />
+        <div className="assistant-chat-host" hidden={tab !== 'chat' || pickingCode}>
+          <AssistantChat source={source} active={open && tab === 'chat' && !pickingCode} onAction={runAction}
+            codeExcerpt={codeExcerpt} onRemoveCode={() => setCodeExcerpt(undefined)} onPickCode={() => setPickingCode(true)}
+            page={activePage} onStart={(page) => { minimize(); onStart(page); }} onTool={(tool) => {
+              if (tool === 'code') setPickingCode(true);
+              else setMode(tool);
+            }} />
         </div>
+        {tab === 'chat' && pickingCode && <div className="assistant-body">
+          <AssistantCodePicker current={codeExcerpt} onBack={() => setPickingCode(false)} onSelect={askAboutCode}
+            onImport={() => { setPickingCode(false); minimize(); onStart('code'); }} />
+        </div>}
         <div className="assistant-body" hidden={tab !== 'review'}>
           {editingLog && <div className="assistant-context">
             <span className="knowledge-muted">当前日志 · {editingLog.log.date}</span>
@@ -294,6 +327,9 @@ export default function AssistantDock({ activeLog, onOpenReview, children }: {
         {tab === 'search' && <div className="assistant-body">
           <AssistantSearch query={searchQuery} scope={searchScope} onQuery={setSearchQuery} onScope={setSearchScope} onNavigate={minimize} />
         </div>}
+        <div className="assistant-body" hidden={tab !== 'practice'}>
+          <AssistantPractice key={practiceRequest} query={practiceQuery} onQuery={setPracticeQuery} onNavigate={minimize} active={open && tab === 'practice'} />
+        </div>
       </div>
       {!viewport.compact && <button type="button" className="assistant-resize" aria-label="调整智能体窗口大小"
         title="拖动调整大小，也可用方向键" onPointerDown={(event) => start(event, 'resize')} {...dragHandlers}

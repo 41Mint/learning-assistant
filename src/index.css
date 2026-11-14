@@ -431,7 +431,7 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
   display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--app-border); border-radius: 8px;
   background: var(--app-bg); color: var(--app-text); font-size: 22px; line-height: 1; cursor: pointer;
 }
-.assistant-modes { padding: 8px 14px 0; }
+.assistant-modes { flex-wrap: wrap; padding: 8px 14px 0; }
 .assistant-modes button, .assistant-window-menu button {
   padding: 6px 9px; border: 0; border-radius: 6px; color: var(--app-text); background: transparent; cursor: pointer; font-size: 13px;
 }
@@ -449,7 +449,31 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .assistant-resize:focus-visible { outline-offset: -3px; }
 .assistant-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px 16px; }
 .assistant-context { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin: 0 0 10px; font-weight: 650; }
-.assistant-review-picker, .assistant-search { display: grid; gap: 8px; font-size: 14px; }
+.assistant-review-picker, .assistant-search, .assistant-practice, .assistant-goal-form { display: grid; gap: 8px; font-size: 14px; }
+.assistant-practice > :is(p, h3), .assistant-goal-form p { margin: 0; }
+.assistant-practice > :is(button, form) { justify-self: start; }
+.assistant-practice { overflow-wrap: anywhere; }
+.assistant-code-context { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; align-items: center; }
+.assistant-code-context p { overflow-wrap: anywhere; }
+.assistant-code-context p:last-child { grid-column: 1 / -1; }
+.assistant-context-option { grid-column: 1 / -1; }
+.assistant-code-button { margin-right: auto; width: 36px; height: 34px; display: grid; place-items: center;
+  border: 1px solid var(--app-border); border-radius: 7px; background: var(--app-bg); color: var(--app-text); cursor: pointer; }
+.assistant-guide, .assistant-code-picker { display: grid; gap: 8px; font-size: 14px; min-width: 0; }
+.assistant-guide p, .assistant-code-picker p { margin: 0; }
+.assistant-guide > :is(a, button):not(.knowledge-text-button), .assistant-prompt {
+  display: grid; gap: 3px; text-align: left; padding: 8px 10px; border: 1px solid var(--app-border); border-radius: 8px;
+  background: var(--app-bg); color: var(--app-text); cursor: pointer; text-decoration: none;
+}
+.assistant-guide > :is(a, button):hover, .assistant-prompt:hover { border-color: var(--app-accent); }
+.assistant-guide > :is(a, button) > span { color: var(--app-muted); font-size: 13px; }
+.assistant-guide > .knowledge-text-button, .assistant-code-picker > button { justify-self: start; }
+.assistant-code-picker label { display: grid; gap: 4px; min-width: 0; }
+.assistant-code-picker :is(select, input) { width: 100%; min-width: 0; padding: 6px; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-bg); color: var(--app-text); }
+.assistant-code-range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.assistant-code-picker pre { margin: 0; padding: 8px; max-height: 130px; overflow: auto; background: var(--app-bg); }
+.assistant-prompt { justify-self: start; max-width: 100%; font-size: 13px; }
+.assistant-prompt:disabled { cursor: default; opacity: 0.6; }
 .assistant-review-picker p { margin: 0; }
 .assistant-review-logs { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .assistant-review-logs button, .assistant-search-scope select {
@@ -469,7 +493,7 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .assistant-chat-question small { display: block; color: var(--app-muted); }
 .assistant-answer { min-width: 0; }
 .assistant-answer pre { max-width: 100%; overflow: auto; }
-.assistant-composer { display: grid; flex-shrink: 0; gap: 6px; padding: 8px 26px 10px 14px; border-top: 1px solid var(--app-border); }
+.assistant-composer { display: grid; flex-shrink: 0; max-height: 68%; overflow-y: auto; gap: 6px; padding: 8px 26px 10px 14px; border-top: 1px solid var(--app-border); }
 .assistant-composer p { margin: 0; font-size: 13px; }
 .assistant-composer textarea {
   min-width: 0; width: 100%; resize: none; padding: 7px 9px; font-size: 14px;
@@ -521,6 +545,16 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .code-version h2 { overflow-wrap: anywhere; }
 .code-focus-card { max-width: 840px; margin-inline: auto; overflow-wrap: anywhere; }
 .code-preview pre { max-height: 55vh; overflow: auto; white-space: pre; }
+.script-preview code { display: block; min-width: max-content; }
+.script-preview .script-line { position: relative; display: inline-block; min-width: 100%; min-height: 1lh; padding-inline-start: 6ch; }
+.script-preview .script-line::before {
+  content: attr(data-code-line); position: absolute; inset-inline-start: 0; width: 4.5ch; text-align: right;
+  color: var(--app-muted); user-select: none; font-variant-numeric: tabular-nums;
+}
+.script-preview .script-line[aria-current="true"] { background: var(--app-active); }
+.script-preview .script-line[aria-current="true"]::before { color: var(--app-text); font-weight: 650; }
+.script-ask-popover { position: fixed; z-index: 1000000; display: grid; gap: 4px; }
+.script-ask-popover .note-button { margin: 0; box-shadow: 0 4px 12px #0f172a45; }
 
 .relation-entry-link {
   display: inline-flex; align-items: center; min-height: 30px; padding: 3px 8px; margin: 0 6px 0 0;
@@ -597,7 +631,7 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 }
 .network-icon-button { width: 34px; display: inline-grid; place-items: center; padding: 0; flex-shrink: 0; }
 .network-icon-button[aria-expanded="true"], .network-icon-button[aria-pressed="true"] { background: var(--app-active); color: var(--app-accent); border-color: var(--app-accent); }
-.network-tool-panel, .network-context-menu {
+.network-tool-panel, .workspace-context-menu {
   position: absolute; z-index: 6; padding: 10px; border: 1px solid var(--app-border); border-radius: 8px;
   background: var(--app-surface); color: var(--app-text); box-shadow: 0 8px 24px #0f172a40;
 }
@@ -624,11 +658,13 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
   display: grid; width: 100%; min-width: 0; padding: 5px 7px; margin: 4px 0; text-align: left; overflow-wrap: anywhere;
   color: var(--app-text); background: var(--app-bg); border: 1px solid var(--app-border); border-inline-start: 3px solid var(--relation-tone); border-radius: 6px; cursor: pointer;
 }
-.network-search-results button:hover, .network-context-menu button:hover { background: var(--app-active); }
+.network-search-results button:hover, .workspace-context-menu button:hover { background: var(--app-active); }
 .network-search-results button small { font-size: 11px; color: var(--app-muted); }
-.network-context-menu { z-index: 7; padding: 4px; min-width: 120px; }
-.network-context-menu-title { max-width: 144px; padding: 4px 9px; color: var(--app-muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.network-context-menu button { width: 100%; border: 0; padding: 7px 9px; border-radius: 5px; color: var(--app-text); background: transparent; text-align: left; cursor: pointer; }
+.workspace-context-menu { z-index: 7; padding: 4px; min-width: 120px; }
+.workspace-context-menu-title { max-width: 144px; padding: 4px 9px; color: var(--app-muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.workspace-context-menu button { width: 100%; border: 0; padding: 7px 9px; border-radius: 5px; color: var(--app-text); background: transparent; text-align: left; cursor: pointer; }
+.workspace-context-menu button:focus-visible { outline: 1px solid var(--app-accent); outline-offset: -2px; }
+.script-ask-menu { position: fixed; z-index: 1000000; width: 160px; max-width: calc(100vw - 16px); }
 .network-layers button, .network-layer-term { display: inline-flex; align-items: center; gap: 5px; }
 .network-layer-term { cursor: default; }
 .network-layers button::before, .network-layer-term::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--relation-tone); }

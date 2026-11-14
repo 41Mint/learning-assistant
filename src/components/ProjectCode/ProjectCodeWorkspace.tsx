@@ -102,10 +102,9 @@ function ProjectCard({ project, versions, importStatus, onImport }: {
   );
 }
 
-export default function ProjectCodeWorkspace() {
+export default function ProjectCodeWorkspace({ adding, setAdding }: { adding: boolean; setAdding: (adding: boolean) => void }) {
   const { data, isLoaded, error, load } = useProjectCodeStore();
   const versionId = useWorkspaceStore((state) => state.codeVersionId);
-  const [adding, setAdding] = useState(false);
   const [directoryImport, setDirectoryImport] = useState<{ projectId?: string } | null>(null);
   const [importResult, setImportResult] = useState<{ projectId: string; added: number; reused: number } | null>(null);
   const version = data.versions.find((item) => item.id === versionId);
@@ -128,7 +127,7 @@ export default function ProjectCodeWorkspace() {
           <button type="button" className="note-button" onClick={() => setAdding(true)}>添加代码版本</button>
           <button type="button" className="note-button secondary" onClick={() => setDirectoryImport({})}>导入项目目录</button>
         </div>}
-        {!versionId && adding && (
+        {!versionId && adding && !directoryImport && (
           <CodeVersionForm onCancel={() => setAdding(false)} onSaved={(id) => {
             setAdding(false);
             window.location.hash = codeVersionHref(id);

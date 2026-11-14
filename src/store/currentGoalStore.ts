@@ -3,7 +3,7 @@ import { getSkillNode } from '../data/skillPath';
 import { getStorageItem, setStorageItem, STORAGE_KEYS } from '../utils/storage';
 
 export interface CurrentGoal {
-  type: 'skill' | 'task';
+  type: 'skill' | 'task' | 'practice';
   id: string;
   label: string;
 }
@@ -51,8 +51,9 @@ export const useCurrentGoalStore = create<CurrentGoalStore>((set) => ({
   },
 
   setCurrentGoal: (goal) => {
+    if (goal.type === 'practice') localStorage.setItem(STORAGE_KEYS.CURRENT_GOAL, JSON.stringify({ version: 2, goal } satisfies CurrentGoalStorageV2));
+    else persist(goal);
     set({ goal, isLoaded: true });
-    persist(goal);
   },
 
   clearCurrentGoal: () => {

@@ -1,4 +1,4 @@
-import type { RelationAnnotation } from '../types/relations';
+import type { RelationAnnotation } from '../types/relations.ts';
 
 export const RELATION_LABEL_LIMIT = 12;
 export const RELATION_NOTE_LIMIT = 400;
