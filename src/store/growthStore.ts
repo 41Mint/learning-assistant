@@ -24,6 +24,7 @@ interface GrowthStore extends GrowthData {
   saveGroup: (name: string, id?: string, cardIds?: string[], exercise?: SavedExercise) => string;
   removeGroup: (id: string) => void;
   moveCards: (cardIds: string[], groupId: string | null) => void;
+  applyGrouping: (name: string, cardIds: string[]) => void;
   applyArrangementHistory: (direction: HistoryDirection) => boolean;
 }
 
@@ -158,6 +159,23 @@ export const useGrowthStore = create<GrowthStore>((set, get) => {
       const { groups } = get();
       const next = placeCards(groups, cardIds, groupId);
       if (next.some((group, index) => group !== groups[index])) arrange({ groups: next });
+    },
+    applyGrouping: (name, cardIds) => {
+      const current = get();
+      if (!current.isLoaded || current.error) throw new Error(current.error || '成长记录正在加载。');
+      const { version, outcomes, exercises, groups, hiddenPresetIds } = current;
+      const raw = localStorage.getItem(STORAGE_KEYS.GROWTH);
+      const stored = raw === null ? emptyGrowth() : validateGrowth(JSON.parse(raw));
+      if (JSON.stringify(stored) !== JSON.stringify({ version, outcomes, exercises, hiddenPresetIds, groups })) {
+        throw new Error('成长记录已经在其他页面更新。请刷新后重新获取分组建议。');
+      }
+      const available = new Set([...outcomes, ...growthExercises(current)].map(({ id }) => id));
+      if (cardIds.length < 2 || new Set(cardIds).size !== cardIds.length || cardIds.some((id) => !available.has(id))) {
+        throw new Error('这组建议包含已不可用的卡片，请重新选卡。');
+      }
+      const existing = groups.find((group) => normalizedName(group.name) === normalizedName(name));
+      if (existing && cardIds.every((id) => existing.cardIds.includes(id))) return;
+      current.saveGroup(existing?.name ?? name, existing?.id, cardIds);
     },
     applyArrangementHistory: (direction) => {
       const current = get();

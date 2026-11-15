@@ -658,6 +658,9 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .assistant-chat-host[hidden], .assistant-body[hidden] { display: none; }
 .assistant-transcript { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px 14px; }
 .assistant-turn { display: grid; gap: 6px; margin-bottom: 12px; font-size: 14px; overflow-wrap: anywhere; }
+.assistant-grouping { display: grid; gap: 8px; }
+.assistant-grouping-card h4, .assistant-grouping-card p { margin: 0 0 6px; }
+.assistant-grouping-members { margin: 6px 0; padding-inline-start: 20px; overflow-wrap: anywhere; }
 .assistant-chat-question { justify-self: end; max-width: 92%; padding: 6px 10px; background: var(--app-active); border-radius: 8px; }
 .assistant-chat-question p { margin: 0; white-space: pre-wrap; }
 .assistant-chat-question small { display: block; color: var(--app-muted); }

@@ -293,9 +293,14 @@ export default function AssistantDock({ activePage, activeLog, onOpenReview, onS
     {menu?.launcher && operations}
     <dialog ref={dialog} id="assistant-drawer" className="assistant-drawer" aria-labelledby="assistant-heading"
       style={viewport.compact ? undefined : { left: windowFrame.x, top: windowFrame.y, width: windowFrame.width, height: windowFrame.height }}
-      onCancel={(event) => { event.preventDefault(); close(); }}
+      onCancel={(event) => {
+        if (event.target !== event.currentTarget) return;
+        event.preventDefault();
+        close();
+      }}
       onKeyDown={(event) => {
-        if (!viewport.compact && event.key === 'Escape' && !event.nativeEvent.isComposing && !event.defaultPrevented) {
+        if (!viewport.compact && event.key === 'Escape' && !event.nativeEvent.isComposing && !event.defaultPrevented
+          && event.target instanceof Element && event.target.closest('dialog') === event.currentTarget) {
           event.preventDefault();
           close();
         }

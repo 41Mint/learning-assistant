@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin } from 'vite';
 import { LOG_REVIEW_ENDPOINT, LOG_REVIEW_MAX_TEXT, readReviewQueries, readReviewResult, reviewRecord, reviewText } from '../src/types/logReview.ts';
-import { ASSISTANT_CHAT_ENDPOINT, ASSISTANT_REQUEST_BYTES, CHAT_ANSWER_LIMIT, CHAT_CODE_CONTEXT_LIMIT, CHAT_CODE_LIMIT, CHAT_GROUP_CARD_LIMIT, CHAT_GROUP_DESCRIPTION_LIMIT, CHAT_HISTORY_LIMIT, CHAT_QUESTION_LIMIT, CHAT_SCRIPT_LIMIT } from '../src/types/assistantChat.ts';
+import { ASSISTANT_CHAT_ENDPOINT, ASSISTANT_REQUEST_BYTES, CHAT_ANSWER_LIMIT, CHAT_CODE_CONTEXT_LIMIT, CHAT_CODE_LIMIT, CHAT_GROUP_CARD_LIMIT, CHAT_GROUP_DESCRIPTION_LIMIT, CHAT_HISTORY_LIMIT, CHAT_QUESTION_LIMIT, CHAT_SCRIPT_LIMIT, readGrowthGrouping } from '../src/types/assistantChat.ts';
 import type { ChatGrowthCard } from '../src/types/assistantChat.ts';
 import { isProjectRelativePath } from '../src/utils/projectCode.ts';
 import { GROWTH_SUGGESTIONS_ENDPOINT, readGrowthSuggestions } from '../src/types/growthSuggestions.ts';
@@ -27,6 +27,9 @@ const chatPrompt = `你是游戏开发学习助手，擅长解释 Unity、C# 和
 解释代码时先说用途，再按需解释关键语句。附带上下文时，用它理解选中代码，重点仍是选中片段。区分可确认的行为和需要更多代码才能判断的行为。
 回答脚本用途时，结合脚本路径、正文和提供的职责说明。说明可确认的职责、入口和依赖。收到的脚本若只有首尾片段，说明结论基于哪些行。没有场景、预制体或调用方资料时，不能断言脚本已挂载或被调用。
 应用内可从智能体工具栏整理日志、查找资料或回看实践。问代码可从脚本选区或问答中的引用代码入口开始。只说明用户可以采取的操作，不声称已查询或修改应用数据。`;
+const selectedCardsPrompt = `${chatPrompt}
+只返回一个 JSON 对象，例如 {"answer":"这两张卡片都在练习角色控制。","groups":[{"name":"角色控制","members":[1,2],"reason":"都与角色的移动反馈有关。"}]}。
+answer 是给用户看的简短 Markdown 回答。用户请求分组或归类时，在 groups 中给出可预览的分组，members 只填写本轮所选卡片的整数编号。每组至少两张，每张最多分到一个组，组名之间不重复且不超过 60 字。可保留没有合适搭档的卡片独立。一般问答或无合适分组时，groups 返回空数组。`;
 
 type ModelMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
@@ -141,10 +144,10 @@ function chatMessages(value: unknown): ModelMessage[] {
       }
       return { 标题: card.title, 领域: card.domains, 状态: card.completed ? '已完成' : '待尝试', 说明摘要: card.description };
     });
-    return [{ role: 'system', content: chatPrompt }, ...history, {
+    return [{ role: 'system', content: isGroup ? chatPrompt : selectedCardsPrompt }, ...history, {
       role: 'user', content: JSON.stringify({ 问题: question, ...(isGroup
         ? { 参考卡组: { 名称: collection.name, 成员总数: collection.totalCards, 附带成员: cards } }
-        : { 所选卡片: cards }) }),
+        : { 所选卡片: cards.map((card, index) => ({ 编号: index + 1, ...card })) }) }),
     }];
   }
   if (value.growthCard !== undefined) {
@@ -237,8 +240,17 @@ export function logReviewPlugin({ apiKey, model = defaultModel }: { apiKey: stri
       const value = await readBody(request);
       const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(45000)]);
       if (chat) {
-        const answer = await deepSeek(apiKey, model, chatMessages(value), signal);
-        reply(response, 200, { answer });
+        const messages = chatMessages(value);
+        const selection = reviewRecord(value) && reviewRecord(value.growthSelection) ? value.growthSelection : undefined;
+        const content = await deepSeek(apiKey, model, messages, signal, Boolean(selection));
+        if (!selection) { reply(response, 200, { answer: content }); return; }
+        try {
+          const result: unknown = JSON.parse(content);
+          if (!reviewRecord(result)) throw new Error();
+          const answer = reviewText(result.answer, CHAT_ANSWER_LIMIT);
+          if (!answer) throw new Error();
+          reply(response, 200, { answer, groups: readGrowthGrouping(result.groups, Number(selection.totalCards)) });
+        } catch { throw new ReviewError(502, '模型没有返回可用的卡片分析，请重试。'); }
         return;
       }
       if (growth) {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { ASSISTANT_CHAT_ENDPOINT, ASSISTANT_REQUEST_BYTES, CHAT_ANSWER_LIMIT, CHAT_HISTORY_LIMIT, CHAT_QUESTION_LIMIT } from '../../types/assistantChat';
+import { ASSISTANT_CHAT_ENDPOINT, ASSISTANT_REQUEST_BYTES, CHAT_ANSWER_LIMIT, CHAT_HISTORY_LIMIT, CHAT_QUESTION_LIMIT, readGrowthGrouping } from '../../types/assistantChat';
 import type { ChatRequest } from '../../types/assistantChat';
 import { LOG_REVIEW_MAX_TEXT, reviewRecord, reviewText } from '../../types/logReview';
 import { assistantAction, isAssistantGuideQuestion } from './assistantActions';
@@ -12,12 +12,14 @@ import AssistantGuide from './AssistantGuide';
 import type { AssistantStart } from './AssistantGuide';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { describeScript, lineLabel, surroundingCode } from '../../utils/assistantCode';
+import GrowthGroupingPlan from './GrowthGroupingPlan';
+import type { ProposedGrowthGroup } from './GrowthGroupingPlan';
 
 export interface AssistantChatSource { id: string; date: string; text: string; draft: boolean }
-interface Turn { question: string; answer: string; source?: { id: string; label: string }; guide?: boolean }
+interface Turn { question: string; answer: string; source?: { id: string; label: string }; guide?: boolean; groups?: ProposedGrowthGroup[] }
 const excerptLabel = (excerpt: AssistantCodeExcerpt) => `${excerpt.path} · ${lineLabel(excerpt)}`;
 
-async function askAssistant(input: ChatRequest, signal: AbortSignal): Promise<string> {
+async function askAssistant(input: ChatRequest, signal: AbortSignal) {
   let body = JSON.stringify(input);
   while (new Blob([body]).size > ASSISTANT_REQUEST_BYTES && input.history.length) {
     input.history = input.history.slice(2);
@@ -31,7 +33,7 @@ async function askAssistant(input: ChatRequest, signal: AbortSignal): Promise<st
   if (!response.ok || !answer) {
     throw new Error((reviewRecord(value) && reviewText(value.error, 300)) || '暂时无法获取回复，请重试。');
   }
-  return answer;
+  return { answer, groups: readGrowthGrouping(reviewRecord(value) ? value.groups : undefined, input.growthSelection?.cards.length ?? 0) };
 }
 
 export default function AssistantChat({ source, active, onAction, codeExcerpt, onRemoveCode, onPickCode, growthReference, onRemoveGrowthReference, page, onTool, onStart }: {
@@ -123,9 +125,13 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
     const log = attached && { date: attached.date, text: attached.text.slice(0, LOG_REVIEW_MAX_TEXT) };
     const code = fragment && { path: fragment.path, text: fragment.text, startLine: fragment.startLine, endLine: fragment.endLine, context: includedContext };
     try {
-      const answer = await askAssistant({ question: text, history, log, code, script, growthCard, growthGroup, growthSelection }, current.signal);
+      const reply = await askAssistant({ question: text, history, log, code, script, growthCard, growthGroup, growthSelection }, current.signal);
       if (current.signal.aborted) return;
-      setTurns((previous) => [...previous, { question: text, answer, source: sourceInfo }]);
+      const groups = growthReference?.kind === 'selection' && growthReference.cardIds.length === growthReference.selection.cards.length
+        ? reply.groups.map(({ name, reason, members }) => ({ name, reason, cards: members.map((number) => ({
+          id: growthReference.cardIds[number - 1], title: growthReference.selection.cards[number - 1].title,
+        })) })) : undefined;
+      setTurns((previous) => [...previous, { question: text, answer: reply.answer, source: sourceInfo, groups }]);
       setQuestion('');
     } catch (error) {
       if (!current.signal.aborted) setError(error instanceof Error ? error.message : '暂时无法获取回复，请重试。');
@@ -154,6 +160,7 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
         {turn.guide ? <AssistantGuide page={page} onAction={onTool} onStart={onStart} /> : <div className="assistant-answer markdown-preview">
           <ReactMarkdown skipHtml disallowedElements={['img', 'a']} unwrapDisallowed>{turn.answer}</ReactMarkdown>
         </div>}
+        {turn.groups && turn.groups.length > 0 && <GrowthGroupingPlan suggestions={turn.groups} />}
       </div>)}
       {pending && <div className="assistant-turn">{renderQuestion(pending)}<p role="status">正在生成回复…</p></div>}
     </div>

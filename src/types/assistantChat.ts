@@ -1,3 +1,5 @@
+import { reviewRecord, reviewText } from './logReview.ts';
+
 export const ASSISTANT_CHAT_ENDPOINT = '/api/assistant-chat';
 export const CHAT_QUESTION_LIMIT = 2000;
 export const CHAT_ANSWER_LIMIT = 12000;
@@ -36,6 +38,34 @@ export interface ChatGrowthCards {
 }
 export interface ChatGrowthGroup extends ChatGrowthCards {
   name: string;
+}
+
+export interface ChatGrowthGrouping {
+  name: string;
+  members: number[];
+  reason: string;
+}
+
+export function readGrowthGrouping(value: unknown, cardCount: number): ChatGrowthGrouping[] {
+  if (!Array.isArray(value) || value.length > Math.floor(cardCount / 2)) return [];
+  const usedCards = new Set<number>();
+  const usedNames = new Set<string>();
+  const groups: ChatGrowthGrouping[] = [];
+  for (const item of value) {
+    if (!reviewRecord(item) || typeof item.name !== 'string' || !Array.isArray(item.members) || item.members.length < 2) return [];
+    const name = item.name.trim();
+    const key = name.normalize('NFKC').trim().toLocaleLowerCase();
+    if (!key || name.length > 60 || usedNames.has(key)) return [];
+    const members: number[] = [];
+    for (const number of item.members) {
+      if (typeof number !== 'number' || !Number.isSafeInteger(number) || number < 1 || number > cardCount || usedCards.has(number)) return [];
+      members.push(number);
+      usedCards.add(number);
+    }
+    usedNames.add(key);
+    groups.push({ name, members, reason: reviewText(item.reason, 200) });
+  }
+  return groups;
 }
 
 export interface ChatRequest {

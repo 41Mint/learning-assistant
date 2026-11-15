@@ -350,7 +350,7 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
     askAboutGrowth({ id: item.id, kind: 'group', group: { name: item.name, ...cardSummaries(item.cardIds) } });
   };
   const selectionContext: AssistantGrowthSelection | undefined = selectionIds.length > 1 && selectionIds.length <= CHAT_GROUP_CARD_LIMIT
-    ? { id: JSON.stringify([...selectionIds].sort()), kind: 'selection', selection: cardSummaries(selectionIds) } : undefined;
+    ? { id: JSON.stringify([...selectionIds].sort()), kind: 'selection', selection: cardSummaries(selectionIds), cardIds: selectionIds } : undefined;
   const dismissFolderForAsk = () => {
     if (!folder) return;
     setFolder(undefined);

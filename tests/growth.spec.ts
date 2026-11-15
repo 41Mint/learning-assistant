@@ -713,6 +713,92 @@ test('多选菜单的移动和移出按选区执行，图标与快捷键可多�
   await expect(second).toBeVisible();
 });
 
+test('智能体分组可逐组确认、加入已有卡组并撤销重做', async ({ page }) => {
+  const selected = [title, '让角色跳起并落回地面', '用字典统计物品数量', '让一个事件触发两种反馈'];
+  const requests: ChatRequest[] = [];
+  await page.route('**/api/assistant-chat', async (route) => {
+    const request: ChatRequest = route.request().postDataJSON();
+    requests.push(request);
+    const invalid = request.question === '再给一组';
+    await route.fulfill({ json: {
+      answer: invalid ? '另一轮分析。' : '可以按练习主题归为两组。',
+      groups: invalid ? [{ name: '无效分组', members: [1, 5] }] : [
+        { name: '角色控制', members: [1, 2], reason: '这两项都在练习角色移动。' },
+        { name: 'C# 练习', members: [3, 4], reason: '这两项可用 C# 单独完成。' },
+      ],
+    } });
+  });
+  await page.goto('/#path/try');
+  const board = page.getByRole('region', { name: '待尝试' });
+  await board.getByRole('button', { name: '新建卡组' }).click();
+  const create = page.getByRole('dialog', { name: '新建卡组' });
+  await create.getByLabel('卡组名称').fill('c# 练习');
+  await create.getByRole('button', { name: '创建卡组' }).click();
+
+  const cards = selected.map((name) => board.getByRole('article', { name, exact: true }));
+  await cards[0].click({ position: { x: 12, y: 70 } });
+  for (const card of cards.slice(1)) await card.click({ modifiers: ['Shift'], position: { x: 12, y: 70 } });
+  await board.getByRole('group', { name: '所选卡片' }).getByRole('button', { name: '询问智能体' }).click();
+  const assistant = page.getByRole('dialog', { name: '学习智能体' });
+  await assistant.getByRole('button', { name: '这些卡片可以怎么分组？' }).click();
+  await assistant.getByRole('button', { name: '发送', exact: true }).click();
+  const first = assistant.getByRole('article', { name: '角色控制', exact: true });
+  const second = assistant.getByRole('article', { name: 'c# 练习', exact: true });
+  const confirm = page.getByRole('dialog', { name: '应用分组建议' });
+  await expect(first).toContainText('这两项都在练习角色移动。');
+  await expect(first.getByRole('listitem')).toHaveCount(2);
+  await expect(second).toContainText('加入已有卡组');
+  expect(requests[0].growthSelection?.cards.map(({ title }) => title)).toEqual(selected);
+  expect(requests[0].growthSelection).not.toHaveProperty('cardIds');
+  for (const card of cards) await expect(card).toBeVisible();
+
+  await second.getByRole('button', { name: '应用这组' }).click();
+  await expect(confirm).toContainText('将下列卡片移到已有卡组「c# 练习」');
+  await page.keyboard.press('Escape');
+  await expect(confirm).toBeHidden();
+  await expect(assistant).toBeVisible();
+  await expect(cards[2]).toBeVisible();
+  await expect(cards[3]).toBeVisible();
+
+  await first.getByRole('button', { name: '应用这组' }).click();
+  await confirm.getByLabel('目标卡组名称').fill('角色动作');
+  await confirm.getByRole('button', { name: '确认应用' }).click();
+  const renamed = assistant.getByRole('article', { name: '角色动作', exact: true });
+  const stack = board.getByRole('link', { name: '打开卡组 角色动作，2 张卡片' });
+  await expect(stack).toBeVisible();
+  await expect(renamed.getByRole('button', { name: '应用这组' })).toBeDisabled();
+  await expect(cards[0]).toHaveCount(0);
+  await expect(cards[2]).toBeVisible();
+
+  await assistant.getByRole('button', { name: '最小化学习智能体' }).click();
+  await board.getByRole('button', { name: '撤销整理' }).click();
+  await expect(stack).toHaveCount(0);
+  await expect(cards[0]).toBeVisible();
+  const restoreAssistant = page.getByRole('button', { name: '恢复学习智能体' });
+  await restoreAssistant.click();
+  await expect(renamed.getByRole('button', { name: '应用这组' })).toBeEnabled();
+  await assistant.getByRole('button', { name: '最小化学习智能体' }).click();
+  await board.getByRole('button', { name: '重做整理' }).click();
+  await expect(stack).toBeVisible();
+
+  const desktop = page.viewportSize()!;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await restoreAssistant.click();
+  await second.getByRole('button', { name: '应用这组' }).click();
+  await confirm.getByRole('button', { name: '取消' }).click();
+  await expect(assistant).toBeVisible();
+  await second.getByRole('button', { name: '应用这组' }).click();
+  await confirm.getByRole('button', { name: '确认应用' }).click();
+  await expect(second).toContainText('已在此卡组');
+  await page.setViewportSize(desktop);
+  await expect(board.getByRole('link', { name: '打开卡组 c# 练习，2 张卡片' })).toBeVisible();
+
+  await assistant.getByRole('textbox', { name: '输入问题' }).fill('再给一组');
+  await assistant.getByRole('button', { name: '发送', exact: true }).click();
+  await expect(assistant.getByText('另一轮分析。')).toBeVisible();
+  await expect(assistant.getByRole('article', { name: '无效分组' })).toHaveCount(0);
+});
+
 test('智能体工具栏和问答可打开同一练习推荐面板并保留偏好', async ({ page }) => {
   await seedLearning(page);
   await page.goto('/#history');

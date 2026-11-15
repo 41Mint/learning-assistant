@@ -6,7 +6,7 @@ export interface AssistantLogDraft { id: string; text: string }
 export type AssistantLogKind = 'today' | 'history';
 export type AssistantCodeExcerpt = ChatCode & { id: string; versionId: string };
 export type AssistantCodeReference = AssistantCodeExcerpt | { kind: 'script'; id: string; versionId: string; path: string };
-export type AssistantGrowthSelection = { id: string; kind: 'selection'; selection: ChatGrowthCards };
+export type AssistantGrowthSelection = { id: string; kind: 'selection'; selection: ChatGrowthCards; cardIds: string[] };
 export type AssistantGrowthReference = AssistantGrowthSelection
   | { id: string; kind: 'card'; card: ChatGrowthCard }
   | { id: string; kind: 'group'; group: ChatGrowthGroup };
