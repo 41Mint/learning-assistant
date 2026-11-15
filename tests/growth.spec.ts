@@ -581,6 +581,67 @@ test('卡片右键与键盘菜单联动目标和智能体，完成后移入已�
   await expect(card.getByText('当前目标')).toBeVisible();
 });
 
+test('成长看板可单选和 Shift 多选，仅将选中的卡片交给智能体分组', async ({ page }) => {
+  const requests: ChatRequest[] = [];
+  await page.route('**/api/assistant-chat', async (route) => {
+    const request: ChatRequest = route.request().postDataJSON();
+    requests.push(request);
+    await route.fulfill({ json: { answer: request.growthSelection ? '可以把它们放进「角色控制」。' : '先测试角色移动。' } });
+  });
+  await page.goto('/#path/try');
+  const board = page.getByRole('region', { name: '待尝试' });
+  const jump = '让角色跳起并落回地面';
+  const first = board.getByRole('article', { name: title, exact: true });
+  const second = board.getByRole('article', { name: jump, exact: true });
+  const selection = board.getByRole('group', { name: '所选卡片' });
+  await first.click({ position: { x: 14, y: 70 } });
+  await expect(first).toHaveAttribute('data-selected', 'true');
+  await expect(selection.getByRole('status')).toHaveText('已选 1 张');
+  await second.getByRole('link', { name: jump }).click({ modifiers: ['Shift'] });
+  await expect(page).toHaveURL(/#path\/try$/);
+  await expect(selection.getByRole('status')).toHaveText('已选 2 张');
+  await second.press('Shift+Space');
+  await expect(selection.getByRole('status')).toHaveText('已选 1 张');
+  await second.press('Shift+Space');
+  const assistant = page.getByRole('dialog', { name: '学习智能体' });
+  await first.click({ button: 'right' });
+  const cardMenu = first.getByRole('group', { name: '卡片操作' });
+  const ask = cardMenu.getByRole('button', { name: '询问智能体', exact: true });
+  await expect(cardMenu.getByRole('button', { name: '询问如何分组' })).toHaveCount(0);
+  await ask.click();
+  await expect(cardMenu).toBeHidden();
+  await expect(assistant.getByText('引用 ' + title)).toBeVisible();
+  const scope = assistant.getByRole('group', { name: '卡片引用范围' });
+  await expect(scope.getByRole('button', { name: '当前卡片' })).toHaveAttribute('aria-pressed', 'true');
+  await assistant.getByRole('button', { name: '这个练习可以怎么开始？' }).click();
+  expect(requests).toHaveLength(0);
+  await assistant.getByRole('button', { name: '发送', exact: true }).click();
+  await expect(assistant.getByText('先测试角色移动。')).toBeVisible();
+  expect(requests[0].growthCard?.title).toBe(title);
+  expect(requests[0].growthSelection).toBeUndefined();
+  await scope.getByRole('button', { name: '所选卡片（2）' }).click();
+  await expect(assistant.getByText('引用 2 张选中的卡片')).toBeVisible();
+  await assistant.getByRole('button', { name: '这些卡片可以怎么分组？' }).click();
+  expect(requests).toHaveLength(1);
+  await assistant.getByRole('button', { name: '发送', exact: true }).click();
+  await expect(assistant.getByText('可以把它们放进「角色控制」。')).toBeVisible();
+  expect(requests[1].growthCard).toBeUndefined();
+  expect(requests[1].history).toEqual([]);
+  expect(requests[1].growthSelection).toEqual({ totalCards: 2, cards: [
+    { title, domains: ['Unity', 'C#'], description: expect.stringContaining('松开后停止'), completed: false },
+    { title: jump, domains: ['Unity', 'C#'], description: expect.stringContaining('跳跃与落地'), completed: false },
+  ] });
+  await assistant.getByRole('button', { name: '关闭学习智能体' }).click();
+  await selection.getByRole('button', { name: '询问智能体', exact: true }).click();
+  await expect(assistant.getByRole('button', { name: '这些卡片可以怎么分组？' })).toBeVisible();
+  await assistant.getByRole('button', { name: '关闭学习智能体' }).click();
+  await expect(board.getByRole('link', { name: /打开卡组/ })).toHaveCount(0);
+  await board.getByLabel('按领域筛选').selectOption('C#');
+  await expect(selection).toHaveCount(0);
+  await second.getByRole('link', { name: jump }).click();
+  await expect(board.getByRole('heading', { name: jump })).toBeVisible();
+});
+
 test('智能体工具栏和问答可打开同一练习推荐面板并保留偏好', async ({ page }) => {
   await seedLearning(page);
   await page.goto('/#history');

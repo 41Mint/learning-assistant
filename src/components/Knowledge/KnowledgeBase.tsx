@@ -8,6 +8,7 @@ import { logLabel } from '../../utils/growth';
 import { entryNames, normalizedName, otherEntryId } from '../../utils/knowledge';
 import { codeVersionHref, codeVersionLabel, entryCodeIds } from '../../utils/projectCode';
 import MarkdownContent from '../common/MarkdownContent';
+import WorkspaceDialog from '../common/WorkspaceDialog';
 import HighlightedText from '../common/HighlightedText';
 import { useScrollToSearchMatch } from '../common/useScrollToSearchMatch';
 import KnowledgeEditor from './KnowledgeEditor';
@@ -23,6 +24,7 @@ export default function KnowledgeBase() {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ entry?: KnowledgeEntry } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string>();
   const [message, setMessage] = useState('');
   const editTrigger = useRef<HTMLButtonElement>(null);
   const detailHeading = useRef<HTMLHeadingElement>(null);
@@ -51,15 +53,6 @@ export default function KnowledgeBase() {
     openEntry(id);
     setMessage('词条已保存。');
     window.requestAnimationFrame(() => detailHeading.current?.focus());
-  };
-  const remove = (entry: KnowledgeEntry) => {
-    if (!window.confirm('确定删除词条“' + entry.title + '”及其关联？')) return;
-    try {
-      store.deleteEntry(entry.id);
-      setMessage('词条已删除。');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '删除失败，请重试。');
-    }
   };
   const links = selected ? store.logLinks.filter((link) => link.entryId === selected.id) : [];
   const related = selected ? store.relations.flatMap((relation) => otherEntryId(relation, selected.id) ?? []) : [];
@@ -109,7 +102,7 @@ export default function KnowledgeBase() {
                 <button type="button" className="note-button" onClick={(event) => edit(event.currentTarget, selected)}>编辑词条</button>
                 <RelationLink kind="entry" id={selected.id} />
                 <a className="relation-entry-link" href={knowledgeNetworkHref(selected.id)}>在知识网络中查看</a>
-                <button type="button" className="knowledge-text-button danger" onClick={() => remove(selected)}>删除词条</button>
+                <button type="button" className="knowledge-text-button danger" onClick={() => setConfirmDelete(selected.id)}>删除词条</button>
               </div>
             </div>
             {selected.aliases.length > 0 && <p className="knowledge-muted">别名：<HighlightedText text={selected.aliases.join('、')} words={search?.words} /></p>}
@@ -143,6 +136,12 @@ export default function KnowledgeBase() {
                 </li>;
               })}</ul>
             </section>}
+            {confirmDelete === selected.id && <WorkspaceDialog title="删除词条" action="确认删除" destructive onClose={() => setConfirmDelete(undefined)} onSave={() => {
+              store.deleteEntry(selected.id);
+              setMessage('词条已删除。');
+            }}>
+              <p>删除「{selected.title}」及其关联？</p>
+            </WorkspaceDialog>}
           </>
         ) : <><h2>{entryId ? '词条未找到' : '选择或新建一个知识词条'}</h2><p className="knowledge-muted">从左侧目录选择词条，或从学习日志中为反复遇到的知识创建词条。</p></>}
         {message && <p className="knowledge-message" role="status">{message}</p>}

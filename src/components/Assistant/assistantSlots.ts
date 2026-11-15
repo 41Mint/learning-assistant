@@ -1,14 +1,15 @@
 import { createContext } from 'react';
 import type { GrowthDomain } from '../../types';
-import type { ChatCode, ChatGrowthCard, ChatGrowthGroup } from '../../types/assistantChat';
+import type { ChatCode, ChatGrowthCard, ChatGrowthCards, ChatGrowthGroup } from '../../types/assistantChat';
 
 export interface AssistantLogDraft { id: string; text: string }
 export type AssistantLogKind = 'today' | 'history';
 export type AssistantCodeExcerpt = ChatCode & { id: string; versionId: string };
 export type AssistantCodeReference = AssistantCodeExcerpt | { kind: 'script'; id: string; versionId: string; path: string };
-export type AssistantGrowthReference = { id: string } & (
-  { kind: 'card'; card: ChatGrowthCard } | { kind: 'group'; group: ChatGrowthGroup }
-);
+export type AssistantGrowthSelection = { id: string; kind: 'selection'; selection: ChatGrowthCards };
+export type AssistantGrowthReference = AssistantGrowthSelection
+  | { id: string; kind: 'card'; card: ChatGrowthCard; selectionContext?: AssistantGrowthSelection }
+  | { id: string; kind: 'group'; group: ChatGrowthGroup };
 export const isScriptReference = (reference?: AssistantCodeReference): reference is Extract<AssistantCodeReference, { kind: 'script' }> =>
   Boolean(reference && 'kind' in reference);
 

@@ -30,10 +30,12 @@ export interface ChatGrowthCard {
   domains: string[];
   description: string;
 }
-export interface ChatGrowthGroup {
-  name: string;
+export interface ChatGrowthCards {
   totalCards: number;
   cards: (ChatGrowthCard & { completed: boolean })[];
+}
+export interface ChatGrowthGroup extends ChatGrowthCards {
+  name: string;
 }
 
 export interface ChatRequest {
@@ -44,4 +46,5 @@ export interface ChatRequest {
   script?: ChatScript;
   growthCard?: ChatGrowthCard;
   growthGroup?: ChatGrowthGroup;
+  growthSelection?: ChatGrowthCards;
 }

@@ -14,6 +14,7 @@ import { codeTargetKey, codeVersionSource, effectiveCodeLinks, parseCodePermalin
 import { matchScriptLine } from '../../utils/searchMatches';
 import MarkdownContent from '../common/MarkdownContent';
 import FocusEditor from '../common/FocusEditor';
+import WorkspaceDialog from '../common/WorkspaceDialog';
 import HighlightedText from '../common/HighlightedText';
 import { useScrollToSearchMatch } from '../common/useScrollToSearchMatch';
 import RelationLink from '../Relations/RelationLink';
@@ -217,6 +218,7 @@ function ScriptPreview({ content, version, search }: { content: string; version:
 export default function CodeVersionDetail({ version, project }: { version: CodeVersion; project: CodeProject }) {
   const { saveVersionDetails, deleteVersion } = useProjectCodeStore();
   const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [note, setNote] = useState(version.note);
   const [githubUrl, setGithubUrl] = useState('');
   const [busy, setBusy] = useState(false);
@@ -247,17 +249,9 @@ export default function CodeVersionDetail({ version, project }: { version: CodeV
   };
 
   const remove = async () => {
-    if (!window.confirm('确定删除这个代码版本及其关联？')) return;
-    setBusy(true);
-    try {
-      await deleteVersion(version.id);
-      const { page, id } = readWorkspaceHash();
-      if (page === 'code' && id === version.id) window.location.hash = 'code';
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '删除失败，请重试。');
-    } finally {
-      setBusy(false);
-    }
+    await deleteVersion(version.id);
+    const { page, id } = readWorkspaceHash();
+    if (page === 'code' && id === version.id) window.location.hash = 'code';
   };
 
   if (editing) {
@@ -304,13 +298,16 @@ export default function CodeVersionDetail({ version, project }: { version: CodeV
           setEditing(true);
         }}>编辑版本资料</button>
         <RelationLink kind="code" id={version.id} />
-        <button type="button" className="knowledge-text-button danger" disabled={busy} onClick={() => void remove()}>删除代码版本</button>
+        <button type="button" className="knowledge-text-button danger" disabled={busy} onClick={() => setConfirmDelete(true)}>删除代码版本</button>
       </div>
       {message && <p role="status">{message}</p>}
       {version.content === null
         ? <p className="code-muted">此版本仅保存链接。私有文件可用有权限的 GitHub 账号打开。</p>
         : <ScriptPreview content={version.content} version={version} search={search} />}
       <CodeReferences versionId={version.id} />
+      {confirmDelete && <WorkspaceDialog title="删除代码版本" action="确认删除" destructive onClose={() => setConfirmDelete(false)} onSave={remove}>
+        <p>删除「{version.path}」的这个版本及其关联？</p>
+      </WorkspaceDialog>}
     </article>
   );
 }

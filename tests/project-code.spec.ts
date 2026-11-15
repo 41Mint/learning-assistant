@@ -496,8 +496,12 @@ test('同名脚本分版本保存，日志、词条与两次实践打开对应�
   await expect(preview.locator('pre code')).toContainText('hits = 1');
   await expect(preview.locator('pre code')).not.toContainText('hits = 2');
   await expect(page.getByRole('link', { name: '知识词条 · 点击判断', exact: true })).toHaveAttribute('href', '#knowledge/code-entry');
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: '删除代码版本', exact: true }).click();
+  const deleteVersion = page.getByRole('dialog', { name: '删除代码版本' });
+  await deleteVersion.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(preview).toBeVisible();
+  await page.getByRole('button', { name: '删除代码版本', exact: true }).click();
+  await deleteVersion.getByRole('button', { name: '确认删除' }).click();
   await expect(page.getByRole('article', { name: '打地鼠练习' })).toContainText('1 个代码版本');
   await page.goto('/#history/' + firstDate);
   await expect(page.getByRole('region', { name: '项目代码', exact: true }).getByText('项目代码（0）', { exact: true })).toBeVisible();

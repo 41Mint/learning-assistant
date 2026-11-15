@@ -6,22 +6,26 @@ import type { GrowthDrag } from '../../store/growthDragStore';
 import type { DragEventHandler } from 'react';
 import type { ChatGrowthCard } from '../../types/assistantChat';
 import { AssistantSlots } from '../Assistant/assistantSlots';
+import type { AssistantGrowthSelection } from '../Assistant/assistantSlots';
 
 export interface GrowthCardAction {
   label: string;
   run?: (trigger: HTMLButtonElement) => void;
 }
 
-export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, actions, children, href, highlighted, drag, onDragOver, onDrop }: {
+export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, selectionContext, actions, children, href, highlighted, selected, onSelect, drag, onDragOver, onDrop }: {
   id: string;
   card: ChatGrowthCard;
   recordLabel: string;
   onRecord?: (trigger: HTMLButtonElement) => void;
   onAsk?: () => void;
+  selectionContext?: AssistantGrowthSelection;
   actions?: GrowthCardAction[];
   children: ReactNode;
   href?: string;
   highlighted?: boolean;
+  selected?: boolean;
+  onSelect?: (extend: boolean) => void;
   drag?: GrowthDrag;
   onDragOver?: DragEventHandler<HTMLElement>;
   onDrop?: DragEventHandler<HTMLElement>;
@@ -68,8 +72,25 @@ export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, act
     trigger.current.focus({ preventScroll: true });
     action(trigger.current);
   };
+  const askAboutCard = () => act(() => {
+    onAsk?.();
+    askAboutGrowth({ id, kind: 'card', selectionContext,
+      card: { ...card, title: card.title.slice(0, 100), description: card.description.slice(0, 1200) } });
+  });
 
   return <article className="growth-card growth-summary" aria-label={card.title} data-card-focus={highlighted || undefined}
+    tabIndex={onSelect ? 0 : undefined} data-selected={selected || undefined} aria-description={selected ? '已选中' : undefined}
+    onClick={(event) => {
+      if (!onSelect || event.altKey || event.ctrlKey || event.metaKey || !(event.target instanceof Element)) return;
+      if (event.target.closest('button') || (!event.shiftKey && event.target.closest('a'))) return;
+      if (event.shiftKey) event.preventDefault();
+      onSelect(event.shiftKey);
+    }}
+    onKeyDown={(event) => {
+      if (!onSelect || event.target !== event.currentTarget || event.key !== ' ') return;
+      event.preventDefault();
+      onSelect(event.shiftKey);
+    }}
     draggable={Boolean(drag)} onDragOver={onDragOver} onDrop={onDrop}
     onDragStart={(event) => {
       if (!drag || (event.target instanceof Element && event.target.closest('button'))) {
@@ -117,10 +138,7 @@ export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, act
           setError('学习目标保存失败，请重试。');
         }
       })}>{current ? '已设为学习目标' : '设为学习目标'}</button>
-      <button type="button" onClick={() => act(() => {
-        onAsk?.();
-        askAboutGrowth({ id, kind: 'card', card: { ...card, title: card.title.slice(0, 100), description: card.description.slice(0, 1200) } });
-      })}>询问智能体</button>
+      <button type="button" onClick={askAboutCard}>询问智能体</button>
     </div>
   </article>;
 }

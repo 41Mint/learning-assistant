@@ -140,8 +140,15 @@ test('名称/别名冲突阻止保存；相关词条双向且去重；解除及�
   await panel.getByRole('button', { name: '关联选中词条 / 更新说明', exact: true }).click();
   await panel.getByRole('link', { name: 'PPU', exact: true }).click();
   const beforeLogs = await page.evaluate((key) => localStorage.getItem(key), logsKey);
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: '删除词条', exact: true }).click();
+  const deleteEntry = page.getByRole('dialog', { name: '删除词条' });
+  await expect(deleteEntry).toContainText('PPU');
+  await expect(deleteEntry.getByRole('button', { name: '取消', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(deleteEntry).toHaveCount(0);
+  await page.getByRole('button', { name: '删除词条', exact: true }).click();
+  await deleteEntry.getByRole('button', { name: '确认删除' }).click();
+  await expect(deleteEntry).toHaveCount(0);
   const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), knowledgeKey);
   expect(saved.entries.map((entry: { title: string }) => entry.title)).toEqual(['Sprite 切割']);
   expect(saved.logLinks).toHaveLength(0);
