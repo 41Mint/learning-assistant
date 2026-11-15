@@ -14,7 +14,7 @@ export function growthExercises({ exercises, hiddenPresetIds }: Pick<GrowthData,
 
 export function logLabel(log: StudyLog) {
   const title = log.content.match(/^#{1,6}\s+(.+)$/m)?.[1];
-  return title ? `${log.date} · ${title}` : log.date;
+  return title && title.trim() !== log.date ? `${log.date} · ${title}` : log.date;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

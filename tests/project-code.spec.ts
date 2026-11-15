@@ -380,7 +380,7 @@ test('项目目录预览、批量保存、职责说明、日志回链与备份�
 
   const backup = await downloadBackup(page);
   const code: ProjectCodeData = backup.data.projectCode;
-  expect(backup.version).toBe(5);
+  expect(backup.version).toBe(6);
   expect(code.versions.map(({ path }) => path)).toEqual([scriptPath, 'Assets/Scripts/Mole.cs']);
   expect(code.projects[0].directory).toMatchObject({
     files: ['Assets/Scenes/Game.unity', 'Assets/Scripts/Bad.cs', scriptPath, 'Assets/Scripts/Mole.cs', 'ProjectSettings/ProjectVersion.txt'],
@@ -566,7 +566,7 @@ test('实践编辑统一保存三类资料，旧代码关联可预选、取消�
   await expect(backlinks.getByRole('link', { name: /成长实践 · 点击目标时增加分数/ })).toHaveCount(0);
 });
 
-test('v5 备份带回本地文本、仅链接版本和关联，v4 继续恢复成长实践', async ({ page, browser }) => {
+test('完整备份带回本地文本、仅链接版本和关联，v4 继续恢复成长实践', async ({ page, browser }) => {
   await seedStudyContext(page);
   await page.goto('/');
   const { panel, form } = await openLogCodeForm(page);
@@ -600,7 +600,7 @@ test('v5 备份带回本地文本、仅链接版本和关联，v4 继续恢复�
   await wordForm.getByRole('button', { name: '保存词条', exact: true }).click();
   await expect(page.getByRole('region', { name: '项目用例' }).getByRole('link', { name: /只留固定链接/ })).toBeVisible();
   const backup = await downloadBackup(page);
-  expect(backup.version).toBe(5);
+  expect(backup.version).toBe(6);
   expect(backup.data.projectCode.versions.map((version: { content: string | null }) => version.content)).toEqual([firstContent, null]);
 
   const context = await browser.newContext();

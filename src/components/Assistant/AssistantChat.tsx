@@ -77,6 +77,7 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
   const growthPrompts = growthGroup ? ['这个卡组叫什么更合适？', '组内卡片的分类合适吗？']
     : growthSelection ? ['这些卡片可以怎么分组？']
     : ['这张卡片要我做到什么？', '这个练习可以怎么开始？'];
+  const prompts = growthReference ? growthPrompts : codeExcerpt && (!wholeScript || script) ? [suggestedQuestion] : [];
   const availableLogId = codeExcerpt || growthReference ? undefined : source?.id;
   if (sourceId !== availableLogId) {
     setSourceId(availableLogId);
@@ -200,18 +201,13 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
         引用当前日志 · {source.date}{source.draft ? '（草稿）' : ''}
       </label>}
       {attached && <p className="knowledge-muted">发送时会将引用的{attached.draft ? '草稿' : '日志'}文字交给 DeepSeek。{attached.text.length > LOG_REVIEW_MAX_TEXT && `只发送前 ${LOG_REVIEW_MAX_TEXT} 个字符。`}</p>}
-      {codeExcerpt && (!wholeScript || script) && <button type="button" className="assistant-prompt" disabled={Boolean(pending)} onClick={() => {
-        setQuestion(suggestedQuestion);
-        setError('');
-        composer.current?.focus();
-      }}>{suggestedQuestion}</button>}
-      {growthReference && growthPrompts.map((prompt) => (
+      {prompts.length > 0 && <div className="assistant-prompts" role="group" aria-label="快捷问题">{prompts.map((prompt) => (
         <button key={prompt} type="button" className="assistant-prompt" disabled={Boolean(pending)} onClick={() => {
           setQuestion(prompt);
           setError('');
           composer.current?.focus();
         }}>{prompt}</button>
-      ))}
+      ))}</div>}
       <textarea ref={composer} aria-label="输入问题" rows={3} maxLength={CHAT_QUESTION_LIMIT} placeholder="输入问题…"
         value={question} readOnly={Boolean(pending)} onChange={(event) => { setQuestion(event.target.value); setError(''); }}
         onKeyDown={(event) => {

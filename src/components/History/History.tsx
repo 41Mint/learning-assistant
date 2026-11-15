@@ -10,6 +10,7 @@ import RelationLink from '../Relations/RelationLink';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import LogContentEditor from '../StudyLog/LogContentEditor';
 import type { LogEditingProps } from '../StudyLog/LogContentEditor';
+import TrashLogButton from '../StudyLog/TrashLogButton';
 
 interface CalendarDay {
   date: string; // YYYY-MM-DD
@@ -32,6 +33,7 @@ const History = ({ draft, setDraft }: LogEditingProps) => {
   const [calendarView, setCalendarView] = useState(() => ({ date: selectedDate, month: new Date(`${selectedDate}T12:00:00`) }));
   const currentMonth = useMemo(() => calendarView.date === selectedDate ? calendarView.month : new Date(`${selectedDate}T12:00:00`), [calendarView, selectedDate]);
   const [message, setMessage] = useState('');
+  const [deletedDate, setDeletedDate] = useState('');
   const editButton = useRef<HTMLButtonElement>(null);
   const record = useRef<HTMLDivElement>(null);
   const selectedLog = selectedDate ? getLogByDate(selectedDate) : null;
@@ -283,6 +285,7 @@ const History = ({ draft, setDraft }: LogEditingProps) => {
                     setDraft(selectedLog);
                   }}>编辑 / 补充记录</button>
                   <RelationLink kind="log" id={selectedLog.id} />
+                  <TrashLogButton log={selectedLog} onMoved={() => setDeletedDate(selectedLog.date)} />
                 </>}
               />
               {message && <p role="status">{message}</p>}
@@ -297,7 +300,9 @@ const History = ({ draft, setDraft }: LogEditingProps) => {
           点击有绿点的日期查看当天的学习记录
         </div>
       )}
-      {selectedDate && !selectedLog && <p className="text-sm text-gray-500 dark:text-gray-400">该日期暂无记录，可使用上方“导入图文学习记录”保存学习材料。</p>}
+      {selectedDate && !selectedLog && (selectedDate === deletedDate
+        ? <p role="status">日志已移入<a href="#data">回收站</a>。</p>
+        : <p className="text-sm text-gray-500 dark:text-gray-400">该日期暂无学习记录。</p>)}
     </div>
   );
 

@@ -1,7 +1,9 @@
-import { IMAGE_PREFIX } from './imageStorage';
+import { IMAGE_PREFIX, referencedImageIds } from './imageStorage';
 import type { StoredImage } from './imageStorage';
 import { isCalendarDate, LEGACY_LOG_PREFIX, STORAGE_KEYS } from './storage';
-import type { GrowthData, KnowledgeData, LearningTask, StudyLog } from '../types';
+import type { GrowthData, KnowledgeData, LearningTask, StudyLog, TrashedStudyLog } from '../types';
+import { isTrashedLog } from './studyLogs';
+import type { StoredStudyLog } from './studyLogs';
 import type { ProjectCodeData } from '../types/projectCode';
 import { emptyKnowledge, validateKnowledge } from './knowledge';
 import { emptyGrowth, validateGrowth } from './growth';
@@ -11,6 +13,7 @@ import { readBackupAssets, replaceBackupAssets } from './projectCodeStorage';
 interface BackupImage { id: string; name: string; type: string; base64: string }
 interface BackupData {
   studyLogs: StudyLog[];
+  trashedLogs: TrashedStudyLog[];
   tasks: LearningTask[];
   skillTree: Record<string, unknown> | null;
   currentGoal: Record<string, unknown> | null;
@@ -23,7 +26,7 @@ interface BackupData {
 }
 export interface BackupFile {
   format: 'learning-assistant-backup';
-  version: 1 | 2 | 3 | 4 | 5;
+  version: 1 | 2 | 3 | 4 | 5 | 6;
   exportedAt: string;
   data: BackupData;
   images: BackupImage[];
@@ -34,10 +37,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 function strings(value: unknown): value is string[] { return Array.isArray(value) && value.every((item) => typeof item === 'string'); }
 function number(value: unknown): value is number { return typeof value === 'number' && Number.isFinite(value) && value >= 0; }
-function isLog(value: unknown): value is StudyLog {
+function isLog(value: unknown): value is StoredStudyLog {
   return isRecord(value) && typeof value.id === 'string' && isCalendarDate(value.date) && number(value.duration)
     && typeof value.content === 'string' && strings(value.tags) && strings(value.knowledgePoints)
-    && number(value.createdAt) && number(value.updatedAt);
+    && number(value.createdAt) && number(value.updatedAt) && (value.deletedAt === undefined || number(value.deletedAt));
 }
 function isTask(value: unknown): value is LearningTask {
   return isRecord(value) && typeof value.id === 'string' && typeof value.parentSkillId === 'string'
@@ -52,21 +55,26 @@ function optionalRecord(value: unknown): Record<string, unknown> | null {
 
 export function parseBackup(value: unknown): BackupFile {
   if (!isRecord(value) || value.format !== 'learning-assistant-backup'
-    || (value.version !== 1 && value.version !== 2 && value.version !== 3 && value.version !== 4 && value.version !== 5)
+    || (value.version !== 1 && value.version !== 2 && value.version !== 3 && value.version !== 4 && value.version !== 5 && value.version !== 6)
     || typeof value.exportedAt !== 'string' || !Number.isFinite(Date.parse(value.exportedAt)) || !isRecord(value.data)) {
     throw new Error('无法识别该备份，请选择由学习助手导出的 JSON 文件。');
   }
   const raw = value.data;
-  if (!Array.isArray(raw.studyLogs) || !raw.studyLogs.every(isLog) || !Array.isArray(raw.tasks) || !raw.tasks.every(isTask)) {
+  const trashedLogs = value.version >= 6 ? raw.trashedLogs : [];
+  if (!Array.isArray(raw.studyLogs) || !raw.studyLogs.every((log) => isLog(log) && !isTrashedLog(log))
+    || !Array.isArray(trashedLogs) || !trashedLogs.every((log): log is TrashedStudyLog => isLog(log) && isTrashedLog(log))
+    || !Array.isArray(raw.tasks) || !raw.tasks.every(isTask)) {
     throw new Error('学习记录或任务字段不完整，未修改本地数据。');
   }
   const studyLogs: StudyLog[] = raw.studyLogs;
   const tasks: LearningTask[] = raw.tasks;
-  const knowledge = value.version >= 3 ? validateKnowledge(raw.knowledge, new Set(studyLogs.map((log) => log.id))) : emptyKnowledge();
+  const allLogs = [...studyLogs, ...trashedLogs];
+  const logIds = new Set(allLogs.map((log) => log.id));
+  const knowledge = value.version >= 3 ? validateKnowledge(raw.knowledge, logIds) : emptyKnowledge();
   const growth = value.version >= 4 ? validateGrowth(raw.growth) : emptyGrowth();
   const projectCode = value.version >= 5 ? validateProjectCode(raw.projectCode) : emptyProjectCode();
   if (new Set(studyLogs.map((log) => log.date)).size !== studyLogs.length
-    || new Set(studyLogs.map((log) => log.id)).size !== studyLogs.length
+    || logIds.size !== allLogs.length
     || new Set(tasks.map((task) => task.id)).size !== tasks.length) throw new Error('备份存在重复记录，无法恢复。');
   const skillTree = optionalRecord(raw.skillTree);
   if (skillTree && (skillTree.version !== 1 || !strings(skillTree.completedIds))) throw new Error('技能进度格式不正确。');
@@ -93,14 +101,14 @@ export function parseBackup(value: unknown): BackupFile {
   }
   const ids = new Set(images.map((image) => image.id));
   if (ids.size !== images.length) throw new Error('图片 ID 重复，无法恢复。');
-  for (const content of [...studyLogs.map((log) => log.content), ...knowledge.entries.map((entry) => entry.content)]) {
-    for (const match of content.matchAll(/learning-image:([a-zA-Z0-9-]+)/g)) {
-      if (!ids.has(match[1])) throw new Error(`备份缺少记录引用的图片：${match[1]}`);
+  for (const content of [...allLogs.map((log) => log.content), ...knowledge.entries.map((entry) => entry.content)]) {
+    for (const id of referencedImageIds(content)) {
+      if (!ids.has(id)) throw new Error(`备份缺少记录引用的图片：${id}`);
     }
   }
   return {
     format: 'learning-assistant-backup', version: value.version, exportedAt: value.exportedAt,
-    data: { studyLogs, tasks, skillTree, currentGoal, streak, settings: optionalRecord(raw.settings), pomodoroToday: optionalRecord(raw.pomodoroToday), knowledge, growth, projectCode }, images,
+    data: { studyLogs, trashedLogs, tasks, skillTree, currentGoal, streak, settings: optionalRecord(raw.settings), pomodoroToday: optionalRecord(raw.pomodoroToday), knowledge, growth, projectCode }, images,
   };
 }
 
@@ -125,14 +133,17 @@ export async function createBackup(): Promise<BackupFile> {
     try { raw[name] = item === null ? null : JSON.parse(item); }
     catch { throw new Error(`无法读取 ${name}，请保留现有数据并联系开发者。`); }
   }
-  raw.studyLogs ??= [];
+  const stored = raw.studyLogs ?? [];
+  if (!Array.isArray(stored) || !stored.every(isLog)) throw new Error('学习日志格式不正确。');
+  raw.studyLogs = stored.filter((log) => !isTrashedLog(log));
+  raw.trashedLogs = stored.filter(isTrashedLog);
   raw.tasks ??= [];
   raw.knowledge ??= emptyKnowledge();
   raw.growth ??= emptyGrowth();
   const assets = await readBackupAssets();
   raw.projectCode = assets.projectCode;
   const images = await Promise.all(assets.images.map(encodeImage));
-  return parseBackup({ format: 'learning-assistant-backup', version: 5, exportedAt: new Date().toISOString(), data: raw, images });
+  return parseBackup({ format: 'learning-assistant-backup', version: 6, exportedAt: new Date().toISOString(), data: raw, images });
 }
 
 export async function restoreBackup(backup: BackupFile): Promise<void> {
@@ -143,7 +154,7 @@ export async function restoreBackup(backup: BackupFile): Promise<void> {
     blob: new Blob([Uint8Array.from(atob(image.base64), (character) => character.charCodeAt(0))], { type: image.type }),
   }));
   const mappings: Array<[string, unknown]> = [
-    [STORAGE_KEYS.STUDY_LOGS, checked.data.studyLogs], [STORAGE_KEYS.TASKS, checked.data.tasks],
+    [STORAGE_KEYS.STUDY_LOGS, [...checked.data.studyLogs, ...checked.data.trashedLogs]], [STORAGE_KEYS.TASKS, checked.data.tasks],
     [STORAGE_KEYS.SKILL_TREE, checked.data.skillTree], [STORAGE_KEYS.CURRENT_GOAL, checked.data.currentGoal],
     [STORAGE_KEYS.STREAK, checked.data.streak], [STORAGE_KEYS.SETTINGS, checked.data.settings], [STORAGE_KEYS.POMODORO_TODAY, checked.data.pomodoroToday],
     [STORAGE_KEYS.KNOWLEDGE, checked.data.knowledge],

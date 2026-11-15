@@ -22,6 +22,8 @@ export interface StudyLog {
   updatedAt: number; // 时间戳
 }
 
+export type TrashedStudyLog = StudyLog & { deletedAt: number };
+
 // Streak状态
 export interface StreakState {
   currentStreak: number; // 当前连续天数

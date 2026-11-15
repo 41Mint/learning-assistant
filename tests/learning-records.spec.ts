@@ -78,7 +78,7 @@ test('新版备份包含真实图片；取消无写入；确认恢复后图文�
   await page.getByRole('button', { name: '导出完整备份', exact: true }).click();
   const download = await downloadEvent;
   const backup = JSON.parse(await readFile((await download.path())!, 'utf8'));
-  expect(backup.version).toBe(5);
+  expect(backup.version).toBe(6);
   expect(backup.data.knowledge.entries).toHaveLength(1);
   expect(backup.images).toHaveLength(1);
   expect(Buffer.from(backup.images[0].base64, 'base64').equals(png)).toBe(true);
@@ -129,6 +129,214 @@ test('旧备份可读取，损坏备份无写入，写入失败可回退', async
     return { oldVersion: old.version, rejected, rolledBack, unchanged: before === localStorage.getItem('learning-assistant:study-logs') };
   });
   expect(result).toEqual({ oldVersion: 1, rejected: true, rolledBack: true, unchanged: true });
+});
+
+test('历史日志可从备份中的回收站恢复图文和关联，同日有记录时可改日期', async ({ page, browser }) => {
+  await importNote(page);
+  const { logId, entryId, versionId } = await page.evaluate(async (date) => {
+    const { useStudyLogStore } = await import('/src/store/studyLogStore.ts');
+    const { useKnowledgeStore } = await import('/src/store/knowledgeStore.ts');
+    const { useProjectCodeStore } = await import('/src/store/projectCodeStore.ts');
+    const { useGrowthStore } = await import('/src/store/growthStore.ts');
+    const study = useStudyLogStore.getState();
+    const log = study.getLogByDate(date);
+    study.saveLog({ ...log, tags: ['Unity'], duration: 25 });
+    const entryId = useKnowledgeStore.getState().saveEntry({ title: '像素图示', aliases: [], category: '', content: '' }, { fromLog: { id: log.id, note: '原始截图' } });
+    const versionId = await useProjectCodeStore.getState().saveVersion({
+      project: { name: '示例项目', repositoryUrl: '', tutorialUrl: '' }, path: 'Sprite.cs', content: 'class Sprite {}', githubUrl: '', note: '',
+    }, { kind: 'log', id: log.id });
+    useGrowthStore.getState().savePractice({ id: 'pixel-practice', title: '像素实践', domains: ['Unity'] },
+      { id: 'first-practice', date, note: '', logIds: [log.id], entryIds: [] });
+    return { logId: log.id, entryId, versionId };
+  }, day);
+  const deleteLog = page.getByRole('dialog', { name: '删除学习日志' });
+  await page.getByRole('button', { name: '删除日志', exact: true }).click();
+  await deleteLog.getByRole('button', { name: '取消' }).click();
+  await expect(page.getByRole('img', { name: '示意截图' })).toBeVisible();
+  await page.getByRole('button', { name: '删除日志', exact: true }).click();
+  await deleteLog.getByRole('button', { name: '移入回收站' }).click();
+  await expect(page.getByText('日志已移入回收站。')).toBeVisible();
+  await expect(page.getByRole('img', { name: '示意截图' })).toHaveCount(0);
+  await page.getByRole('button', { name: '检索资料', exact: true }).click();
+  const search = page.getByRole('dialog', { name: '检索资料' });
+  await search.getByRole('searchbox').fill('学习步骤');
+  await expect(search.getByRole('link', { name: /学习步骤/ })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.getByRole('link', { name: '回收站' }).click();
+  const trash = page.getByRole('region', { name: '回收站' });
+  await expect(trash.getByText(/学习步骤/)).toBeVisible();
+  await page.reload();
+  await expect(trash.getByText(/学习步骤/)).toBeVisible();
+  await page.evaluate(async (id) => {
+    const { useKnowledgeStore } = await import('/src/store/knowledgeStore.ts');
+    useKnowledgeStore.getState().saveEntry({ title: '像素图示已补充', aliases: [], category: '', content: '' }, { id });
+  }, entryId);
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: '导出完整备份' }).click();
+  const backup = JSON.parse(await readFile((await (await download).path())!, 'utf8'));
+  expect(backup.data.studyLogs.some(({ id }: { id: string }) => id === logId)).toBe(false);
+  expect(backup.data.trashedLogs).toEqual([expect.objectContaining({ id: logId, date: day, duration: 25, tags: ['Unity'], deletedAt: expect.any(Number) })]);
+  expect(backup.images).toHaveLength(1);
+  expect(backup.data.knowledge.logLinks).toEqual([expect.objectContaining({ entryId, logId })]);
+
+  const context = await browser.newContext();
+  try {
+    const restored = await context.newPage();
+    await restored.goto('/#data');
+    await restored.getByLabel('选择备份文件').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+    await expect(restored.getByText('回收站中有 1 篇日志。')).toBeVisible();
+    await Promise.all([restored.waitForEvent('load'), restored.getByRole('button', { name: '确认恢复并刷新' }).click()]);
+    await restored.getByRole('region', { name: '回收站' }).getByText(/学习步骤/).waitFor();
+    await restored.evaluate(async (date) => {
+      const { useStudyLogStore } = await import('/src/store/studyLogStore.ts');
+      useStudyLogStore.getState().appendToDate(date, '同日新写的日志');
+    }, day);
+    await restored.getByRole('button', { name: '恢复日志' }).click();
+    const dialog = restored.getByRole('dialog', { name: '恢复学习日志' });
+    const restoreDate = dialog.getByLabel('恢复到日期');
+    await restoreDate.fill(day);
+    await expect(dialog.getByRole('button', { name: '确认恢复' })).toBeDisabled();
+    const newDate = '2026-11-03';
+    await restoreDate.fill(newDate);
+    await dialog.getByRole('button', { name: '确认恢复' }).click();
+    await restored.getByRole('region', { name: '回收站' }).getByRole('link', { name: newDate }).click();
+    const history = restored.locator('#study-history');
+    const image = history.getByRole('img', { name: '示意截图' });
+    await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+    await expect(history.getByRole('link', { name: '像素图示已补充', exact: true })).toBeVisible();
+    await restored.goto('/#code/' + versionId);
+    await expect(restored.getByRole('region', { name: '引用记录' }).getByRole('link', { name: /学习步骤/ })).toHaveAttribute('href', '#history/' + newDate);
+    await restored.goto('/#path/pixel-practice');
+    await expect(restored.getByRole('link', { name: /学习步骤/ })).toHaveAttribute('href', '#history/' + newDate);
+    await restored.goto('/#history/' + day);
+    await expect(history.getByText('同日新写的日志')).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
+test('今日日志可移出并恢复到原日期，刷新不会自动创建冲突日志', async ({ page }) => {
+  await page.goto('/#today');
+  const today = page.getByRole('region', { name: '今日学习' });
+  const logId = await page.evaluate(async () => {
+    const { useStudyLogStore } = await import('/src/store/studyLogStore.ts');
+    const log = useStudyLogStore.getState().getTodayLog();
+    useStudyLogStore.getState().saveLog({ ...log, content: '今天整理的内容' });
+    return log.id;
+  });
+  await today.getByRole('button', { name: '删除日志' }).click();
+  await page.getByRole('dialog', { name: '删除学习日志' }).getByRole('button', { name: '移入回收站' }).click();
+  await page.reload();
+  await expect(today.getByRole('button', { name: '写日志' })).toBeVisible();
+  for (const text of ['', '这份草稿要取消。']) {
+    await today.getByRole('button', { name: '写日志' }).click();
+    const editor = today.getByRole('form', { name: '今日记录编辑表单' });
+    await expect(editor.getByRole('button', { name: '保存记录' })).toBeDisabled();
+    if (text) await editor.getByLabel('学习内容（Markdown）').fill(text);
+    await editor.getByRole('button', { name: '取消编辑' }).click();
+    await expect(today.getByRole('button', { name: '写日志' })).toBeVisible();
+    await expect(today.getByRole('button', { name: '删除日志' })).toHaveCount(0);
+  }
+  await today.getByRole('link', { name: '回收站' }).click();
+  await expect(page.getByRole('region', { name: '回收站' }).getByRole('listitem')).toHaveCount(1);
+  await page.getByRole('button', { name: '恢复日志' }).click();
+  const dialog = page.getByRole('dialog', { name: '恢复学习日志' });
+  await expect(dialog.getByLabel('恢复到日期')).toHaveCount(0);
+  await dialog.getByRole('button', { name: '确认恢复' }).click();
+  await expect(page.getByText('回收站里没有学习日志。')).toBeVisible();
+  await page.goto('/#today');
+  await expect(today.getByText('今天整理的内容')).toBeVisible();
+  expect(await page.evaluate(async () => {
+    const { useStudyLogStore } = await import('/src/store/studyLogStore.ts');
+    return useStudyLogStore.getState().currentLog?.id;
+  })).toBe(logId);
+  await today.getByRole('button', { name: '删除日志' }).click();
+  await page.getByRole('dialog', { name: '删除学习日志' }).getByRole('button', { name: '移入回收站' }).click();
+  await today.getByRole('button', { name: '写日志' }).click();
+  await today.getByLabel('学习内容（Markdown）').fill('这篇新日志只在保存后写入。');
+  await today.getByRole('button', { name: '保存记录' }).click();
+  await expect(today.getByText('这篇新日志只在保存后写入。')).toBeVisible();
+  expect(await page.evaluate(async () => {
+    const { useStudyLogStore } = await import('/src/store/studyLogStore.ts');
+    return useStudyLogStore.getState().trashedLogs.map(({ id }) => id);
+  })).toEqual([logId]);
+});
+
+test('回收站彻底删除只移除该日志、链接和独占图片，写入失败后可重试', async ({ page }) => {
+  await importNote(page);
+  const { logId, sharedImage, codeId } = await page.evaluate(async (date) => {
+    const { useStudyLogStore } = await import('/src/store/studyLogStore.ts');
+    const { useKnowledgeStore } = await import('/src/store/knowledgeStore.ts');
+    const { useProjectCodeStore } = await import('/src/store/projectCodeStore.ts');
+    const { useGrowthStore } = await import('/src/store/growthStore.ts');
+    const { getImages, writeImages } = await import('/src/utils/imageStorage.ts');
+    const study = useStudyLogStore.getState();
+    const log = study.getLogByDate(date);
+    const [shared] = await getImages();
+    await writeImages([{ ...shared, id: 'private-log-image' }]);
+    useKnowledgeStore.getState().saveEntry({ title: '共用图片词条', aliases: [], category: '', content: log.content }, { fromLog: { id: log.id, note: '' } });
+    study.saveLog({ ...log, content: log.content + '\n\n![独占图片](learning-image:private-log-image)' });
+    const codeId = await useProjectCodeStore.getState().saveVersion({
+      project: { name: '示例项目', repositoryUrl: '', tutorialUrl: '' }, path: 'Sprite.cs', content: 'class Sprite {}', githubUrl: '', note: '',
+    }, { kind: 'log', id: log.id });
+    const growth = useGrowthStore.getState();
+    growth.savePractice({ id: 'test-practice', title: '像素实践', domains: ['Unity'] },
+      { id: 'practice', date, note: '', logIds: [log.id], entryIds: [] });
+    growth.saveExercise({ id: 'test-exercise', title: '像素练习', domains: ['Unity'], action: '练习', done: '',
+      sources: { logIds: [log.id], entryIds: [], codeVersionIds: [] } });
+    study.trashLog(log.id);
+    localStorage.setItem('learning-assistant:log:' + date, JSON.stringify({ content: '旧版副本', duration: 0 }));
+    return { logId: log.id, sharedImage: shared.id, codeId };
+  }, day);
+  await page.goto('/#data');
+  const trash = page.getByRole('region', { name: '回收站' });
+  const firstPosition = (await trash.boundingBox())!.y;
+  expect(firstPosition).toBeLessThan((await page.getByRole('heading', { name: /数据备份与恢复/ }).boundingBox())!.y);
+  const remove = page.getByRole('dialog', { name: '彻底删除学习日志' });
+  await trash.getByRole('button', { name: '彻底删除' }).click();
+  await expect(remove.getByRole('button', { name: '取消' })).toBeFocused();
+  await remove.getByRole('button', { name: '取消' }).click();
+  await expect(trash.getByRole('button', { name: '恢复日志' })).toBeVisible();
+  const before = await page.evaluate(async () => {
+    const { createBackup } = await import('/src/utils/dataBackup.ts');
+    const { data, images } = await createBackup();
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'learning-assistant:study-logs') {
+        Storage.prototype.setItem = original;
+        throw new Error('模拟存储失败');
+      }
+      return original.call(this, key, value);
+    };
+    return { data, images };
+  });
+  await trash.getByRole('button', { name: '彻底删除' }).click();
+  await remove.getByRole('button', { name: '确认彻底删除' }).click();
+  await expect(remove.getByRole('alert')).toContainText('模拟存储失败');
+  const failed = await page.evaluate(async () => {
+    const { createBackup } = await import('/src/utils/dataBackup.ts');
+    const { data, images } = await createBackup();
+    return { data, images };
+  });
+  expect(failed).toEqual(before);
+  await remove.getByRole('button', { name: '确认彻底删除' }).click();
+  await expect(trash.getByRole('status')).toHaveText('日志已彻底删除。');
+  const backup = await page.evaluate(async () => {
+    const { createBackup } = await import('/src/utils/dataBackup.ts');
+    return createBackup();
+  });
+  expect(backup.data.trashedLogs).toEqual([]);
+  expect(backup.data.studyLogs.some(({ id }: { id: string }) => id === logId)).toBe(false);
+  expect(backup.images.map(({ id }: { id: string }) => id)).toEqual([sharedImage]);
+  expect(backup.data.knowledge.entries).toHaveLength(1);
+  expect(backup.data.knowledge.logLinks).toEqual([]);
+  expect(backup.data.projectCode.versions[0].id).toBe(codeId);
+  expect(backup.data.projectCode.links).toEqual([]);
+  expect(backup.data.growth.outcomes[0].practices[0].logIds).toEqual([]);
+  expect(backup.data.growth.exercises[0].sources.logIds).toEqual([]);
+  await page.reload();
+  await page.goto('/#history/' + day);
+  await expect(page.getByText('该日期暂无学习记录。')).toBeVisible();
 });
 
 test('Day1 真实材料：15 张图片的导入、刷新和备份', async ({ page }, testInfo) => {

@@ -5,10 +5,12 @@ import { usePomodoroStore } from '../../store/pomodoroStore';
 import { replaceBackupAssets } from '../../utils/projectCodeStorage';
 import { emptyProjectCode } from '../../utils/projectCode';
 import { IS_KNOWLEDGE_DEMO, KNOWLEDGE_DEMO_HREF, STORAGE_PREFIX } from '../../utils/workspaceMode';
+import { isTrashedLog } from '../../utils/studyLogs';
+import type { StoredStudyLog } from '../../utils/studyLogs';
 
 function addStoredDuration(date: string, minutes: number, content: string) {
-  const logs = getStorageItem<StudyLog[]>(STORAGE_KEYS.STUDY_LOGS, []);
-  const existingIndex = logs.findIndex((log) => log.date === date);
+  const logs = getStorageItem<StoredStudyLog[]>(STORAGE_KEYS.STUDY_LOGS, []);
+  const existingIndex = logs.findIndex((log) => log.date === date && !isTrashedLog(log));
   const now = Date.now();
 
   if (existingIndex >= 0) {
@@ -151,7 +153,7 @@ export default function DevTools() {
     console.clear();
     console.log('=== 🔍 Learning Assistant 数据调试 ===\n');
 
-    const logs = getStorageItem<StudyLog[]>(STORAGE_KEYS.STUDY_LOGS, []);
+    const logs = getStorageItem<StoredStudyLog[]>(STORAGE_KEYS.STUDY_LOGS, []).filter((log) => !isTrashedLog(log));
     console.log(`📦 总共 ${logs.length} 条学习记录\n`);
 
     logs.sort((a, b) => a.date.localeCompare(b.date)).forEach((log) => {

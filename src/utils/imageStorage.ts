@@ -8,6 +8,10 @@ export interface StoredImage {
 
 export const IMAGE_PREFIX = 'learning-image:';
 
+export function referencedImageIds(content: string): string[] {
+  return [...content.matchAll(/learning-image:([a-zA-Z0-9-]+)/g)].map((match) => match[1]);
+}
+
 export async function getImages(): Promise<StoredImage[]> {
   const database = await openDatabase();
   try {

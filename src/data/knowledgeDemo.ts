@@ -89,7 +89,7 @@ function demoBackup(): BackupFile {
   return {
     format: 'learning-assistant-backup', version: 5, exportedAt: new Date(FIXTURE_TIME).toISOString(), images: [],
     data: {
-      studyLogs, tasks: [], skillTree: null, currentGoal: null, streak: null, settings: null, pomodoroToday: null,
+      studyLogs, trashedLogs: [], tasks: [], skillTree: null, currentGoal: null, streak: null, settings: null, pomodoroToday: null,
       knowledge: { version: 1, entries, logLinks, relations }, growth: emptyGrowth(),
       projectCode: { version: 1, projects: [{ id: projectId, name: 'Unity 学习演示', repositoryUrl: '', tutorialUrl: '' }], versions, links: codeLinks },
     },

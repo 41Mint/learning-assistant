@@ -289,6 +289,16 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .stats-card > div { margin-bottom: 20px; }
 .backup-card { max-width: 900px; }
 .backup-card > p { color: var(--app-muted); font-size: 14px; line-height: 1.7; }
+.log-trash { margin-bottom: 16px; }
+.log-trash h2 { margin: 0 0 10px; font-size: 18px; }
+.log-trash a { color: var(--app-accent); }
+.log-trash-list { list-style: none; padding: 0; margin: 0; }
+.log-trash-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-top: 1px solid var(--app-border); }
+.log-trash-list li > div { min-width: 0; overflow-wrap: anywhere; }
+.log-trash-list time { display: block; }
+.log-trash-actions { display: flex; flex: none; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 8px; }
+.log-trash-actions .note-button { margin-right: 0; }
+@media (max-width: 440px) { .log-trash-list li { align-items: flex-start; flex-direction: column; } }
 @media (min-width: 1180px) { .focus-editor .editor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 900px) {
   .today-layout, .history-layout { grid-template-columns: minmax(0, 1fr); }
@@ -630,7 +640,8 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .assistant-code-picker :is(select, input) { width: 100%; min-width: 0; padding: 6px; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-bg); color: var(--app-text); }
 .assistant-code-range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .assistant-code-picker pre { margin: 0; padding: 8px; max-height: 130px; overflow: auto; background: var(--app-bg); }
-.assistant-prompt { justify-self: start; max-width: 100%; font-size: 13px; }
+.assistant-prompts { display: flex; gap: 6px; min-width: 0; overflow-x: auto; overscroll-behavior-inline: contain; padding: 4px; scrollbar-width: thin; }
+.assistant-prompt { flex: none; white-space: nowrap; font-size: 13px; }
 .assistant-prompt:disabled { cursor: default; opacity: 0.6; }
 .assistant-review-picker p { margin: 0; }
 .assistant-review-logs { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }

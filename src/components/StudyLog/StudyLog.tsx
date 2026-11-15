@@ -7,10 +7,14 @@ import RelationLink from '../Relations/RelationLink';
 import { useStudyLogStore } from '../../store/studyLogStore';
 import LogContentEditor from './LogContentEditor';
 import type { LogEditingProps } from './LogContentEditor';
+import TrashLogButton from './TrashLogButton';
+import { getTodayDate, STORAGE_KEYS } from '../../utils/storage';
+import { createTodayLogDraft } from '../../utils/studyLogs';
 
 export default function StudyLog({ draft, setDraft }: LogEditingProps) {
   const {
     currentLog,
+    error,
     getTodayLog,
     loadLogs,
     addTag,
@@ -22,11 +26,18 @@ export default function StudyLog({ draft, setDraft }: LogEditingProps) {
   const [newTag, setNewTag] = useState('');
   const [newKnowledge, setNewKnowledge] = useState('');
   const [message, setMessage] = useState('');
+  const [newDraftId, setNewDraftId] = useState<string>();
   const editButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     loadLogs();
-    getTodayLog();
+    const state = useStudyLogStore.getState();
+    if (!state.error && !state.currentLog && !state.trashedLogs.some(({ date }) => date === getTodayDate())) {
+      try { getTodayLog(); } catch { /* The store exposes the write error. */ }
+    }
+    const reload = (event: StorageEvent) => { if (event.key === STORAGE_KEYS.STUDY_LOGS || event.key === null) loadLogs(); };
+    window.addEventListener('storage', reload);
+    return () => window.removeEventListener('storage', reload);
   }, [getTodayLog, loadLogs]);
 
   const handleAddTag = () => {
@@ -43,11 +54,7 @@ export default function StudyLog({ draft, setDraft }: LogEditingProps) {
     }
   };
 
-  if (!currentLog) {
-    return <div>加载中...</div>;
-  }
-
-  const reading = (
+  const reading = currentLog ? (
     <div className="module-card study-log-card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6" hidden={Boolean(draft)}>
       <div className="study-log-heading flex justify-between items-center mb-4">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
@@ -67,6 +74,7 @@ export default function StudyLog({ draft, setDraft }: LogEditingProps) {
             setDraft(currentLog);
           }}>编辑</button>
           <RelationLink kind="log" id={currentLog.id} />
+          <TrashLogButton log={currentLog} onMoved={() => setMessage('')} />
         </>
       } />
       {message && <p role="status">{message}</p>}
@@ -155,12 +163,28 @@ export default function StudyLog({ draft, setDraft }: LogEditingProps) {
         </div>
       </div>
     </div>
+  ) : (
+    <div className="module-card study-log-card" hidden={Boolean(draft)}>
+      <h2>📝 今日学习记录</h2>
+      {error ? <p role="alert">{error}</p> : <>
+        <p>今天还没有学习日志。已删除的日志可在<a href="#data">回收站</a>恢复。</p>
+        <button ref={editButton} type="button" className="note-button" onClick={() => {
+          const log = createTodayLogDraft();
+          setMessage('');
+          setNewDraftId(log.id);
+          setDraft(log);
+        }}>写日志</button>
+        <MarkdownImport />
+        {message && <p role="alert">{message}</p>}
+      </>}
+    </div>
   );
 
   return (
     <div>
-      {draft && <LogContentEditor key={draft.id} log={draft} kind="today" onClose={(saved) => {
+      {draft && <LogContentEditor key={draft.id} log={draft} kind="today" creating={draft.id === newDraftId} onClose={(saved) => {
         setDraft(null);
+        setNewDraftId(undefined);
         if (saved) setMessage('学习记录已保存。');
         window.requestAnimationFrame(() => editButton.current?.focus());
       }} />}

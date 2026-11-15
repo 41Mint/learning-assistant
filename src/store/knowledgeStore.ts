@@ -1,12 +1,12 @@
 import { create } from 'zustand';
-import type { KnowledgeData, KnowledgeEntry, KnowledgeLogLink, KnowledgeRelation } from '../types';
+import type { KnowledgeData, KnowledgeEntry, KnowledgeLogLink, KnowledgeRelation, StudyLog } from '../types';
 import type { RelationAnnotation } from '../types/relations';
 import type { LogReviewSuggestion } from '../types/logReview';
 import { emptyKnowledge, entryNames, normalizedName, otherEntryId, validateKnowledge } from '../utils/knowledge';
 import { entryCodeIds } from '../utils/projectCode';
 import { cleanRelationAnnotation } from '../utils/relationAnnotation';
 import { generateId, STORAGE_KEYS } from '../utils/storage';
-import { useStudyLogStore } from './studyLogStore';
+import { storedStudyLogIds, useStudyLogStore } from './studyLogStore';
 import { useProjectCodeStore } from './projectCodeStore';
 
 export type EntryInput = Pick<KnowledgeEntry, 'title' | 'aliases' | 'category' | 'content'>;
@@ -55,7 +55,7 @@ interface KnowledgeStore extends KnowledgeData {
   restoreEntryEdit: (expected: EntryEditSnapshot, replacement: EntryEditSnapshot) => void;
   deleteEntry: (id: string) => void;
   linkLog: (entryId: string, logId: string, note: string, annotation?: RelationAnnotation) => void;
-  saveReviewedLog: (logId: string, content: string, originalContent: string, suggestions: LogReviewSuggestion[]) => void;
+  saveReviewedLog: (logId: string, content: string, originalContent: string, suggestions: LogReviewSuggestion[], draft?: StudyLog) => void;
   unlinkLog: (id: string) => void;
   relate: (sourceId: string, targetId: string, annotation?: RelationAnnotation) => void;
   removeRelation: (id: string) => void;
@@ -67,7 +67,7 @@ interface KnowledgeStore extends KnowledgeData {
 export const useKnowledgeStore = create<KnowledgeStore>((set, get) => {
   const persist = (data: KnowledgeData) => {
     if (get().error) throw new Error(get().error);
-    validateKnowledge(data, new Set(useStudyLogStore.getState().logs.map((log) => log.id)));
+    validateKnowledge(data, storedStudyLogIds(useStudyLogStore.getState()));
     localStorage.setItem(STORAGE_KEYS.KNOWLEDGE, JSON.stringify(data));
     set(data);
   };
@@ -148,9 +148,9 @@ export const useKnowledgeStore = create<KnowledgeStore>((set, get) => {
       logLinks: get().logLinks.filter((item) => item.entryId !== id),
       relations: get().relations.filter((item) => item.sourceId !== id && item.targetId !== id),
     }),
-    saveReviewedLog: (logId, content, originalContent, suggestions) => {
+    saveReviewedLog: (logId, content, originalContent, suggestions, draft) => {
       const study = useStudyLogStore.getState();
-      const log = study.logs.find(({ id }) => id === logId);
+      const log = draft ?? study.logs.find(({ id }) => id === logId);
       if (!log || log.content !== originalContent) throw new Error('日志已有修改，请重新打开后再整理。');
       const tags = new Set(log.tags.map(normalizedName));
       const addedTags: string[] = [];
@@ -186,14 +186,18 @@ export const useKnowledgeStore = create<KnowledgeStore>((set, get) => {
         linked.add(entryId);
         links.push({ id: generateId(), logId, entryId, note: suggestion.kind === 'link' ? suggestion.note.trim() : '' });
       }
-      if (!links.length) { study.updateLogContent(logId, content, originalContent, addedTags); return; }
+      const save = () => draft ? study.saveLog({ ...draft, content, tags: [...draft.tags, ...addedTags] })
+        : study.updateLogContent(logId, content, originalContent, addedTags);
+      if (!links.length) { save(); return; }
       if (get().error) throw new Error(get().error);
       next.entries = [...next.entries, ...created];
       next.logLinks = [...next.logLinks, ...links];
-      validateKnowledge(next, new Set(study.logs.map(({ id }) => id)));
+      const logIds = storedStudyLogIds(study);
+      if (draft) logIds.add(draft.id);
+      validateKnowledge(next, logIds);
       const previous = localStorage.getItem(STORAGE_KEYS.KNOWLEDGE);
       localStorage.setItem(STORAGE_KEYS.KNOWLEDGE, JSON.stringify(next));
-      try { study.updateLogContent(logId, content, originalContent, addedTags); }
+      try { save(); }
       catch (error) {
         if (previous === null) localStorage.removeItem(STORAGE_KEYS.KNOWLEDGE);
         else localStorage.setItem(STORAGE_KEYS.KNOWLEDGE, previous);

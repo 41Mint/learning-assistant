@@ -16,8 +16,9 @@ export function readProjectCode(): Promise<ProjectCodeData> {
   });
 }
 
-export function updateProjectCode(edit: (data: ProjectCodeData) => ProjectCodeData): Promise<ProjectCodeData> {
-  return transactAssets([PROJECT_CODE_STORE], 'readwrite', (transaction, abort) => {
+export function updateProjectCode(edit: (data: ProjectCodeData) => ProjectCodeData, deleteImageIds?: () => string[]): Promise<ProjectCodeData> {
+  const stores = deleteImageIds ? [PROJECT_CODE_STORE, IMAGE_STORE] : [PROJECT_CODE_STORE];
+  return transactAssets(stores, 'readwrite', (transaction, abort) => {
     const store = transaction.objectStore(PROJECT_CODE_STORE);
     const request = store.get(LIBRARY_KEY);
     let next: ProjectCodeData;
@@ -25,6 +26,10 @@ export function updateProjectCode(edit: (data: ProjectCodeData) => ProjectCodeDa
       try {
         next = validateProjectCode(edit(storedProjectCode(request.result)));
         store.put(next, LIBRARY_KEY);
+        if (deleteImageIds) {
+          const images = transaction.objectStore(IMAGE_STORE);
+          for (const id of deleteImageIds()) images.delete(id);
+        }
       } catch (error) {
         abort(error);
       }

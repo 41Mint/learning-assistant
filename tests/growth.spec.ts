@@ -178,7 +178,7 @@ test('完整备份在独立浏览器恢复实践与回链，v3 继续恢复词�
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出完整备份' }).click();
   const backup = JSON.parse(await readFile((await (await download).path())!, 'utf8'));
-  expect(backup.version).toBe(5);
+  expect(backup.version).toBe(6);
 
   const context = await browser.newContext();
   try {
@@ -613,6 +613,11 @@ test('成长看板可单选和 Shift 多选，仅将选中的卡片交给智能�
   await expect(assistant.getByText('引用 ' + title)).toBeVisible();
   const scope = assistant.getByRole('group', { name: '卡片引用范围' });
   await expect(scope.getByRole('button', { name: '当前卡片' })).toHaveAttribute('aria-pressed', 'true');
+  const prompts = assistant.getByRole('group', { name: '快捷问题' });
+  await expect(prompts.getByRole('button')).toHaveCount(2);
+  expect(await prompts.getByRole('button').evaluateAll((buttons) => buttons.every((button) => button.getBoundingClientRect().top === buttons[0].getBoundingClientRect().top))).toBe(true);
+  await page.setViewportSize({ width: 320, height: 840 });
+  await expect.poll(() => prompts.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
   await assistant.getByRole('button', { name: '这个练习可以怎么开始？' }).click();
   expect(requests).toHaveLength(0);
   await assistant.getByRole('button', { name: '发送', exact: true }).click();
@@ -632,6 +637,7 @@ test('成长看板可单选和 Shift 多选，仅将选中的卡片交给智能�
     { title: jump, domains: ['Unity', 'C#'], description: expect.stringContaining('跳跃与落地'), completed: false },
   ] });
   await assistant.getByRole('button', { name: '关闭学习智能体' }).click();
+  await page.setViewportSize({ width: 1280, height: 720 });
   await selection.getByRole('button', { name: '询问智能体', exact: true }).click();
   await expect(assistant.getByRole('button', { name: '这些卡片可以怎么分组？' })).toBeVisible();
   await assistant.getByRole('button', { name: '关闭学习智能体' }).click();

@@ -1,8 +1,10 @@
 import { create } from 'zustand';
-import { getStorageItem, setStorageItem, STORAGE_KEYS, LEGACY_LOG_PREFIX, generateId, getTodayDate } from '../utils/storage';
-import type { StudyLog } from '../types';
+import { STORAGE_KEYS, LEGACY_LOG_PREFIX, generateId, getTodayDate, isCalendarDate } from '../utils/storage';
+import { createTodayLogDraft, isEmptyLogContent, isTrashedLog, readStoredLogs } from '../utils/studyLogs';
+import type { StoredStudyLog } from '../utils/studyLogs';
+import type { StudyLog, TrashedStudyLog } from '../types';
 
-function migrateLegacyLogs(logs: StudyLog[]): StudyLog[] {
+function migrateLegacyLogs(logs: StoredStudyLog[]): StoredStudyLog[] {
   const knownDates = new Set(logs.map((log) => log.date));
   const migratedLogs: StudyLog[] = [];
 
@@ -36,8 +38,20 @@ function migrateLegacyLogs(logs: StudyLog[]): StudyLog[] {
   return migratedLogs.length > 0 ? [...logs, ...migratedLogs] : logs;
 }
 
+function splitLogs(stored: StoredStudyLog[]) {
+  const logs = stored.filter((log) => !isTrashedLog(log));
+  return { logs, trashedLogs: stored.filter(isTrashedLog), currentLog: logs.find(({ date }) => date === getTodayDate()) ?? null };
+}
+
+function saveStoredLogs(stored: StoredStudyLog[]) {
+  localStorage.setItem(STORAGE_KEYS.STUDY_LOGS, JSON.stringify(stored));
+  return { ...splitLogs(stored), error: '' };
+}
+
 interface StudyLogStore {
   logs: StudyLog[];
+  trashedLogs: TrashedStudyLog[];
+  error: string;
   currentLog: StudyLog | null;
 
   // 加载所有日志
@@ -48,6 +62,8 @@ interface StudyLogStore {
 
   // 保存日志
   saveLog: (log: StudyLog) => void;
+  trashLog: (id: string) => void;
+  restoreLog: (id: string, date: string) => void;
   appendToDate: (date: string, content: string) => void;
   updateLogContent: (id: string, content: string, originalContent?: string, addedTags?: string[]) => void;
 
@@ -73,41 +89,40 @@ interface StudyLogStore {
   getLogByDate: (date: string) => StudyLog | undefined;
 }
 
+export function storedStudyLogIds({ logs, trashedLogs }: Pick<StudyLogStore, 'logs' | 'trashedLogs'>): Set<string> {
+  return new Set([...logs, ...trashedLogs].map(({ id }) => id));
+}
+
 export const useStudyLogStore = create<StudyLogStore>((set, get) => ({
   logs: [],
+  trashedLogs: [],
+  error: '',
   currentLog: null,
 
   loadLogs: () => {
-    const logs = getStorageItem<StudyLog[]>(STORAGE_KEYS.STUDY_LOGS, []);
-    const migratedLogs = migrateLegacyLogs(logs);
-    if (migratedLogs !== logs) {
-      setStorageItem(STORAGE_KEYS.STUDY_LOGS, migratedLogs);
+    try {
+      const logs = readStoredLogs();
+      const migratedLogs = migrateLegacyLogs(logs);
+      if (migratedLogs !== logs) set(saveStoredLogs(migratedLogs));
+      else set({ ...splitLogs(logs), error: '' });
+    } catch {
+      set({ error: '学习日志读取失败。请先保留现有数据，再检查浏览器存储。' });
     }
-    set({ logs: migratedLogs });
   },
 
   getTodayLog: () => {
-    const today = getTodayDate();
-    let log = get().logs.find(l => l.date === today);
-
-    if (!log) {
-      // 创建今天的日志
-      log = {
-        id: generateId(),
-        date: today,
-        duration: 0,
-        content: `### ${today}\n\n`,
-        tags: [],
-        knowledgePoints: [],
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      };
-
-      const newLogs = [...get().logs, log];
-      set({ logs: newLogs, currentLog: log });
-      setStorageItem(STORAGE_KEYS.STUDY_LOGS, newLogs);
+    const state = splitLogs(readStoredLogs());
+    let log = state.currentLog;
+    if (log) {
+      set({ ...state, error: '' });
     } else {
-      set({ currentLog: log });
+      log = createTodayLogDraft();
+
+      try { get().saveLog(log); }
+      catch (error) {
+        set({ error: '无法创建今日日志，请检查浏览器存储后重试。' });
+        throw error;
+      }
     }
 
     return log;
@@ -115,34 +130,46 @@ export const useStudyLogStore = create<StudyLogStore>((set, get) => ({
 
   saveLog: (log: StudyLog) => {
     const updatedLog = { ...log, updatedAt: Date.now() };
-    const logs = get().logs;
-    const index = logs.findIndex(l => l.id === updatedLog.id);
-
-    let newLogs;
-    if (index >= 0) {
-      newLogs = [...logs];
-      newLogs[index] = updatedLog;
-    } else {
-      newLogs = [...logs, updatedLog];
+    const stored = readStoredLogs();
+    const previous = stored.find(({ id }) => id === log.id);
+    if (previous && isTrashedLog(previous)) throw new Error('日志已在回收站，请先恢复再保存。');
+    if (stored.some((item) => item.id !== log.id && item.date === log.date && !isTrashedLog(item))) {
+      throw new Error('这一天已有学习日志，请重新打开后再保存。');
     }
+    set(saveStoredLogs(previous ? stored.map((item) => item.id === log.id ? updatedLog : item) : [...stored, updatedLog]));
+  },
 
-    // 先持久化；配额不足时抛错，界面保留草稿，不误报保存成功。
-    localStorage.setItem(STORAGE_KEYS.STUDY_LOGS, JSON.stringify(newLogs));
-    set({ logs: newLogs, ...(updatedLog.date === getTodayDate() ? { currentLog: updatedLog } : {}) });
+  trashLog: (id) => {
+    const stored = readStoredLogs();
+    const log = stored.find((item) => item.id === id && !isTrashedLog(item));
+    if (!log) throw new Error('这篇日志已不在学习记录中。');
+    set(saveStoredLogs(stored.map((item) => item.id === id ? { ...log, deletedAt: Date.now() } : item)));
+  },
+
+  restoreLog: (id, date) => {
+    if (!isCalendarDate(date)) throw new Error('请选择一个有效的日期。');
+    const stored = readStoredLogs();
+    const trashed = stored.find((item) => item.id === id && isTrashedLog(item));
+    if (!trashed) throw new Error('这篇日志已不在回收站。');
+    if (stored.some((item) => item.date === date && !isTrashedLog(item))) {
+      throw new Error('该日期已有学习记录，请选择一个空日期。');
+    }
+    const { deletedAt: _, ...log } = trashed;
+    set(saveStoredLogs(stored.map((item) => item.id === id ? { ...log, date } : item)));
   },
 
   appendToDate: (date, content) => {
-    const existing = get().logs.find((log) => log.date === date);
+    const existing = readStoredLogs().find((log) => log.date === date && !isTrashedLog(log));
     const now = Date.now();
     const log: StudyLog = existing ?? {
       id: generateId(), date, duration: 0, content: '', tags: [], knowledgePoints: [], createdAt: now, updatedAt: now,
     };
-    const emptyHeading = !log.content.trim() || log.content.trim() === `### ${date}`;
+    const emptyHeading = isEmptyLogContent(log.content, date);
     get().saveLog({ ...log, content: emptyHeading ? content : `${log.content.trimEnd()}\n\n---\n\n${content}` });
   },
 
   updateLogContent: (id, content, originalContent, addedTags) => {
-    const log = get().logs.find((candidate) => candidate.id === id);
+    const log = readStoredLogs().find((candidate) => candidate.id === id && !isTrashedLog(candidate));
     if (!log) throw new Error('这条记录不存在，请重新打开后再编辑。');
     if (originalContent !== undefined && log.content !== originalContent) {
       throw new Error('这篇正文已有新的保存内容。请先复制本次草稿，再重新打开记录核对。');
