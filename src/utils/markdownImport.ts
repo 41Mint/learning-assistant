@@ -1,6 +1,6 @@
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
-import { IMAGE_PREFIX } from './imageStorage';
+import { imageMarkdown, prepareImageFile } from './imageStorage';
 import type { StoredImage } from './imageStorage';
 
 interface MarkdownNode {
@@ -63,22 +63,13 @@ export async function prepareMarkdownImport(markdown: string, files: File[]): Pr
     const file = matches[0];
     let image = imagesByFile.get(file);
     if (!image) {
-      if (file.size > 10 * 1024 * 1024) throw new Error(`图片 ${file.name} 超过 10 MB，请缩小后再导入。`);
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const header = Array.from(bytes.slice(0, 12), (byte) => String.fromCharCode(byte)).join('');
-      const type = header.startsWith('\x89PNG\r\n\x1a\n') ? 'image/png'
-        : bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255 ? 'image/jpeg'
-        : /^GIF8[79]a/.test(header) ? 'image/gif'
-        : header.startsWith('RIFF') && header.slice(8, 12) === 'WEBP' ? 'image/webp' : null;
-      if (!type) throw new Error(`${file.name} 不是支持的 PNG、JPEG、GIF 或 WebP 图片。`);
-      image = { id: crypto.randomUUID(), name: file.name, blob: new Blob([bytes], { type }) };
+      image = await prepareImageFile(file);
       imagesByFile.set(file, image);
     }
     const start = node.position?.start.offset;
     const end = node.position?.end.offset;
     if (start !== undefined && end !== undefined) {
-      const alt = (node.alt ?? '').replace(/[[\]\\]/g, '\\$&');
-      edits.push({ start, end, value: `![${alt}](${IMAGE_PREFIX}${image.id})` });
+      edits.push({ start, end, value: imageMarkdown(image.id, node.alt ?? '') });
     }
   }
   let content = markdown;

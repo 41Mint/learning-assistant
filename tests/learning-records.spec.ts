@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -26,6 +26,166 @@ async function importNote(page: Page) {
   await expect(page.locator('#study-history .markdown-preview img')).toHaveCount(1);
   await expect.poll(() => page.locator('#study-history .markdown-preview img').evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
 }
+
+function pasteScreenshots(editor: Locator, count = 1) {
+  return editor.evaluate((element, { bytes, count }) => {
+    const clipboard = new DataTransfer();
+    for (let index = 0; index < count; index++) clipboard.items.add(new File([new Uint8Array(bytes)], `截图-${index + 1}.png`, { type: 'image/png' }));
+    return element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: clipboard, bubbles: true, cancelable: true }));
+  }, { bytes: [...png], count });
+}
+
+function savedImageIds(page: Page) {
+  return page.evaluate(async () => {
+    const { getImages } = await import('/src/utils/imageStorage.ts');
+    return (await getImages()).map(({ id }) => id);
+  });
+}
+
+test('今日编辑可粘贴截图和替换选区，仅保存仍引用的图片且能从备份恢复', async ({ page, browser }) => {
+  await page.goto('/#today');
+  const today = page.getByRole('region', { name: '今日学习', exact: true });
+  const edit = today.getByRole('button', { name: '编辑', exact: true });
+  const editor = today.getByLabel('学习内容（Markdown）');
+  await edit.click();
+  const original = await editor.inputValue();
+  await pasteScreenshots(editor);
+  const preview = today.getByRole('region', { name: '学习内容实时预览' });
+  await expect(preview.getByRole('img', { name: '截图', exact: true })).toBeVisible();
+  expect(await savedImageIds(page)).toEqual([]);
+  await today.getByRole('button', { name: '取消编辑' }).click();
+  await edit.click();
+  await expect(editor).toHaveValue(original);
+  expect(await savedImageIds(page)).toEqual([]);
+
+  await editor.fill('粘贴前\n\n替换这段\n\n粘贴后');
+  const textAllowed = await editor.evaluate((element: HTMLTextAreaElement) => {
+    const start = element.value.indexOf('替换这段');
+    element.setSelectionRange(start, start + '替换这段'.length);
+    const clipboard = new DataTransfer();
+    clipboard.setData('text/plain', '普通文字');
+    return element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: clipboard, bubbles: true, cancelable: true }));
+  });
+  expect(textAllowed).toBe(true);
+  expect(await pasteScreenshots(editor, 2)).toBe(false);
+  await expect(editor).toHaveValue(/^粘贴前\n\n!\[截图 1\]\(learning-image:[\w-]+\)\n\n!\[截图 2\]\(learning-image:[\w-]+\)\n\n粘贴后$/);
+  await expect(preview.getByRole('img')).toHaveCount(2);
+  await expect.poll(() => editor.evaluate((element: HTMLTextAreaElement) => element.value.slice(element.selectionStart))).toBe('粘贴后');
+  await editor.fill((await editor.inputValue()).replace(/!\[截图 2\]\(learning-image:[\w-]+\)\n\n/, ''));
+  await today.getByRole('button', { name: '保存记录' }).click();
+  await expect(today.getByRole('img', { name: '截图 1', exact: true })).toBeVisible();
+  expect(await savedImageIds(page)).toHaveLength(1);
+  await page.reload();
+  const image = today.getByRole('img', { name: '截图 1', exact: true });
+  await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBe(1);
+
+  await page.goto('/#data');
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: '导出完整备份' }).click();
+  const buffer = await readFile((await (await download).path())!);
+  const backup = JSON.parse(buffer.toString('utf8'));
+  expect(backup.images).toHaveLength(1);
+  expect(backup.images[0].base64).toBe(png.toString('base64'));
+  const context = await browser.newContext();
+  try {
+    const restored = await context.newPage();
+    await restored.goto('/#data');
+    await restored.getByLabel('选择备份文件').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer });
+    await Promise.all([restored.waitForEvent('load'), restored.getByRole('button', { name: '确认恢复并刷新' }).click()]);
+    await restored.goto('/#today');
+    await expect(restored.getByRole('region', { name: '今日学习', exact: true }).getByRole('img', { name: '截图 1' })).toBeVisible();
+  } finally { await context.close(); }
+});
+
+test('历史日志粘贴保存失败时保留正文草稿并回退新图片，可重试', async ({ page }) => {
+  await importNote(page);
+  const previousImages = await savedImageIds(page);
+  await page.getByRole('button', { name: '编辑 / 补充记录' }).click();
+  const form = page.getByRole('form', { name: '历史记录编辑表单' });
+  const editor = form.getByRole('textbox', { name: '历史学习内容', exact: true });
+  await editor.press('Control+End');
+  await pasteScreenshots(editor, 2);
+  await expect(form.getByRole('img', { name: /^截图/ })).toHaveCount(2);
+  const draft = await editor.inputValue();
+  const save = form.getByRole('button', { name: '保存补充' });
+  await page.evaluate(() => {
+    const storedPut = IDBObjectStore.prototype.put;
+    let puts = 0;
+    IDBObjectStore.prototype.put = function (...args: Parameters<typeof storedPut>) {
+      if (this.name === 'images' && ++puts === 2) {
+        IDBObjectStore.prototype.put = storedPut;
+        throw new Error('测试图片写入失败');
+      }
+      return storedPut.apply(this, args);
+    };
+  });
+  await save.click();
+  await expect(form.getByRole('alert')).toContainText('测试图片写入失败');
+  expect(await savedImageIds(page)).toEqual(previousImages);
+  await expect(editor).toHaveValue(draft);
+  await page.evaluate(() => {
+    const storedPut = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'learning-assistant:study-logs') {
+        Storage.prototype.setItem = storedPut;
+        throw new Error('测试日志写入失败');
+      }
+      storedPut.call(this, key, value);
+    };
+  });
+  await save.click();
+  await expect(form.getByRole('alert')).toContainText('测试日志写入失败');
+  expect(await savedImageIds(page)).toEqual(previousImages);
+  await expect(editor).toHaveValue(draft);
+  await save.click();
+  await expect(form).toHaveCount(0);
+  await expect(page.locator('#study-history').getByRole('img', { name: /^截图/ })).toHaveCount(2);
+  expect(await savedImageIds(page)).toHaveLength(3);
+});
+
+test('大截图保存后在折叠正文中持续显示，展开与收起时复用同一张图片', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/#today');
+  const today = page.getByRole('region', { name: '今日学习', exact: true });
+  await today.getByRole('button', { name: '编辑', exact: true }).click();
+  const editor = today.getByRole('textbox', { name: '学习内容（Markdown）', exact: true });
+  await editor.fill('大尺寸截图');
+  await editor.evaluate(async (element) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 3840;
+    canvas.height = 2400;
+    const drawing = canvas.getContext('2d')!;
+    drawing.fillStyle = '#315c8a';
+    drawing.fillRect(0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+    const clipboard = new DataTransfer();
+    clipboard.items.add(new File([blob!], '大截图.png', { type: 'image/png' }));
+    element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: clipboard, bubbles: true, cancelable: true }));
+  });
+  await expect(today.getByRole('region', { name: '学习内容实时预览' }).getByRole('img', { name: '截图' })).toBeVisible();
+  await today.getByRole('button', { name: '保存记录' }).click();
+  const expand = today.getByRole('button', { name: '展开全文', exact: true });
+  await expect(expand).toBeVisible();
+  const reading = today.locator('.collapsible-note');
+  const stable = await reading.evaluate((note) => new Promise<boolean>((resolve) => {
+    let frames = 0;
+    const image = note.querySelector('img');
+    const src = image?.src;
+    const sample = () => {
+      if (!image || note.querySelector('img') !== image || image.src !== src) return resolve(false);
+      if (++frames === 24) return resolve(image.naturalWidth === 3840);
+      requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  }));
+  expect(stable).toBe(true);
+  const image = reading.getByRole('img', { name: '截图' });
+  const original = await image.elementHandle();
+  await expand.click();
+  await today.getByRole('button', { name: '收起正文', exact: true }).click();
+  await expect(expand).toBeVisible();
+  expect(await image.evaluate((element, first) => element === first, original)).toBe(true);
+});
 
 test('缺图阻止保存；代码块里的图片语法不当作实际图片', async ({ page }) => {
   await openImport(page, `${markdown}\n\n\x60\x60\x60md\n![code](missing-code.png)\n\x60\x60\x60`);

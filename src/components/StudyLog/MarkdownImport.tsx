@@ -3,7 +3,7 @@ import { useStudyLogStore } from '../../store/studyLogStore';
 import { getTodayDate } from '../../utils/storage';
 import { prepareMarkdownImport } from '../../utils/markdownImport';
 import type { PreparedImport } from '../../utils/markdownImport';
-import { deleteImages, writeImages } from '../../utils/imageStorage';
+import { saveWithImages } from '../../utils/imageStorage';
 import MarkdownContent from '../common/MarkdownContent';
 
 export default function MarkdownImport() {
@@ -35,15 +35,11 @@ export default function MarkdownImport() {
   const save = async () => {
     if (!prepared || prepared.missing.length || !date) return;
     setBusy(true);
-    let imagesSaved = false;
     try {
-      await writeImages(prepared.images);
-      imagesSaved = true;
-      appendToDate(date, prepared.content);
+      await saveWithImages(prepared.images, () => appendToDate(date, prepared.content));
       setPrepared(null);
       setMessage(`已保存到 ${date} 的学习记录，共 ${prepared.images.length} 张图片。可在下方“学习历史”选择该日期回看或补充。`);
     } catch (error) {
-      if (imagesSaved) await deleteImages(prepared.images.map((image) => image.id)).catch(() => {});
       setMessage(error instanceof Error ? error.message : '保存失败，原有学习记录未更改，请重试。');
     } finally { setBusy(false); }
   };
