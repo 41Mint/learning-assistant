@@ -1,10 +1,11 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { DragEvent, ReactNode } from 'react';
 
-export default function GrowthFolder({ name, origin, children, onClose, onManage, onDragOutside, onDropOutside }: {
+export default function GrowthFolder({ name, origin, children, historyTools, onClose, onManage, onDragOutside, onDropOutside }: {
   name: string;
   origin: DOMRect;
   children: ReactNode;
+  historyTools: ReactNode;
   onClose: () => void;
   onManage: () => void;
   onDragOutside: (event: DragEvent<HTMLDialogElement>) => boolean;
@@ -40,6 +41,7 @@ export default function GrowthFolder({ name, origin, children, onClose, onManage
     <div className="growth-folder-content">
       <header>
         <h2>{name}</h2>
+        {historyTools}
         <button type="button" className="growth-board-group-button" onClick={onManage}>管理卡组</button>
         <button type="button" className="growth-board-group-button" aria-label="关闭卡组" onClick={onClose}>×</button>
       </header>

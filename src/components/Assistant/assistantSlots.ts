@@ -8,7 +8,7 @@ export type AssistantCodeExcerpt = ChatCode & { id: string; versionId: string };
 export type AssistantCodeReference = AssistantCodeExcerpt | { kind: 'script'; id: string; versionId: string; path: string };
 export type AssistantGrowthSelection = { id: string; kind: 'selection'; selection: ChatGrowthCards };
 export type AssistantGrowthReference = AssistantGrowthSelection
-  | { id: string; kind: 'card'; card: ChatGrowthCard; selectionContext?: AssistantGrowthSelection }
+  | { id: string; kind: 'card'; card: ChatGrowthCard }
   | { id: string; kind: 'group'; group: ChatGrowthGroup };
 export const isScriptReference = (reference?: AssistantCodeReference): reference is Extract<AssistantCodeReference, { kind: 'script' }> =>
   Boolean(reference && 'kind' in reference);

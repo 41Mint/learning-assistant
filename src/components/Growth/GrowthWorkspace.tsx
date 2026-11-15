@@ -12,12 +12,15 @@ import { CHAT_GROUP_CARD_LIMIT, CHAT_GROUP_DESCRIPTION_LIMIT } from '../../types
 import { growthExercises, logLabel } from '../../utils/growth';
 import { codeVersionHref, codeVersionLabel, practiceCodeIds } from '../../utils/projectCode';
 import { generateId } from '../../utils/storage';
+import { historyShortcut } from '../../utils/workspaceHistory';
+import type { HistoryDirection } from '../../utils/workspaceHistory';
 import SkillTree from '../SkillTree/SkillTree';
 import GrowthPracticeForm from './GrowthPracticeForm';
 import GrowthExerciseForm from './GrowthExerciseForm';
 import type { GrowthExerciseDraft } from './GrowthExerciseForm';
 import GrowthCard from './GrowthCard';
 import WorkspaceDialog from '../common/WorkspaceDialog';
+import HistoryButtons from '../common/HistoryButtons';
 import GrowthGroupStack from './GrowthGroupStack';
 import GrowthFolder from './GrowthFolder';
 import GrowthContextMenu from './GrowthContextMenu';
@@ -76,8 +79,8 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
   exerciseDraft?: GrowthExerciseDraft;
   setExerciseDraft: (draft?: GrowthExerciseDraft) => void;
 }) {
-  const { outcomes, exercises, hiddenPresetIds, groups, isLoaded, error, loadGrowth, removePractice, removeExercise, restorePreset,
-    saveExercise, saveGroup, removeGroup, moveCard, previousArrangement, undoArrangement } = useGrowthStore();
+  const { outcomes, exercises, hiddenPresetIds, groups, isLoaded, error, loadGrowth, removePractice, removeExercises, restorePreset,
+    saveExercise, saveGroup, removeGroup, moveCards, arrangementHistory, applyArrangementHistory } = useGrowthStore();
   const [domain, setDomain] = useState<GrowthDomain | ''>('');
   const activeView = useWorkspaceStore((state) => state.growthView);
   const { openGrowthRecommendations, askAboutGrowth, close: closeAssistant } = useContext(AssistantSlots);
@@ -214,10 +217,11 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
     setSelection((practice ?? outcome.practices[0]).id);
     setDialog({ kind, id: outcome.id, trigger, practiceId: practice?.id });
   };
-  const moveAction = (id: string): GrowthCardAction => ({ label: '移到卡组', run: canOpenForm ? (trigger) => {
+  const moveAction = (ids: string[]): GrowthCardAction => ({ label: '移到卡组', run: canOpenForm ? () => {
     setFolder(undefined);
-    setSelection(groups.find(({ cardIds }) => cardIds.includes(id))?.id ?? '');
-    setDialog({ kind: 'move', id, trigger });
+    const owner = cardOwners.get(ids[0]);
+    setSelection(ids.every((id) => cardOwners.get(id) === owner) ? owner ?? '' : '');
+    setDialog({ kind: 'move', cardIds: ids });
   } : undefined });
   const dialogOutcome = sortedOutcomes.find(({ id }) => id === dialog?.id);
   const dialogPractice = dialogOutcome?.practices.find(({ id }) => id === selection);
@@ -232,16 +236,20 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
     outcome: { id: generateId(), title: '', domains: selectedDomain ? [selectedDomain] : [] }, preset: false, groupId: group?.id,
   }, trigger);
   const dialogGroup = groups.find(({ id }) => id === dialog?.id);
-  const dialogExercise = allPending.find(({ id }) => id === dialog?.id);
-  const removeFromGroup = (id: string) => {
+  const dialogExercises = dialog?.kind === 'remove-exercise'
+    ? allPending.filter(({ id }) => dialog.cardIds?.includes(id)) : [];
+  const removeFromGroup = (ids: string[]) => {
     try {
-      moveCard(id, null);
-      setFeedback({ text: '已移出卡组。' });
+      moveCards(ids, null);
+      setSelectedCards([]);
+      setFeedback({ text: ids.length > 1 ? `已将 ${ids.length} 张卡片移出卡组。` : '已移出卡组。' });
     } catch (error) { reportError(error); }
   };
-  const groupActions = (id: string, ownerId?: string): GrowthCardAction[] => [moveAction(id), ...(ownerId ? [{
-    label: '移出当前卡组', run: canOpenForm ? () => removeFromGroup(id) : undefined,
+  const groupActions = (ids: string[], ownerId?: string): GrowthCardAction[] => [moveAction(ids), ...(ownerId ? [{
+    label: '移出当前卡组', run: canOpenForm ? () => removeFromGroup(ids) : undefined,
   }] : [])];
+  const removeTryAction = (ids: string[]): GrowthCardAction => ({ label: '移出待尝试',
+    run: canOpenForm ? () => setDialog({ kind: 'remove-exercise', cardIds: ids }) : undefined });
   const acceptDrop = (event: BoardDragEvent, targetGroup?: string, targetCard?: string) => {
     if (!event.dataTransfer?.types.includes(GROWTH_DRAG_TYPE)) return;
     event.stopPropagation();
@@ -276,7 +284,7 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
           setFeedback({ text: targetGroup ? '已收藏并加入卡组的「待尝试」。' : '已加入待尝试。' });
         }
       } else if (targetGroup) {
-        moveCard(transfer.cardId, targetGroup);
+        moveCards([transfer.cardId], targetGroup);
         setFeedback({ text: '已移到所选卡组。' });
       } else if (targetCard) {
         setSelection('');
@@ -297,13 +305,35 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
     event.dataTransfer.dropEffect = 'move';
     return transfer.cardId;
   };
-  const undo = () => {
+  const historyEnabled = canOpenForm && activeView !== 'topics' && !dialog;
+  const historyAvailable = { undo: arrangementHistory.undo.length > 0, redo: arrangementHistory.redo.length > 0 };
+  const performHistory = (direction: HistoryDirection) => {
+    if (!active || !historyEnabled || document.querySelector('dialog:modal:not(.growth-folder)')) return false;
     try {
-      undoArrangement();
-      if (group && !useGrowthStore.getState().groups.some(({ id }) => id === group.id)) window.location.assign(growthBoardHref(boardView));
-      setFeedback({ text: '已撤销上次卡片整理。' });
+      if (!applyArrangementHistory(direction)) return false;
+      const nextGroups = useGrowthStore.getState().groups;
+      if (openFolder && !nextGroups.some(({ id }) => id === openFolder.id)) setFolder(undefined);
+      if (group && !nextGroups.some(({ id }) => id === group.id)) window.location.assign(growthBoardHref(boardView === 'all' ? 'recent' : boardView));
+      setSelectedCards([]);
+      setFeedback({ text: direction === 'undo' ? '已撤销卡片整理。' : '已重做卡片整理。' });
     } catch (error) { reportError(error); }
+    return true;
   };
+  const onHistoryKey = useEffectEvent((event: KeyboardEvent) => {
+    if (event.target instanceof Element && event.target.closest('dialog[open]:not(.growth-folder)')) return;
+    const direction = historyShortcut(event);
+    if (direction && performHistory(direction)) event.preventDefault();
+  });
+  useEffect(() => {
+    if (!active) return;
+    const shortcut = (event: KeyboardEvent) => onHistoryKey(event);
+    window.addEventListener('keydown', shortcut);
+    return () => window.removeEventListener('keydown', shortcut);
+  }, [active]);
+  const historyTools = <div className="growth-history-tools" role="group" aria-label="整理历史">
+    <HistoryButtons available={historyAvailable} labels={{ undo: '撤销整理', redo: '重做整理' }}
+      disabled={!historyEnabled} onHistory={performHistory} />
+  </div>;
   const openGroup = (id: string, trigger: HTMLElement) => {
     setSelectedCards([]);
     setFolder({ id, origin: trigger.getBoundingClientRect() });
@@ -326,20 +356,29 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
     setFolder(undefined);
     setSelectedCards([]);
   };
+  const askSelectedCards = () => {
+    if (!selectionContext) return;
+    dismissFolderForAsk();
+    askAboutGrowth(selectionContext);
+  };
+  const batch = selectionIds.length > 1 ? {
+    count: selectionIds.length,
+    actions: [
+      ...groupActions(selectionIds, (openFolder ?? group)?.id),
+      ...(selectionIds.every((id) => !completedIds.has(id)) ? [removeTryAction(selectionIds)] : []),
+      { label: '询问智能体', run: selectionContext ? askSelectedCards : undefined },
+    ],
+  } : undefined;
   const selectionProps = (id: string) => ({
     selected: selectionIds.includes(id),
-    selectionContext: selectionIds.includes(id) ? selectionContext : undefined,
+    batch,
     onSelect: (extend: boolean) => setSelectedCards(!extend ? [id] : selectionIds.includes(id)
       ? selectionIds.filter((selected) => selected !== id) : [...selectionIds, id]),
   });
   const selectionBar = selectionIds.length > 0 && <div className="growth-selection" role="group" aria-label="所选卡片">
     <small role="status">已选 {selectionIds.length} 张{selectionIds.length > CHAT_GROUP_CARD_LIMIT && ` · 每次最多询问 ${CHAT_GROUP_CARD_LIMIT} 张`}</small>
     {selectionIds.length > 1 && <button type="button" className="growth-board-group-button" disabled={!selectionContext}
-      onClick={() => {
-        if (!selectionContext) return;
-        dismissFolderForAsk();
-        askAboutGrowth(selectionContext);
-      }}>询问智能体</button>}
+      onClick={askSelectedCards}>询问智能体</button>}
     <button type="button" className="knowledge-text-button" onClick={() => setSelectedCards([])}>取消选择</button>
   </div>;
   const showGroupMenu = (event: MouseEvent<HTMLAnchorElement>, item: GrowthGroup) => {
@@ -364,7 +403,8 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
         : { label: '记录自定义成果', run: () => newOutcome() },
       { label: '让智能体推荐', run: () => openGrowthRecommendations(domain || undefined) },
       { label: '新建卡组', run: () => { setSelection(''); setDialog({ kind: 'group' }); } },
-      ...(previousArrangement ? [{ label: '撤销整理', run: undo }] : []),
+      ...(historyAvailable.undo ? [{ label: '撤销整理', run: () => performHistory('undo') }] : []),
+      ...(historyAvailable.redo ? [{ label: '重做整理', run: () => performHistory('redo') }] : []),
     ] });
   };
   const onPageBackground = useEffectEvent((event: globalThis.MouseEvent) => {
@@ -405,7 +445,7 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
       actions={[
         { label: '编辑实践', run: canOpenForm ? (trigger) => choosePractice('edit', outcome, trigger) : undefined },
         { label: '删除实践', run: canOpenForm ? (trigger) => choosePractice('delete', outcome, trigger) : undefined },
-        ...groupActions(outcome.id, ownerId),
+        ...groupActions([outcome.id], ownerId),
       ]}
       recordLabel="追加实践" onRecord={canOpenForm ? (trigger) => begin({ outcome, preset: Boolean(preset) }, trigger) : undefined}>
       {description && <p className="growth-card-summary">{description}</p>}
@@ -419,7 +459,7 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
       onAsk={dismissFolderForAsk}
       card={{ title, domains, description: done ? `${action}\n完成条件：${done}` : action }} recordLabel="我做到了"
       actions={[{ label: '编辑卡片', run: canOpenForm ? (trigger) => editExercise(trigger, exercise) : undefined },
-        ...groupActions(id, ownerId), { label: '移出待尝试', run: canOpenForm ? () => setDialog({ kind: 'remove-exercise', id }) : undefined }]}
+        ...groupActions([id], ownerId), removeTryAction([id])]}
       onRecord={canOpenForm ? (trigger) => recordExercise(exercise, trigger) : undefined}>
       <p className="growth-card-summary">{action || done}</p>
     </GrowthCard>;
@@ -503,7 +543,7 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
           )}
           {activeView === 'try' && hiddenPresetIds.length > 0 && <button type="button" className="growth-board-group-button" disabled={!canOpenForm}
             onClick={() => { setSelection(hiddenPresetIds[0]); setDialog({ kind: 'restore' }); }}>恢复内置练习</button>}
-          {previousArrangement && <button type="button" className="growth-board-group-button" onClick={undo}>撤销整理</button>}
+          {historyTools}
         </div>
         {!folder && selectionBar}
         {error && <p role="alert">{error}</p>}
@@ -580,14 +620,14 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
         )}
       </section>
       {active && menu && <GrowthContextMenu menu={menu} onClose={() => setMenu(undefined)} />}
-      {active && openFolder && folder && <GrowthFolder name={openFolder.name} origin={folder.origin}
+      {active && openFolder && folder && <GrowthFolder name={openFolder.name} origin={folder.origin} historyTools={historyTools}
         onClose={() => { setFolder(undefined); setSelectedCards([]); }} onManage={() => groupEditor(openFolder.id)}
         onDragOutside={(event) => Boolean(folderDragOutside(event, openFolder.id))}
         onDropOutside={(event) => {
           const id = folderDragOutside(event, openFolder.id);
           if (!id) return;
           useGrowthDragStore.setState({ drag: undefined });
-          removeFromGroup(id);
+          removeFromGroup([id]);
         }}>
         {selectionBar}
         {feedback && <p className="growth-muted" role={feedback.error ? 'alert' : 'status'}>{feedback.text}</p>}
@@ -632,18 +672,25 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
         }}>
         <p>删除「{dialogGroup.name}」后，组内卡片会保留在「所有卡片」中。</p>
       </WorkspaceDialog>}
-      {active && dialog?.kind === 'remove-exercise' && dialogExercise && <WorkspaceDialog title="移出待尝试" action="确认移出" destructive
+      {active && dialog?.kind === 'remove-exercise' && dialogExercises.length > 0 && <WorkspaceDialog title="移出待尝试" action="确认移出" destructive
+        valid={dialogExercises.length === dialog.cardIds?.length}
         onClose={() => setDialog(undefined)} onSave={() => {
-          removeExercise(dialogExercise.id);
-          setFeedback({ text: '已移出待尝试。' });
+          removeExercises(dialogExercises.map(({ id }) => id));
+          setSelectedCards([]);
+          setFeedback({ text: dialogExercises.length > 1 ? `已将 ${dialogExercises.length} 张卡片移出待尝试。` : '已移出待尝试。' });
         }}>
-        <p>将「{dialogExercise.title}」移出「待尝试」？</p>
+        <p>{dialogExercises.length === 1 ? `将「${dialogExercises[0].title}」移出「待尝试」？` : `将所选的 ${dialogExercises.length} 张卡片移出「待尝试」？`}</p>
       </WorkspaceDialog>}
-      {active && dialog?.kind === 'move' && <WorkspaceDialog title="移到卡组" action="确认移动" onClose={() => setDialog(undefined)} onSave={() => {
-        if (!dialog.id) return;
-        moveCard(dialog.id, selection || null);
-        setFeedback({ text: selection ? '已移到所选卡组。' : '已移出卡组。' });
+      {active && dialog?.kind === 'move' && <WorkspaceDialog title="移到卡组" action="确认移动"
+        valid={dialog.cardIds?.some((id) => (cardOwners.get(id) ?? '') !== selection)} onClose={() => setDialog(undefined)} onSave={() => {
+        const ids = dialog.cardIds ?? [];
+        if (!ids.every((id) => stackMembers.has(id))) throw new Error('有卡片已离开当前视图，请重新选择。');
+        moveCards(ids, selection || null);
+        setSelectedCards([]);
+        setFeedback({ text: ids.length > 1 ? (selection ? `已将 ${ids.length} 张卡片移到所选卡组。` : `已将 ${ids.length} 张卡片移出卡组。`)
+          : selection ? '已移到所选卡组。' : '已移出卡组。' });
       }}>
+        {(dialog.cardIds?.length ?? 0) > 1 && <p>移动所选的 {dialog.cardIds?.length} 张卡片。</p>}
         <label className="growth-field">目标卡组
           <select autoFocus value={selection} onChange={(event) => setSelection(event.target.value)}>
             <option value="">未分组</option>

@@ -26,7 +26,8 @@ import NetworkToolbar from './NetworkToolbar';
 import RelationDetails from './RelationDetails';
 import RelationLink from './RelationLink';
 import { useNetworkHistory } from './useNetworkHistory';
-import type { HistoryDirection } from './useNetworkHistory';
+import { historyShortcut } from '../../utils/workspaceHistory';
+import type { HistoryDirection } from '../../utils/workspaceHistory';
 
 type LinkDraft = { first: string; second: string };
 type EditorTarget = { kind: 'entry'; id?: string } | CategoryEditorTarget;
@@ -120,10 +121,7 @@ export default function KnowledgeNetwork({ active }: { active: boolean }) {
   useEffect(() => {
     if (!active) return;
     const shortcut = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.defaultPrevented || event.isComposing) return;
-      if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable], [role="textbox"]')) return;
-      const key = event.key.toLowerCase();
-      const direction = key === 'z' ? (event.shiftKey ? 'redo' : 'undo') : key === 'y' && !event.shiftKey ? 'redo' : null;
+      const direction = historyShortcut(event);
       if (direction && performHistory(direction)) event.preventDefault();
     };
     window.addEventListener('keydown', shortcut);

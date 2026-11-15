@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 
-export type HistoryDirection = 'undo' | 'redo';
+import type { HistoryDirection } from '../../utils/workspaceHistory';
 
 interface NetworkAction {
   label: string;

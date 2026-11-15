@@ -6,20 +6,19 @@ import type { GrowthDrag } from '../../store/growthDragStore';
 import type { DragEventHandler } from 'react';
 import type { ChatGrowthCard } from '../../types/assistantChat';
 import { AssistantSlots } from '../Assistant/assistantSlots';
-import type { AssistantGrowthSelection } from '../Assistant/assistantSlots';
 
 export interface GrowthCardAction {
   label: string;
   run?: (trigger: HTMLButtonElement) => void;
 }
 
-export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, selectionContext, actions, children, href, highlighted, selected, onSelect, drag, onDragOver, onDrop }: {
+export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, batch, actions, children, href, highlighted, selected, onSelect, drag, onDragOver, onDrop }: {
   id: string;
   card: ChatGrowthCard;
   recordLabel: string;
   onRecord?: (trigger: HTMLButtonElement) => void;
   onAsk?: () => void;
-  selectionContext?: AssistantGrowthSelection;
+  batch?: { count: number; actions: GrowthCardAction[] };
   actions?: GrowthCardAction[];
   children: ReactNode;
   href?: string;
@@ -74,7 +73,7 @@ export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, sel
   };
   const askAboutCard = () => act(() => {
     onAsk?.();
-    askAboutGrowth({ id, kind: 'card', selectionContext,
+    askAboutGrowth({ id, kind: 'card',
       card: { ...card, title: card.title.slice(0, 100), description: card.description.slice(0, 1200) } });
   });
 
@@ -124,12 +123,12 @@ export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, sel
     </div>
     {children}
     {error && <small className="growth-muted" role="alert">{error}</small>}
-    <div ref={menu} popover="auto" className="workspace-context-menu growth-card-menu" role="group" aria-label="卡片操作"
+    <div ref={menu} popover="auto" className="workspace-context-menu growth-card-menu" role="group" aria-label={batch ? '所选卡片操作' : '卡片操作'}
       onToggle={(event) => setMenuOpen(event.currentTarget.matches(':popover-open'))}>
-      <div className="workspace-context-menu-title" aria-hidden="true">{card.title}</div>
-      <button type="button" disabled={!onRecord} onClick={() => act((button) => onRecord?.(button))}>{recordLabel}</button>
-      {actions?.map(({ label, run }) => <button type="button" key={label} disabled={!run} onClick={() => { if (run) act(run); }}>{label}</button>)}
-      <button type="button" disabled={current} onClick={() => act(() => {
+      <div className="workspace-context-menu-title" aria-hidden="true">{batch ? `已选 ${batch.count} 张卡片` : card.title}</div>
+      {!batch && <button type="button" disabled={!onRecord} onClick={() => act((button) => onRecord?.(button))}>{recordLabel}</button>}
+      {(batch?.actions ?? actions)?.map(({ label, run }) => <button type="button" key={label} disabled={!run} onClick={() => { if (run) act(run); }}>{label}</button>)}
+      {!batch && <><button type="button" disabled={current} onClick={() => act(() => {
         if (goal && !window.confirm(`将当前目标「${goal.label}」换成「${card.title}」？`)) return;
         try {
           setGoal({ type: 'growth-card', id, label: card.title });
@@ -138,7 +137,7 @@ export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, sel
           setError('学习目标保存失败，请重试。');
         }
       })}>{current ? '已设为学习目标' : '设为学习目标'}</button>
-      <button type="button" onClick={askAboutCard}>询问智能体</button>
+      <button type="button" onClick={askAboutCard}>询问智能体</button></>}
     </div>
   </article>;
 }

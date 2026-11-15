@@ -4,47 +4,57 @@ import type { GrowthData, GrowthGroup, GrowthOutcome, GrowthPractice, SavedExerc
 import { emptyGrowth, growthExercises, validateGrowth } from '../utils/growth';
 import { normalizedName } from '../utils/knowledge';
 import { generateId, getTodayDate, STORAGE_KEYS } from '../utils/storage';
+import type { HistoryDirection } from '../utils/workspaceHistory';
 
 type OutcomeDetails = Omit<GrowthOutcome, 'practices'>;
+type Arrangement = Pick<GrowthData, 'groups' | 'exercises' | 'hiddenPresetIds'>;
+type ArrangementHistory = Record<HistoryDirection, Arrangement[]>;
 
 interface GrowthStore extends GrowthData {
   isLoaded: boolean;
   error: string;
-  previousArrangement?: Pick<GrowthData, 'groups' | 'exercises'>;
+  arrangementHistory: ArrangementHistory;
   loadGrowth: () => void;
   savePractice: (outcome: OutcomeDetails, practice: GrowthPractice, groupId?: string, exercise?: SavedExercise) => void;
   removePractice: (outcomeId: string, practiceId: string) => void;
   saveExercise: (exercise: SavedExercise, groupId?: string) => boolean;
   editExercise: (exercise: SavedExercise, groupId?: string) => void;
-  removeExercise: (id: string) => void;
+  removeExercises: (ids: string[]) => void;
   restorePreset: (id: string) => void;
   saveGroup: (name: string, id?: string, cardIds?: string[], exercise?: SavedExercise) => string;
   removeGroup: (id: string) => void;
-  moveCard: (cardId: string, groupId: string | null) => void;
-  undoArrangement: () => void;
+  moveCards: (cardIds: string[], groupId: string | null) => void;
+  applyArrangementHistory: (direction: HistoryDirection) => boolean;
 }
 
 function placeCards(groups: GrowthGroup[], cardIds: string[], groupId?: string | null) {
   if (groupId && !groups.some(({ id }) => id === groupId)) throw new Error('找不到目标卡组。');
-  return groups.map((group) => ({
-    ...group,
-    cardIds: group.id === groupId ? [...new Set([...group.cardIds, ...cardIds])] : group.cardIds.filter((id) => !cardIds.includes(id)),
-  }));
+  const moving = new Set(cardIds);
+  return groups.map((group) => {
+    const next = group.id === groupId ? [...new Set([...group.cardIds, ...cardIds])] : group.cardIds.filter((id) => !moving.has(id));
+    return next.length === group.cardIds.length ? group : { ...group, cardIds: next };
+  });
 }
 
 export const useGrowthStore = create<GrowthStore>((set, get) => {
-  const persist = (change: Partial<GrowthData>, undoable = false) => {
+  const persist = (change: Partial<GrowthData>, arrangementHistory: ArrangementHistory = { undo: [], redo: [] }) => {
     const { isLoaded, error, outcomes, exercises, hiddenPresetIds, groups } = get();
     if (!isLoaded || error) throw new Error(error || '成长记录正在加载。');
     const data = validateGrowth({ version: 1, outcomes, exercises, hiddenPresetIds, groups, ...change });
     localStorage.setItem(STORAGE_KEYS.GROWTH, JSON.stringify(data));
-    set({ ...data, previousArrangement: undoable ? { groups, exercises } : undefined });
+    set({ ...data, arrangementHistory });
+  };
+  const snapshot = ({ groups, exercises, hiddenPresetIds }: Arrangement): Arrangement => ({ groups, exercises, hiddenPresetIds });
+  const arrange = (change: Partial<Arrangement>) => {
+    const current = get();
+    persist(change, { undo: [...current.arrangementHistory.undo.slice(-49), snapshot(current)], redo: [] });
   };
 
   return {
     ...emptyGrowth(),
     isLoaded: false,
     error: '',
+    arrangementHistory: { undo: [], redo: [] },
     loadGrowth: () => {
       if (get().isLoaded) return;
       try {
@@ -84,8 +94,8 @@ export const useGrowthStore = create<GrowthStore>((set, get) => {
       const existing = [...data.outcomes, ...growthExercises(data)].find(({ id, title }) =>
         id === exercise.id || normalizedName(title) === normalizedName(exercise.title));
       if (existing) return false;
-      persist({ exercises: [...data.exercises, exercise],
-        groups: groupId ? placeCards(data.groups, [exercise.id], groupId) : data.groups }, true);
+      arrange({ exercises: [...data.exercises, exercise],
+        groups: groupId ? placeCards(data.groups, [exercise.id], groupId) : data.groups });
       return true;
     },
     editExercise: (exercise, groupId) => {
@@ -107,20 +117,24 @@ export const useGrowthStore = create<GrowthStore>((set, get) => {
           ? { ...group, cardIds: [...new Set([...group.cardIds, exercise.id])] } : group) : groups,
       });
     },
-    removeExercise: (id) => {
-      const { exercises, groups, outcomes, hiddenPresetIds } = get();
-      if (outcomes.some((outcome) => outcome.id === id)) return;
-      if (GROWTH_PRESETS.some((preset) => preset.id === id)) {
-        if (!hiddenPresetIds.includes(id)) persist({ hiddenPresetIds: [...hiddenPresetIds, id] });
-        return;
-      }
-      persist({ exercises: exercises.filter((exercise) => exercise.id !== id),
-        groups: groups.map((group) => ({
-          ...group, cardIds: group.cardIds.filter((cardId) => cardId !== id),
-        })),
+    removeExercises: (ids) => {
+      const data = get();
+      const completed = new Set(data.outcomes.map(({ id }) => id));
+      const requested = new Set(ids);
+      const pending = growthExercises(data).filter(({ id }) => requested.has(id) && !completed.has(id));
+      if (!pending.length) return;
+      const presetIds = new Set(GROWTH_PRESETS.map(({ id }) => id));
+      const customIds = pending.map(({ id }) => id).filter((id) => !presetIds.has(id));
+      arrange({
+        exercises: data.exercises.filter(({ id }) => !customIds.includes(id)),
+        groups: placeCards(data.groups, customIds, null),
+        hiddenPresetIds: [...data.hiddenPresetIds, ...pending.map(({ id }) => id).filter((id) => presetIds.has(id))],
       });
     },
-    restorePreset: (id) => persist({ hiddenPresetIds: get().hiddenPresetIds.filter((hiddenId) => hiddenId !== id) }),
+    restorePreset: (id) => {
+      const { hiddenPresetIds } = get();
+      if (hiddenPresetIds.includes(id)) arrange({ hiddenPresetIds: hiddenPresetIds.filter((hiddenId) => hiddenId !== id) });
+    },
     saveGroup: (name, id, cardIds = [], exercise) => {
       const data = get();
       const { groups } = data;
@@ -135,20 +149,28 @@ export const useGrowthStore = create<GrowthStore>((set, get) => {
         : [...groups, { id: groupId, name: value, cardIds: [] }];
       if (exercise && [...data.outcomes, ...growthExercises(data)].some((card) =>
         card.id === exercise.id || normalizedName(card.title) === normalizedName(exercise.title))) throw new Error('已有同名卡片。');
-      persist({ groups: cardIds.length ? placeCards(next, cardIds, groupId) : next,
-        exercises: exercise ? [...data.exercises, exercise] : data.exercises }, true);
+      arrange({ groups: cardIds.length ? placeCards(next, cardIds, groupId) : next,
+        exercises: exercise ? [...data.exercises, exercise] : data.exercises });
       return groupId;
     },
-    removeGroup: (id) => persist({ groups: get().groups.filter((group) => group.id !== id) }, true),
-    moveCard: (cardId, groupId) => {
+    removeGroup: (id) => arrange({ groups: get().groups.filter((group) => group.id !== id) }),
+    moveCards: (cardIds, groupId) => {
       const { groups } = get();
-      const current = groups.find(({ cardIds }) => cardIds.includes(cardId));
-      if ((current?.id ?? null) === groupId) return;
-      persist({ groups: placeCards(groups, [cardId], groupId) }, true);
+      const next = placeCards(groups, cardIds, groupId);
+      if (next.some((group, index) => group !== groups[index])) arrange({ groups: next });
     },
-    undoArrangement: () => {
-      const { previousArrangement } = get();
-      if (previousArrangement) persist(previousArrangement);
+    applyArrangementHistory: (direction) => {
+      const current = get();
+      const { arrangementHistory } = current;
+      const previous = arrangementHistory[direction].at(-1);
+      if (!previous) return false;
+      const other = direction === 'undo' ? 'redo' : 'undo';
+      persist(previous, {
+        ...arrangementHistory,
+        [direction]: arrangementHistory[direction].slice(0, -1),
+        [other]: [...arrangementHistory[other], snapshot(current)],
+      });
+      return true;
     },
   };
 });

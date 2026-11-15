@@ -399,6 +399,7 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
   padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--app-border);
 }
 .growth-board-primary { margin-inline-start: auto; }
+.growth-history-tools { display: flex; gap: 4px; }
 .growth-board-group-button {
   padding: 5px 9px; border: 1px solid var(--app-border); border-radius: 6px;
   color: var(--app-text); background: var(--app-surface); font-size: 13px; cursor: pointer;
@@ -794,12 +795,12 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .network-tools, .network-layers, .network-zoom { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; color: var(--app-muted); font-size: 13px; min-width: 0; }
 .network-tools { flex: 1 1 auto; }
 .network-tool-status { margin-inline-start: 5px; font-size: 12px; color: var(--app-accent); overflow-wrap: anywhere; }
-.network-icon-button, .network-layers button, .network-layer-term, .network-zoom button, .network-neighbor-label {
+.workspace-icon-button, .network-layers button, .network-layer-term, .network-zoom button, .network-neighbor-label {
   min-height: 34px; padding: 4px 8px; border: 1px solid var(--app-border); border-radius: 7px;
   background: var(--app-surface); color: var(--app-text); cursor: pointer;
 }
-.network-icon-button { width: 34px; display: inline-grid; place-items: center; padding: 0; flex-shrink: 0; }
-.network-icon-button[aria-expanded="true"], .network-icon-button[aria-pressed="true"] { background: var(--app-active); color: var(--app-accent); border-color: var(--app-accent); }
+.workspace-icon-button { width: 34px; display: inline-grid; place-items: center; padding: 0; flex-shrink: 0; }
+.workspace-icon-button[aria-expanded="true"], .workspace-icon-button[aria-pressed="true"] { background: var(--app-active); color: var(--app-accent); border-color: var(--app-accent); }
 .network-tool-panel, .workspace-context-menu {
   position: absolute; z-index: 6; padding: 10px; border: 1px solid var(--app-border); border-radius: 8px;
   background: var(--app-surface); color: var(--app-text); box-shadow: 0 8px 24px #0f172a40;
@@ -840,8 +841,8 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .network-layers button[aria-pressed="true"] { background: var(--app-active); border-color: var(--app-accent); }
 .network-layers button[aria-pressed="false"] { color: var(--app-muted); }
 .network-layers button[aria-pressed="false"]::before { opacity: 0.35; }
-.network-icon-button:hover:not(:disabled), .network-zoom button:hover:not(:disabled), .network-neighbor-label:hover, .network-layers button:hover { border-color: var(--app-accent); }
-.network-icon-button:disabled, .network-zoom button:disabled { opacity: 0.45; cursor: default; }
+.workspace-icon-button:hover:not(:disabled), .network-zoom button:hover:not(:disabled), .network-neighbor-label:hover, .network-layers button:hover { border-color: var(--app-accent); }
+.workspace-icon-button:disabled, .network-zoom button:disabled { opacity: 0.45; cursor: default; }
 .network-viewport {
   position: relative; height: clamp(320px, calc(100dvh - var(--network-header-height, 375px)), 750px); overflow: clip; border-radius: 0 0 9px 9px;
   background: var(--app-bg) radial-gradient(var(--app-border) 1px, transparent 1px) 0 0 / 18px 18px; cursor: grab;
