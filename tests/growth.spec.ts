@@ -739,12 +739,11 @@ test('卡片右键与键盘菜单联动练习参考和智能体，记录后移�
   await expect(today.getByText(title, { exact: true })).toBeVisible();
   await expect(today.getByText('练习参考', { exact: true })).toBeVisible();
   await expect(today.getByRole('button', { name: '移除练习参考' })).toBeVisible();
-  await page.getByTitle('开发者工具 (可拖动)').click();
-  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: '开发者工具', exact: true }).click();
   await page.getByRole('button', { name: /模拟完成 1 个番茄钟/ }).click();
   await expect.poll(() => page.evaluate((label) => JSON.parse(localStorage.getItem('learning-assistant:study-logs')!)
     .some((log: { tags: string[] }) => log.tags.includes(`练习参考：${label}`)), title)).toBe(true);
-  await page.getByTitle('开发者工具 (可拖动)').click();
+  await page.getByRole('button', { name: '开发者工具', exact: true }).click();
   await page.goto('/#path/try');
   await trigger.press('Enter');
   await expect(menu.getByRole('button', { name: '我做到了' })).toBeFocused();

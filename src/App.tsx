@@ -23,7 +23,7 @@ import { useStreakStore } from './store/streakStore';
 import { useCurrentGoalStore } from './store/currentGoalStore';
 import { useGrowthStore } from './store/growthStore';
 import { readWorkspaceHash, useWorkspaceStore } from './store/workspaceStore';
-import { IS_KNOWLEDGE_DEMO } from './utils/workspaceMode';
+import { IS_TEST_WORKSPACE } from './utils/workspaceMode';
 import { generateId } from './utils/storage';
 import { GROWTH_PRESETS } from './data/growthPresets';
 import { normalizedName } from './utils/knowledge';
@@ -166,7 +166,7 @@ function App() {
   return (
     <AssistantDock activePage={activePage} activeLog={assistantLog} onOpenReview={openReview} onStart={startFromAssistant}
       onRecordRecommendation={recordRecommendation} editingGrowth={Boolean(growthDraft || exerciseDraft)}>
-    <div className="app-shell" data-knowledge-demo={IS_KNOWLEDGE_DEMO || undefined}>
+    <div className="app-shell" data-test-workspace={IS_TEST_WORKSPACE || undefined}>
       <header className="app-header">
         <a className="app-brand" href="#today" aria-label="游戏开发学习助手首页" title="游戏开发学习助手"><img src="/learning-assistant.svg" alt="" width="28" height="28" /></a>
         <WorkspaceNavigation activePage={activePage} activeLabel={pageLabel ?? '页面菜单'} growthView={growthView} />
@@ -174,9 +174,8 @@ function App() {
         {(activePage !== 'today' || todayDraft) && <SessionStatus editingToday={Boolean(todayDraft)} inToday={activePage === 'today'} />}
       </header>
       <div className="app-content">
-      {IS_KNOWLEDGE_DEMO && <div className="knowledge-demo-banner">
-        <strong>知识网络演示工作区</strong>
-        <a href={window.location.pathname + '#network'}>返回个人知识网络</a>
+      {IS_TEST_WORKSPACE && <div className="test-workspace-banner">
+        <strong>测试工作区</strong>
       </div>}
 
       <main>

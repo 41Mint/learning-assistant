@@ -13,7 +13,6 @@ import { cleanRelationAnnotation } from '../../utils/relationAnnotation';
 import { buildRelationNetwork, relationLabel, relationNodeKey } from '../../utils/relations';
 import type { RelationConnection, RelationNode } from '../../utils/relations';
 import { matchesWords, searchWords } from '../../utils/resourceSearch';
-import { IS_KNOWLEDGE_DEMO, KNOWLEDGE_DEMO_HREF } from '../../utils/workspaceMode';
 import KnowledgeDirectory from '../Knowledge/KnowledgeDirectory';
 import KnowledgeEditor from '../Knowledge/KnowledgeEditor';
 import KnowledgeNetworkCanvas from './KnowledgeNetworkCanvas';
@@ -440,10 +439,9 @@ export default function KnowledgeNetwork({ active }: { active: boolean }) {
             {layers.code && ` · ${codeCount} 个代码版本`}
           </p>}
         </div>
-        <div className="network-actions">
-          {isLoaded && !entries.length && !error && <a className="relation-entry-link" href="#knowledge">打开词条目录</a>}
-          {!IS_KNOWLEDGE_DEMO && <a className="relation-entry-link" href={KNOWLEDGE_DEMO_HREF} target="_blank" rel="noopener">打开知识网络演示</a>}
-        </div>
+        {isLoaded && !entries.length && !error && <div className="network-actions">
+          <a className="relation-entry-link" href="#knowledge">打开词条目录</a>
+        </div>}
       </header>
       {error && <p role="alert">{error}</p>}
       {!error && !isLoaded && <p className="relation-muted">正在读取知识词条…</p>}

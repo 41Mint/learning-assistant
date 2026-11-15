@@ -163,11 +163,43 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 :focus-visible { outline: 3px solid #60a5fa; outline-offset: 3px; }
 .app-shell { --app-rail-width: 58px; --app-header-height: 56px; }
 .app-content { max-width: 1240px; margin-inline: auto; min-width: 0; padding: 22px clamp(16px, 2.5vw, 36px) 36px; }
-.knowledge-demo-banner {
+.test-workspace-banner {
   display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 10px;
   padding: 8px 12px; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-active); font-size: 13px;
 }
-.knowledge-demo-banner a { color: var(--app-accent); }
+.dev-tools-launcher {
+  position: fixed; right: 20px; bottom: 16px; z-index: 999999; width: 36px; height: 36px;
+  display: grid; place-items: center; border: 1px solid var(--app-border); border-radius: 10px;
+  background: var(--app-surface); color: var(--app-text); cursor: pointer; font-size: 16px;
+}
+.dev-tools-launcher:hover, .dev-tools-launcher[aria-expanded="true"] { background: var(--app-active); color: var(--app-accent); }
+.dev-tools-panel {
+  position: fixed; right: 64px; bottom: 16px; z-index: 1000002; width: min(352px, calc(100vw - 24px));
+  max-height: calc(100dvh - 28px); display: flex; flex-direction: column; overflow: hidden;
+  border: 1px solid var(--app-border); border-radius: 12px; background: var(--app-surface); color: var(--app-text);
+  box-shadow: 0 8px 30px #0f172a45; font-size: 13px;
+}
+.dev-tools-heading {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 12px; border-bottom: 1px solid var(--app-border); cursor: grab; touch-action: none; user-select: none;
+}
+.dev-tools-heading:active { cursor: grabbing; }
+.dev-tools-heading h2 { margin: 0; font-size: 15px; }
+.dev-tools-heading .workspace-icon-button { min-width: 30px; width: 30px; height: 30px; font-size: 17px; }
+.dev-tools-body { padding: 4px 12px 10px; overflow-y: auto; overscroll-behavior: contain; }
+.dev-tools-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding-block: 8px; }
+.dev-tools-row + .dev-tools-row { border-top: 1px solid var(--app-border); }
+.dev-tools-row > span { min-width: 60px; color: var(--app-muted); }
+.dev-tools-row :is(.note-button, .relation-entry-link) { margin: 0; min-height: 30px; padding: 5px 9px; font-size: inherit; }
+.dev-tools-row .note-button.secondary { background: var(--app-bg); color: var(--app-text); border: 1px solid var(--app-border); }
+.dev-tools-row .note-button.secondary:hover { background: var(--app-active); color: var(--app-accent); }
+.dev-tools-notice { margin: 4px 0 0; color: var(--app-muted); }
+.dev-tools-notice[role="alert"] { color: #ef4444; }
+@media (max-width: 480px) {
+  .dev-tools-panel { right: 12px; bottom: 62px; max-height: calc(100dvh - 74px); }
+  .dev-tools-row > span { min-width: 52px; }
+  .dev-tools-row[role="group"] .note-button { padding-inline: 6px; }
+}
 .app-header {
   position: sticky; top: 0; z-index: 50; min-height: var(--app-header-height);
   display: flex; align-items: center; gap: 14px; padding-inline-end: 16px;
@@ -573,7 +605,7 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
   border: 1px solid var(--app-border); border-radius: 50%; background: var(--app-accent); color: white;
   cursor: grab; box-shadow: 0 4px 12px #0f172a30; touch-action: none; user-select: none;
 }
-.assistant-launcher[data-dev] { bottom: 142px; }
+.assistant-launcher[data-dev] { bottom: 66px; }
 .assistant-launcher[data-dragging] { cursor: grabbing; }
 .assistant-minimized-mark {
   position: absolute; top: -3px; right: -3px; display: grid; place-items: center; width: 18px; height: 18px;
@@ -856,7 +888,7 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
   background: var(--app-bg) radial-gradient(var(--app-border) 1px, transparent 1px) 0 0 / 18px 18px; cursor: grab;
   touch-action: none; user-select: none;
 }
-.app-shell[data-knowledge-demo] { --network-header-height: 425px; }
+.app-shell[data-test-workspace] { --network-header-height: 425px; }
 .network-viewport:active { cursor: grabbing; }
 .network-board { position: absolute; inset: 0 auto auto 0; transform-origin: top left; }
 .network-group { position: absolute; border: 1px solid var(--app-border); border-radius: 11px; background: var(--app-bg); padding: 7px 15px; color: var(--app-muted); }

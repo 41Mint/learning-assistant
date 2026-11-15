@@ -1,328 +1,181 @@
-import { useState, useRef, useEffect } from 'react';
-import type { StudyLog } from '../../types';
-import { formatDate, generateId, getStorageItem, getTodayDate, setStorageItem, STORAGE_KEYS } from '../../utils/storage';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { usePomodoroStore } from '../../store/pomodoroStore';
-import { replaceBackupAssets } from '../../utils/projectCodeStorage';
+import { useStudyLogStore } from '../../store/studyLogStore';
 import { emptyProjectCode } from '../../utils/projectCode';
-import { IS_KNOWLEDGE_DEMO, KNOWLEDGE_DEMO_HREF, STORAGE_PREFIX } from '../../utils/workspaceMode';
-import { isTrashedLog } from '../../utils/studyLogs';
-import type { StoredStudyLog } from '../../utils/studyLogs';
+import { replaceBackupAssets } from '../../utils/projectCodeStorage';
+import { formatDate, generateId, getTodayDate, STORAGE_KEYS } from '../../utils/storage';
+import { isTrashedLog, readStoredLogs } from '../../utils/studyLogs';
+import { IS_TEST_WORKSPACE, STORAGE_PREFIX, TEST_WORKSPACE_HREF } from '../../utils/workspaceMode';
+import WorkspaceDialog from '../common/WorkspaceDialog';
 
-function addStoredDuration(date: string, minutes: number, content: string) {
-  const logs = getStorageItem<StoredStudyLog[]>(STORAGE_KEYS.STUDY_LOGS, []);
-  const existingIndex = logs.findIndex((log) => log.date === date && !isTrashedLog(log));
+function recentDates(days: number) {
+  const today = new Date();
+  return Array.from({ length: days }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(date.getDate() - index);
+    return formatDate(date);
+  });
+}
+
+function addStoredDurations(additions: { date: string; minutes: number; content: string }[]) {
+  const logs = readStoredLogs();
   const now = Date.now();
-
-  if (existingIndex >= 0) {
-    const updatedLogs = [...logs];
-    updatedLogs[existingIndex] = {
-      ...updatedLogs[existingIndex],
-      duration: updatedLogs[existingIndex].duration + minutes,
-      updatedAt: now,
-    };
-    setStorageItem(STORAGE_KEYS.STUDY_LOGS, updatedLogs);
-    return updatedLogs[existingIndex].duration;
+  for (const { date, minutes, content } of additions) {
+    const index = logs.findIndex((log) => log.date === date && !isTrashedLog(log));
+    if (index >= 0) {
+      logs[index] = { ...logs[index], duration: logs[index].duration + minutes, updatedAt: now };
+    } else {
+      logs.push({ id: generateId(), date, duration: minutes, content, tags: [], knowledgePoints: [], createdAt: now, updatedAt: now });
+    }
   }
+  localStorage.setItem(STORAGE_KEYS.STUDY_LOGS, JSON.stringify(logs));
+  useStudyLogStore.getState().loadLogs();
+}
 
-  const newLog: StudyLog = {
-    id: generateId(),
-    date,
-    duration: minutes,
-    content,
-    tags: [],
-    knowledgePoints: [],
-    createdAt: now,
-    updatedAt: now,
+type Position = { x: number; y: number };
+const panelGap = 12;
+
+function clampPosition({ x, y }: Position, { width, height }: Pick<DOMRect, 'width' | 'height'>): Position {
+  return {
+    x: Math.max(panelGap, Math.min(x, window.innerWidth - width - panelGap)),
+    y: Math.max(panelGap, Math.min(y, window.innerHeight - height - panelGap)),
   };
-  setStorageItem(STORAGE_KEYS.STUDY_LOGS, [...logs, newLog]);
-  return newLog.duration;
 }
 
 export default function DevTools() {
   const [isOpen, setIsOpen] = useState(false);
-  const [position, setPosition] = useState({ x: window.innerWidth - 350, y: 100 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const panelRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<Position>();
+  const [confirmation, setConfirmation] = useState<'reset' | 'clear'>();
+  const [notice, setNotice] = useState<{ text: string; error?: boolean }>();
+  const launcher = useRef<HTMLButtonElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLElement>(null);
+  const drag = useRef<{ pointerId: number; x: number; y: number } | undefined>(undefined);
   const completePomodoro = usePomodoroStore((state) => state.completePomodoro);
 
-  // 只在开发环境显示
-  const isDev = import.meta.env.DEV;
-
-  // 鼠标按下开始拖动
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('.drag-handle')) {
-      setIsDragging(true);
-      setDragOffset({
-        x: e.clientX - position.x,
-        y: e.clientY - position.y
+  useLayoutEffect(() => {
+    const element = panel.current;
+    if (!isOpen || !element) return;
+    closeButton.current?.focus({ preventScroll: true });
+    const resize = () => {
+      const bounds = element.getBoundingClientRect();
+      setPosition((current) => {
+        if (!current) return current;
+        const next = clampPosition(current, bounds);
+        return current.x === next.x && current.y === next.y ? current : next;
       });
-    }
-  };
-
-  // 鼠标移动
-  useEffect(() => {
-    if (!isDev) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isDragging) {
-        const newX = Math.max(0, Math.min(e.clientX - dragOffset.x, window.innerWidth - 320));
-        const newY = Math.max(0, Math.min(e.clientY - dragOffset.y, window.innerHeight - 100));
-        setPosition({ x: newX, y: newY });
-      }
     };
-
-    const handleMouseUp = () => {
-      setIsDragging(false);
-    };
-
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-    }
-
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(element);
+    window.addEventListener('resize', resize);
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      observer.disconnect();
+      window.removeEventListener('resize', resize);
     };
-  }, [isDev, isDragging, dragOffset]);
+  }, [isOpen]);
 
-  if (!isDev) return null;
+  if (!import.meta.env.DEV) return null;
 
-  // 生成随机学习数据
-  const generateMockData = (days: number) => {
-    for (let i = 0; i < days; i++) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      const dateStr = formatDate(date);
-
-      const duration = Math.floor(Math.random() * 126) + 25;
-
-      addStoredDuration(dateStr, duration, `### 模拟学习记录\n\n第 ${i + 1} 天`);
-    }
-
-    alert(`✅ 已生成 ${days} 天的模拟数据！刷新页面查看效果。`);
-    window.location.reload();
+  const close = () => {
+    setIsOpen(false);
+    drag.current = undefined;
+    launcher.current?.focus({ preventScroll: true });
   };
-
-  // 清空所有数据
-  const clearAllData = async () => {
-    if (!confirm('⚠️ 确定要清空所有数据吗？此操作不可恢复！')) return;
-
-    try { await replaceBackupAssets([], emptyProjectCode()); }
-    catch { alert('图片和项目代码未能清空，操作已停止，请重试。'); return; }
-
-    Object.keys(localStorage).forEach(key => {
-      if (key.startsWith(STORAGE_PREFIX)) {
-        localStorage.removeItem(key);
-      }
-    });
-
-    alert('✅ 所有数据已清空！');
-    window.location.reload();
-  };
-
-  const resetDemo = async () => {
-    if (!confirm('恢复内置演示数据？演示工作区中的修改会被替换。')) return;
+  const run = (operation: () => void, message: string) => {
     try {
-      const { prepareKnowledgeDemo } = await import('../../data/knowledgeDemo');
-      await prepareKnowledgeDemo(true);
-      window.location.reload();
+      operation();
+      setNotice({ text: message });
     } catch (error) {
-      alert(error instanceof Error ? error.message : '演示数据恢复失败。');
+      setNotice({ text: error instanceof Error ? error.message : '操作失败，请重试。', error: true });
     }
   };
-
-  // 添加今日学习记录
-  const addTodayDuration = (minutes: number) => {
-    const today = getTodayDate();
-    const newDuration = addStoredDuration(today, minutes, '### 测试学习记录\n\n由开发者工具添加');
-
-    alert(`✅ 已添加 ${minutes} 分钟，今日总计: ${newDuration} 分钟`);
+  const reset = async () => {
+    usePomodoroStore.getState().pauseTimer();
+    if (confirmation === 'reset') {
+      const { prepareTestWorkspace } = await import('../../data/knowledgeDemo');
+      await prepareTestWorkspace(true);
+    } else {
+      await replaceBackupAssets([], emptyProjectCode());
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith(STORAGE_PREFIX)) localStorage.removeItem(key);
+      }
+    }
     window.location.reload();
   };
+  const resetSamples = confirmation === 'reset';
+  const personalPage = window.location.hash.split(/[/?]/, 1)[0] || '#today';
 
-  // 走与计时自然结束相同的状态流程，用于验证番茄钟、Streak、目标标签的联动。
-  const simulatePomodoroCompletion = () => {
-    completePomodoro();
-    alert('✅ 已模拟完成 1 个番茄钟。学习时长、打卡、目标或练习参考标签会按正式流程更新。');
-  };
-
-  // 查看所有学习数据（调试用）
-  const debugAllData = () => {
-    console.clear();
-    console.log('=== 🔍 Learning Assistant 数据调试 ===\n');
-
-    const logs = getStorageItem<StoredStudyLog[]>(STORAGE_KEYS.STUDY_LOGS, []).filter((log) => !isTrashedLog(log));
-    console.log(`📦 总共 ${logs.length} 条学习记录\n`);
-
-    logs.sort((a, b) => a.date.localeCompare(b.date)).forEach((log) => {
-      console.log(`${log.date} → ${log.duration || 0} 分钟`);
-    });
-
-    // 检查本周数据
-    console.log('\n📅 本周数据（最近7天）:');
-    const today = new Date();
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      const dateStr = formatDate(date);
-      const duration = logs.find((log) => log.date === dateStr)?.duration ?? 0;
-      console.log(`  ${dateStr} → ${duration} 分钟 ${duration === 0 ? '❌' : '✅'}`);
-    }
-
-    alert('📊 调试数据已输出到控制台（按 F12 查看）');
-  };
-
-  return (
-    <>
-      {/* 浮动按钮 - 放大到 96px */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        style={{
-          position: 'fixed',
-          bottom: '32px',
-          right: '32px',
-          zIndex: 999999
+  return <>
+    <button ref={launcher} type="button" className="dev-tools-launcher" title="开发者工具"
+      aria-label="开发者工具" aria-expanded={isOpen} aria-controls={isOpen ? 'dev-tools-panel' : undefined}
+      onClick={() => isOpen ? close() : setIsOpen(true)}><span aria-hidden="true">🛠</span></button>
+    {isOpen && <section ref={panel} id="dev-tools-panel" className="dev-tools-panel" aria-labelledby="dev-tools-heading"
+      style={position && { left: position.x, top: position.y, right: 'auto', bottom: 'auto' }}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && !event.nativeEvent.isComposing && !confirmation) {
+          event.preventDefault();
+          event.stopPropagation();
+          close();
+        }
+      }}>
+      <header className="dev-tools-heading"
+        onPointerDown={(event) => {
+          if (!event.isPrimary || event.button !== 0 || (event.target instanceof Element && event.target.closest('button'))) return;
+          const bounds = panel.current?.getBoundingClientRect();
+          if (!bounds) return;
+          drag.current = { pointerId: event.pointerId, x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+          event.currentTarget.setPointerCapture(event.pointerId);
         }}
-        className="w-24 h-24 bg-gradient-to-br from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 text-white rounded-full shadow-2xl flex items-center justify-center text-6xl transition-all hover:scale-110 border-4 border-purple-300"
-        title="开发者工具 (可拖动)"
-      >
-        🛠️
-      </button>
-
-      {/* 可拖动的工具面板 - 放大到 400px */}
-      {isOpen && (
-        <div
-          ref={panelRef}
-          style={{
-            position: 'fixed',
-            left: `${position.x}px`,
-            top: `${position.y}px`,
-            zIndex: 999998,
-            cursor: isDragging ? 'grabbing' : 'default'
-          }}
-          onMouseDown={handleMouseDown}
-          className="w-[400px] rounded-xl shadow-2xl border-2 border-purple-500 overflow-hidden bg-white dark:bg-gray-800"
-        >
-          {/* 标题栏 - 可拖动区域，更大字体 */}
-          <div className="drag-handle bg-gradient-to-r from-purple-600 to-purple-700 p-4 cursor-grab active:cursor-grabbing select-none">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                🛠️ 开发者工具
-              </h3>
-              <button
-                onClick={() => setIsOpen(false)}
-                className="text-white hover:bg-white/20 w-9 h-9 rounded-full flex items-center justify-center transition text-xl"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-
-          {/* 面板内容 - 更大的字体和按钮 */}
-          <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-            <div className="border-b border-gray-200 dark:border-gray-700 pb-4">
-              {IS_KNOWLEDGE_DEMO
-                ? <button type="button" className="note-button secondary" onClick={() => void resetDemo()}>恢复内置演示数据</button>
-                : <a className="relation-entry-link" href={KNOWLEDGE_DEMO_HREF} target="_blank" rel="noopener">打开知识网络演示</a>}
-            </div>
-            {/* 生成模拟数据 */}
-            <div className="border-b border-gray-200 dark:border-gray-700 pb-4">
-              <p className="text-base font-medium text-gray-700 dark:text-gray-300 mb-3">
-                📊 生成模拟数据
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => generateMockData(7)}
-                  className="flex-1 px-5 py-4 bg-blue-500 hover:bg-blue-600 text-white text-lg rounded-lg transition font-medium"
-                >
-                  7天
-                </button>
-                <button
-                  onClick={() => generateMockData(14)}
-                  className="flex-1 px-5 py-4 bg-blue-500 hover:bg-blue-600 text-white text-lg rounded-lg transition font-medium"
-                >
-                  14天
-                </button>
-                <button
-                  onClick={() => generateMockData(30)}
-                  className="flex-1 px-5 py-4 bg-blue-500 hover:bg-blue-600 text-white text-lg rounded-lg transition font-medium"
-                >
-                  30天
-                </button>
-              </div>
-            </div>
-
-            {/* 添加今日学习时长 */}
-            <div className="border-b border-gray-200 dark:border-gray-700 pb-4">
-              <p className="text-base font-medium text-gray-700 dark:text-gray-300 mb-3">
-                ⏱️ 添加今日学习时长
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => addTodayDuration(25)}
-                  className="flex-1 px-5 py-4 bg-green-500 hover:bg-green-600 text-white text-lg rounded-lg transition font-medium"
-                >
-                  +25分钟
-                </button>
-                <button
-                  onClick={() => addTodayDuration(50)}
-                  className="flex-1 px-5 py-4 bg-green-500 hover:bg-green-600 text-white text-lg rounded-lg transition font-medium"
-                >
-                  +50分钟
-                </button>
-                <button
-                  onClick={() => addTodayDuration(100)}
-                  className="flex-1 px-5 py-4 bg-green-500 hover:bg-green-600 text-white text-lg rounded-lg transition font-medium"
-                >
-                  +100分钟
-                </button>
-              </div>
-            </div>
-
-            {/* 模拟真实番茄钟完成 */}
-            <div className="border-b border-gray-200 dark:border-gray-700 pb-4">
-              <p className="text-base font-medium text-gray-700 dark:text-gray-300 mb-2">
-                🍅 模拟番茄钟完成
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
-                用于验证完成数、打卡、学习日志、目标或练习参考标签的联动。
-              </p>
-              <button
-                onClick={simulatePomodoroCompletion}
-                className="w-full px-6 py-4 bg-orange-500 hover:bg-orange-600 text-white text-lg rounded-lg transition font-medium"
-              >
-                🍅 模拟完成 1 个番茄钟
-              </button>
-            </div>
-
-            {/* 调试工具 */}
-            <div className="border-b border-gray-200 dark:border-gray-700 pb-4">
-              <p className="text-base font-medium text-gray-700 dark:text-gray-300 mb-3">
-                🔍 调试工具
-              </p>
-              <button
-                onClick={debugAllData}
-                className="w-full px-6 py-4 bg-yellow-500 hover:bg-yellow-600 text-white text-lg rounded-lg transition font-medium"
-              >
-                📊 查看所有数据 (控制台)
-              </button>
-            </div>
-
-            {!IS_KNOWLEDGE_DEMO && <button
-              onClick={clearAllData}
-              className="w-full px-6 py-4 bg-red-500 hover:bg-red-600 text-white text-lg rounded-lg transition font-medium"
-            >
-              🗑️ 清空所有数据
-            </button>}
-
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-4 text-center">
-              💡 仅开发环境 | 抓住标题栏拖动面板
-            </p>
-          </div>
+        onPointerMove={(event) => {
+          const gesture = drag.current;
+          const bounds = panel.current?.getBoundingClientRect();
+          if (gesture?.pointerId === event.pointerId && bounds) {
+            setPosition(clampPosition({ x: event.clientX - gesture.x, y: event.clientY - gesture.y }, bounds));
+          }
+        }}
+        onLostPointerCapture={() => { drag.current = undefined; }}>
+        <h2 id="dev-tools-heading">开发者工具</h2>
+        <button ref={closeButton} type="button" className="workspace-icon-button" aria-label="关闭开发者工具" onClick={close}>×</button>
+      </header>
+      <div className="dev-tools-body">
+        <div className="dev-tools-row">
+          {IS_TEST_WORKSPACE ? <>
+            <button type="button" className="note-button secondary" onClick={() => setConfirmation('reset')}>恢复示例数据</button>
+            <a className="relation-entry-link" href={window.location.pathname + personalPage}>返回个人工作区</a>
+          </> : <a className="relation-entry-link" href={TEST_WORKSPACE_HREF} target="_blank" rel="noopener">进入测试工作区</a>}
         </div>
-      )}
-    </>
-  );
+        <div className="dev-tools-row" role="group" aria-label="生成模拟日志">
+          <span>模拟日志</span>
+          {[7, 14, 30].map((days) => <button type="button" className="note-button secondary" key={days}
+            onClick={() => run(() => addStoredDurations(recentDates(days).map((date, index) => ({
+              date, minutes: Math.floor(Math.random() * 126) + 25, content: `### 模拟学习记录\n\n第 ${index + 1} 天`,
+            }))), `已生成 ${days} 天的模拟时长。`)}>{days} 天</button>)}
+        </div>
+        <div className="dev-tools-row" role="group" aria-label="添加今日学习时长">
+          <span>今日时长</span>
+          {[25, 50, 100].map((minutes) => <button type="button" className="note-button secondary" key={minutes}
+            onClick={() => run(() => addStoredDurations([{ date: getTodayDate(), minutes, content: '### 测试学习记录' }]),
+              `今日学习时长已增加 ${minutes} 分钟。`)}>+{minutes} 分</button>)}
+        </div>
+        <div className="dev-tools-row">
+          <button type="button" className="note-button secondary"
+            onClick={() => run(completePomodoro, '已模拟完成 1 个番茄钟。')}>模拟完成 1 个番茄钟</button>
+          <button type="button" className="knowledge-text-button" onClick={() => run(() => {
+            const logs = readStoredLogs().filter((log) => !isTrashedLog(log));
+            console.table(logs.map(({ date, duration }) => ({ date, duration })));
+          }, '学习时长已输出到控制台。')}>输出日志统计</button>
+        </div>
+        {!IS_TEST_WORKSPACE && <div className="dev-tools-row">
+          <button type="button" className="knowledge-text-button danger" onClick={() => setConfirmation('clear')}>清空个人数据</button>
+        </div>}
+        {notice && <p className="dev-tools-notice" role={notice.error ? 'alert' : 'status'}>{notice.text}</p>}
+      </div>
+      {confirmation && <WorkspaceDialog title={resetSamples ? '恢复示例数据' : '清空个人数据'}
+        action={resetSamples ? '确认恢复' : '确认清空'} destructive onClose={() => setConfirmation(undefined)} onSave={reset}>
+        <p>{resetSamples ? '恢复后，本浏览器在测试工作区所做的修改将被内置示例替换。'
+          : '清空将删除本浏览器中的个人学习数据。此操作无法撤销。'}</p>
+      </WorkspaceDialog>}
+    </section>}
+  </>;
 }

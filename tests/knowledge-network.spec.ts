@@ -256,14 +256,18 @@ test('密集演示能分层聚焦，选中连线可绕开卡片且个人数据�
   await page.goto('/#network');
   const personalResources = await readResources();
   expect(personalResources.projectCode?.versions).toHaveLength(1);
+  await expect(page.getByRole('link', { name: '进入测试工作区', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: '开发者工具', exact: true }).click();
+  const personalTools = page.getByRole('region', { name: '开发者工具', exact: true });
   const [demo] = await Promise.all([
     context.waitForEvent('page'),
-    page.getByRole('link', { name: '打开知识网络演示', exact: true }).click(),
+    personalTools.getByRole('link', { name: '进入测试工作区', exact: true }).click(),
   ]);
   await demo.setViewportSize({ width: 1440, height: 900 });
   await demo.emulateMedia({ colorScheme: 'dark' });
-  await expect(demo).toHaveURL(/\?workspace=knowledge-demo#network$/);
-  await expect(demo.getByText('知识网络演示工作区', { exact: true })).toBeVisible();
+  await expect(demo).toHaveURL(/\?workspace=knowledge-demo#today$/);
+  await expect(demo.getByText('测试工作区', { exact: true })).toBeVisible();
+  await demo.getByRole('link', { name: '知识网络', exact: true }).click();
   const graph = demo.getByRole('group', { name: '知识网络图', exact: true });
   const nodes = graph.locator('button.network-node');
   const lines = graph.locator('.network-line');
@@ -317,13 +321,15 @@ test('密集演示能分层聚焦，选中连线可绕开卡片且个人数据�
   await demo.reload();
   await demo.getByRole('link', { name: '在知识网络中查看', exact: true }).click();
   await expect(details.getByRole('button', { name: '查看与 碰撞检测 的关系（压力验证）', exact: true })).toBeVisible();
-  await demo.getByTitle('开发者工具 (可拖动)').click();
-  demo.once('dialog', (dialog) => dialog.accept());
-  await demo.getByRole('button', { name: '恢复内置演示数据', exact: true }).click();
+  await demo.getByRole('button', { name: '开发者工具', exact: true }).click();
+  await demo.getByRole('button', { name: '恢复示例数据', exact: true }).click();
+  const reset = demo.getByRole('dialog', { name: '恢复示例数据', exact: true });
+  await Promise.all([demo.waitForEvent('load'), reset.getByRole('button', { name: '确认恢复' }).click()]);
   await expect(details.getByRole('button', { name: '查看与 碰撞检测 的关系（练习线索）', exact: true })).toBeVisible();
-  await demo.getByRole('link', { name: '返回个人知识网络', exact: true }).click();
+  await demo.getByRole('button', { name: '开发者工具', exact: true }).click();
+  await demo.getByRole('link', { name: '返回个人工作区', exact: true }).click();
   await expect(demo).toHaveURL(/\/#network$/);
-  await expect(demo.getByText('知识网络演示工作区', { exact: true })).toHaveCount(0);
+  await expect(demo.getByText('测试工作区', { exact: true })).toHaveCount(0);
   await page.reload();
   expect(await readResources()).toEqual(personalResources);
 });
