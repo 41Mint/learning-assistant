@@ -1,4 +1,4 @@
-import type { CodeLink, CodeProject, CodeTarget, CodeVersion, ProjectCodeData, ProjectDirectory } from '../types/projectCode.ts';
+import type { CodeLink, CodeProject, CodeTarget, CodeVersion, ProjectCodeData, ProjectDirectory, StoredProjectCodeData, TrashedCodeVersion } from '../types/projectCode.ts';
 import { isRelationAnnotation } from './relationAnnotation.ts';
 import type { GrowthOutcome, GrowthPractice, KnowledgeEntry } from '../types/index.ts';
 
@@ -8,7 +8,7 @@ const GITHUB_ORIGIN = 'https://github.com';
 const ownerPattern = /^[a-z\d](?:[a-z\d-]{0,38})$/i;
 const repositoryPattern = /^[a-z\d_.-]+$/i;
 
-export const emptyProjectCode = (): ProjectCodeData => ({ version: 1, projects: [], versions: [], links: [] });
+export const emptyProjectCode = (): StoredProjectCodeData => ({ version: 1, projects: [], versions: [], links: [], trash: { versions: [], links: [] } });
 
 export function isProjectRelativePath(path: string): boolean {
   return path.length <= MAX_PATH_LENGTH && !/[\\<>:"|?*]/.test(path)
@@ -209,6 +209,11 @@ function isVersion(value: unknown): value is CodeVersion {
   return source.url === value.githubUrl && source.path === value.path;
 }
 
+function isTrashedVersion(value: unknown): value is TrashedCodeVersion {
+  return isRecord(value) && typeof value.deletedAt === 'number' && value.deletedAt >= 0
+    && Number.isFinite(new Date(value.deletedAt).getTime()) && isVersion(value);
+}
+
 function isLink(value: unknown): value is CodeLink {
   if (!isRecord(value) || !nonempty(value.versionId) || !isRecord(value.target) || !nonempty(value.target.id)
     || (value.annotation !== undefined && !isRelationAnnotation(value.annotation))) return false;
@@ -216,19 +221,25 @@ function isLink(value: unknown): value is CodeLink {
   return kind === 'log' || kind === 'entry' || (kind === 'practice' && nonempty(outcomeId));
 }
 
-export function validateProjectCode(value: unknown): ProjectCodeData {
+export function validateProjectCode(value: unknown): StoredProjectCodeData {
   if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.projects) || !value.projects.every(isProject)
     || !Array.isArray(value.versions) || !value.versions.every(isVersion)
     || !Array.isArray(value.links) || !value.links.every(isLink)) {
     throw new Error('项目代码数据格式不正确。');
   }
+  const trash = value.trash === undefined ? emptyProjectCode().trash : value.trash;
+  if (!isRecord(trash) || !Array.isArray(trash.versions) || !trash.versions.every(isTrashedVersion)
+    || !Array.isArray(trash.links) || !trash.links.every(isLink)) throw new Error('代码版本回收站数据格式不正确。');
   const projectIds = new Set(value.projects.map((project) => project.id));
   const versionIds = new Set(value.versions.map((version) => version.id));
-  const linkKeys = new Set(value.links.map((link) => JSON.stringify([link.versionId, codeTargetKey(link.target)])));
-  if (projectIds.size !== value.projects.length || versionIds.size !== value.versions.length || linkKeys.size !== value.links.length
-    || value.versions.some((version) => !projectIds.has(version.projectId))
-    || value.links.some((link) => !versionIds.has(link.versionId))) {
+  const trashedIds = new Set(trash.versions.map((version) => version.id));
+  const versions = [...value.versions, ...trash.versions];
+  const links = [...value.links, ...trash.links];
+  const linkKeys = new Set(links.map((link) => JSON.stringify([link.versionId, codeTargetKey(link.target)])));
+  if (projectIds.size !== value.projects.length || new Set([...versionIds, ...trashedIds]).size !== versions.length
+    || linkKeys.size !== links.length || versions.some((version) => !projectIds.has(version.projectId))
+    || value.links.some((link) => !versionIds.has(link.versionId)) || trash.links.some((link) => !trashedIds.has(link.versionId))) {
     throw new Error('项目代码数据中存在重复或无效的关联。');
   }
-  return { version: 1, projects: value.projects, versions: value.versions, links: value.links };
+  return { version: 1, projects: value.projects, versions: value.versions, links: value.links, trash: { versions: trash.versions, links: trash.links } };
 }

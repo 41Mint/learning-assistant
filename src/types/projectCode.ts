@@ -41,3 +41,9 @@ export interface ProjectCodeData {
   versions: CodeVersion[];
   links: CodeLink[];
 }
+
+export type TrashedCodeVersion = CodeVersion & { deletedAt: number };
+
+export interface StoredProjectCodeData extends ProjectCodeData {
+  trash: { versions: TrashedCodeVersion[]; links: CodeLink[] };
+}

@@ -3,8 +3,8 @@ import type { CodeLink, CodeVersion } from '../types/projectCode';
 import type { BackupFile } from '../utils/dataBackup';
 import { restoreBackup } from '../utils/dataBackup';
 import { emptyGrowth } from '../utils/growth';
-import { validateKnowledge } from '../utils/knowledge';
-import { effectiveCodeLinks, entryCodeIds } from '../utils/projectCode';
+import { emptyKnowledge, validateKnowledge } from '../utils/knowledge';
+import { effectiveCodeLinks, emptyProjectCode, entryCodeIds } from '../utils/projectCode';
 import { readProjectCode } from '../utils/projectCodeStorage';
 import { getStorageItem, STORAGE_KEYS } from '../utils/storage';
 import { IS_KNOWLEDGE_DEMO, STORAGE_PREFIX } from '../utils/workspaceMode';
@@ -87,11 +87,11 @@ function demoBackup(): BackupFile {
   codeLinks.push({ versionId: sharedVersionId, target: { kind: 'entry', id: sharedLog.entryId } });
 
   return {
-    format: 'learning-assistant-backup', version: 5, exportedAt: new Date(FIXTURE_TIME).toISOString(), images: [],
+    format: 'learning-assistant-backup', version: 8, exportedAt: new Date(FIXTURE_TIME).toISOString(), images: [],
     data: {
       studyLogs, trashedLogs: [], tasks: [], skillTree: null, currentGoal: null, streak: null, settings: null, pomodoroToday: null,
-      knowledge: { version: 1, entries, logLinks, relations }, growth: emptyGrowth(),
-      projectCode: { version: 1, projects: [{ id: projectId, name: 'Unity 学习演示', repositoryUrl: '', tutorialUrl: '' }], versions, links: codeLinks },
+      knowledge: { ...emptyKnowledge(), entries, logLinks, relations }, growth: emptyGrowth(),
+      projectCode: { ...emptyProjectCode(), projects: [{ id: projectId, name: 'Unity 学习演示', repositoryUrl: '', tutorialUrl: '' }], versions, links: codeLinks },
     },
   };
 }

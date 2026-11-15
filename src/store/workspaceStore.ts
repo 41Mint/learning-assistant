@@ -16,13 +16,23 @@ export const GROWTH_VIEWS = [
 ] as const;
 export type GrowthView = typeof GROWTH_VIEWS[number]['id'] | 'topics' | 'all';
 
+export const RECYCLE_CATEGORIES = [
+  { id: 'log', label: '日志' }, { id: 'entry', label: '词条' }, { id: 'code', label: '代码' },
+] as const;
+export type RecycleCategory = typeof RECYCLE_CATEGORIES[number]['id'];
+
+export function recycleBinHref(category: RecycleCategory) {
+  return category === 'log' ? '#data' : `#data?trash=${category}`;
+}
+
 export function readWorkspaceHash() {
   const [path, query = ''] = window.location.hash.slice(1).split('?');
   const [page, value = '', detail = ''] = path.split('/');
+  const params = new URLSearchParams(query);
+  const recycleCategory = RECYCLE_CATEGORIES.find(({ id }) => id === params.get('trash'))?.id ?? 'log';
   try {
     const id = decodeURIComponent(value);
     const decodedDetail = decodeURIComponent(detail);
-    const params = new URLSearchParams(query);
     const words = searchWords(params.get('find') ?? '');
     const search: SearchLocation | null = id && words.length && (page === 'history' || page === 'knowledge' || page === 'code')
       ? { page, id, words, inSource: page === 'code' && params.get('source') === '1' } : null;
@@ -35,8 +45,8 @@ export function readWorkspaceHash() {
       ? { outcomeId: id, practiceId: decodedDetail } : null;
     const growthView: GrowthView = page === 'path' && (id === 'try' || (!decodedDetail && id === 'topics')) ? id
       : groupId && !id && params.get('view') === 'all' ? 'all' : 'recent';
-    return { page, id, search, relation, growthView, groupId, cardId, exerciseId, practiceTarget };
-  } catch { return { page, id: '', search: null, relation: null, growthView: 'recent' as GrowthView, groupId: null, cardId: null, exerciseId: null, practiceTarget: null }; }
+    return { page, id, search, relation, growthView, groupId, cardId, exerciseId, practiceTarget, recycleCategory };
+  } catch { return { page, id: '', search: null, relation: null, growthView: 'recent' as GrowthView, groupId: null, cardId: null, exerciseId: null, practiceTarget: null, recycleCategory }; }
 }
 const initial = readWorkspaceHash();
 const isDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(new Date(`${value}T12:00:00`).getTime());
@@ -92,6 +102,7 @@ interface WorkspaceStore {
   growthCardId: string | null;
   growthExerciseId: string | null;
   growthView: GrowthView;
+  recycleCategory: RecycleCategory;
   search: SearchLocation | null;
   relationTarget: RelationNodeRef | null;
   networkEntryRequest: { id: string } | null;
@@ -109,11 +120,12 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   growthCardId: initial.cardId,
   growthExerciseId: initial.exerciseId,
   growthView: initial.growthView,
+  recycleCategory: initial.recycleCategory,
   search: initial.search,
   relationTarget: initial.relation,
   networkEntryRequest: initial.page === 'network' && initial.id ? { id: initial.id } : null,
   syncHash: () => {
-    const { page, id, search, relation, growthView, groupId, cardId, exerciseId, practiceTarget } = readWorkspaceHash();
+    const { page, id, search, relation, growthView, groupId, cardId, exerciseId, practiceTarget, recycleCategory } = readWorkspaceHash();
     const selection: Partial<WorkspaceStore> = { search, relationTarget: relation };
     if (page === 'network' && id && window.history.state?.knowledgeNetworkEntry !== id) {
       // Back and Forward revisit an existing entry, while a new link requests focus.
@@ -123,6 +135,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
     if (page === 'knowledge' && id) selection.entryId = id;
     if (page === 'history' && isDate(id)) selection.historyDate = id;
     if (page === 'code') selection.codeVersionId = id || null;
+    if (page === 'data') selection.recycleCategory = recycleCategory;
     if (page === 'path') {
       selection.practiceTarget = practiceTarget;
       selection.growthOutcomeId = growthView === 'recent' ? id || null : null;

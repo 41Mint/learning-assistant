@@ -1,10 +1,10 @@
 import { IMAGE_PREFIX, referencedImageIds } from './imageStorage';
 import type { StoredImage } from './imageStorage';
 import { isCalendarDate, LEGACY_LOG_PREFIX, STORAGE_KEYS } from './storage';
-import type { GrowthData, KnowledgeData, LearningTask, StudyLog, TrashedStudyLog } from '../types';
+import type { GrowthData, LearningTask, StoredKnowledgeData, StudyLog, TrashedStudyLog } from '../types';
 import { isTrashedLog } from './studyLogs';
 import type { StoredStudyLog } from './studyLogs';
-import type { ProjectCodeData } from '../types/projectCode';
+import type { StoredProjectCodeData } from '../types/projectCode';
 import { emptyKnowledge, validateKnowledge } from './knowledge';
 import { emptyGrowth, validateGrowth } from './growth';
 import { emptyProjectCode, validateProjectCode } from './projectCode';
@@ -20,13 +20,13 @@ interface BackupData {
   streak: Record<string, unknown> | null;
   settings: Record<string, unknown> | null;
   pomodoroToday: Record<string, unknown> | null;
-  knowledge: KnowledgeData;
+  knowledge: StoredKnowledgeData;
   growth: GrowthData;
-  projectCode: ProjectCodeData;
+  projectCode: StoredProjectCodeData;
 }
 export interface BackupFile {
   format: 'learning-assistant-backup';
-  version: 1 | 2 | 3 | 4 | 5 | 6;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
   exportedAt: string;
   data: BackupData;
   images: BackupImage[];
@@ -55,7 +55,8 @@ function optionalRecord(value: unknown): Record<string, unknown> | null {
 
 export function parseBackup(value: unknown): BackupFile {
   if (!isRecord(value) || value.format !== 'learning-assistant-backup'
-    || (value.version !== 1 && value.version !== 2 && value.version !== 3 && value.version !== 4 && value.version !== 5 && value.version !== 6)
+    || (value.version !== 1 && value.version !== 2 && value.version !== 3 && value.version !== 4
+      && value.version !== 5 && value.version !== 6 && value.version !== 7 && value.version !== 8)
     || typeof value.exportedAt !== 'string' || !Number.isFinite(Date.parse(value.exportedAt)) || !isRecord(value.data)) {
     throw new Error('无法识别该备份，请选择由学习助手导出的 JSON 文件。');
   }
@@ -101,7 +102,7 @@ export function parseBackup(value: unknown): BackupFile {
   }
   const ids = new Set(images.map((image) => image.id));
   if (ids.size !== images.length) throw new Error('图片 ID 重复，无法恢复。');
-  for (const content of [...allLogs.map((log) => log.content), ...knowledge.entries.map((entry) => entry.content)]) {
+  for (const { content } of [...allLogs, ...knowledge.entries, ...knowledge.trash.entries]) {
     for (const id of referencedImageIds(content)) {
       if (!ids.has(id)) throw new Error(`备份缺少记录引用的图片：${id}`);
     }
@@ -143,7 +144,7 @@ export async function createBackup(): Promise<BackupFile> {
   const assets = await readBackupAssets();
   raw.projectCode = assets.projectCode;
   const images = await Promise.all(assets.images.map(encodeImage));
-  return parseBackup({ format: 'learning-assistant-backup', version: 6, exportedAt: new Date().toISOString(), data: raw, images });
+  return parseBackup({ format: 'learning-assistant-backup', version: 8, exportedAt: new Date().toISOString(), data: raw, images });
 }
 
 export async function restoreBackup(backup: BackupFile): Promise<void> {

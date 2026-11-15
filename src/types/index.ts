@@ -96,6 +96,16 @@ export interface KnowledgeData {
   relations: KnowledgeRelation[];
 }
 
+export type TrashedKnowledgeEntry = KnowledgeEntry & { deletedAt: number };
+
+export interface StoredKnowledgeData extends KnowledgeData {
+  trash: {
+    entries: TrashedKnowledgeEntry[];
+    logLinks: KnowledgeLogLink[];
+    relations: KnowledgeRelation[];
+  };
+}
+
 export type GrowthDomain = SkillNode['category'];
 
 export interface GrowthPractice {

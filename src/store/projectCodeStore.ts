@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { CodeLink, CodeProject, CodeTarget, CodeVersion, ProjectCodeData, ProjectDirectory } from '../types/projectCode';
+import type { CodeLink, CodeProject, CodeTarget, CodeVersion, ProjectDirectory, StoredProjectCodeData } from '../types/projectCode';
 import type { RelationAnnotation } from '../types/relations';
 import {
   codeTargetKey, emptyProjectCode, normalizeRepositoryUrl, normalizeScriptPath, normalizeTutorialUrl, parseCodePermalink,
@@ -7,7 +7,10 @@ import {
 import { readProjectCode, updateProjectCode } from '../utils/projectCodeStorage';
 import { projectDirectoryPaths } from '../utils/projectDirectory';
 import { cleanRelationAnnotation } from '../utils/relationAnnotation';
-import { generateId } from '../utils/storage';
+import { emptyGrowth, validateGrowth } from '../utils/growth';
+import { emptyKnowledge, validateKnowledge } from '../utils/knowledge';
+import { generateId, STORAGE_KEYS } from '../utils/storage';
+import { readStoredLogs } from '../utils/studyLogs';
 
 export type ProjectInput = Pick<CodeProject, 'name' | 'tutorialUrl' | 'repositoryUrl'>;
 export interface CodeVersionInput {
@@ -20,7 +23,7 @@ export interface CodeVersionInput {
 }
 
 interface ProjectCodeStore {
-  data: ProjectCodeData;
+  data: StoredProjectCodeData;
   isLoaded: boolean;
   error: string;
   load: () => Promise<void>;
@@ -36,7 +39,8 @@ interface ProjectCodeStore {
   linkVersion: (versionId: string, target: CodeTarget, annotation?: RelationAnnotation) => Promise<void>;
   unlinkVersion: (versionId: string, target: CodeTarget) => Promise<void>;
   annotateLogCode: (versionId: string, logId: string, input: RelationAnnotation) => Promise<void>;
-  deleteVersion: (id: string) => Promise<void>;
+  trashVersion: (id: string) => Promise<void>;
+  restoreVersion: (id: string) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
 }
 
@@ -61,7 +65,7 @@ function withLink(links: CodeLink[], versionId: string, target: CodeTarget, anno
 
 export const useProjectCodeStore = create<ProjectCodeStore>((set, get) => {
   let loading: Promise<void> | undefined;
-  async function update(edit: (data: ProjectCodeData) => ProjectCodeData) {
+  async function update(edit: (data: StoredProjectCodeData) => StoredProjectCodeData) {
     await get().load();
     if (get().error) throw new Error(get().error);
     const data = await updateProjectCode(edit);
@@ -208,13 +212,50 @@ export const useProjectCodeStore = create<ProjectCodeStore>((set, get) => {
       if (!link) throw new Error('这条关联已不存在。');
       return { ...data, links: data.links.map((item) => item === link ? { ...item, annotation } : item) };
     }),
-    deleteVersion: (id) => update((data) => ({
-      ...data,
-      versions: data.versions.filter((version) => version.id !== id),
-      links: data.links.filter((link) => link.versionId !== id),
-    })),
+    trashVersion: (id) => update((data) => {
+      const version = data.versions.find((item) => item.id === id);
+      if (!version) throw new Error('这个代码版本已不存在。');
+      return {
+        ...data,
+        versions: data.versions.filter((item) => item.id !== id),
+        links: data.links.filter((link) => link.versionId !== id),
+        trash: {
+          versions: [...data.trash.versions, { ...version, deletedAt: Date.now() }],
+          links: [...data.trash.links, ...data.links.filter((link) => link.versionId === id)],
+        },
+      };
+    }),
+    restoreVersion: (id) => update((data) => {
+      const candidate = data.trash.versions.find((version) => version.id === id);
+      if (!candidate) throw new Error('这个代码版本已不在回收站。');
+      const { deletedAt: _deletedAt, ...version } = candidate;
+      const archivedLinks = data.trash.links.filter((link) => link.versionId === id);
+      const targetKinds = new Set(archivedLinks.map(({ target }) => target.kind));
+      const logs = new Set(targetKinds.has('log') ? readStoredLogs().map((log) => log.id) : []);
+      const rawKnowledge = targetKinds.has('entry') ? localStorage.getItem(STORAGE_KEYS.KNOWLEDGE) : null;
+      const knowledge = rawKnowledge === null ? emptyKnowledge() : validateKnowledge(JSON.parse(rawKnowledge));
+      const entries = new Set([...knowledge.entries, ...knowledge.trash.entries].map((entry) => entry.id));
+      const rawGrowth = targetKinds.has('practice') ? localStorage.getItem(STORAGE_KEYS.GROWTH) : null;
+      const growth = rawGrowth === null ? emptyGrowth() : validateGrowth(JSON.parse(rawGrowth));
+      const practices = new Map(growth.outcomes.map((outcome) => [outcome.id, new Set(outcome.practices.map((practice) => practice.id))]));
+      const validLinks = archivedLinks.filter(({ target }) => {
+        if (target.kind === 'log') return logs.has(target.id);
+        if (target.kind === 'entry') return entries.has(target.id);
+        return practices.get(target.outcomeId)?.has(target.id);
+      });
+      return {
+        ...data,
+        versions: [...data.versions, version].sort((a, b) => a.savedAt - b.savedAt),
+        links: [...data.links, ...validLinks],
+        trash: {
+          versions: data.trash.versions.filter((item) => item.id !== id),
+          links: data.trash.links.filter((link) => link.versionId !== id),
+        },
+      };
+    }),
     deleteProject: (id) => update((data) => {
       if (data.versions.some((version) => version.projectId === id)) throw new Error('请先处理该项目下的代码版本。');
+      if (data.trash.versions.some((version) => version.projectId === id)) throw new Error('请先处理回收站中属于这个项目的代码版本。');
       return { ...data, projects: data.projects.filter((project) => project.id !== id) };
     }),
   };

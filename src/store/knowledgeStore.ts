@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import type { KnowledgeData, KnowledgeEntry, KnowledgeLogLink, KnowledgeRelation, StudyLog } from '../types';
+import type { KnowledgeData, KnowledgeEntry, KnowledgeLogLink, KnowledgeRelation, StoredKnowledgeData, StudyLog } from '../types';
 import type { RelationAnnotation } from '../types/relations';
+import type { CodeLink } from '../types/projectCode';
 import type { LogReviewSuggestion } from '../types/logReview';
 import { emptyKnowledge, entryNames, normalizedName, otherEntryId, validateKnowledge } from '../utils/knowledge';
 import { entryCodeIds } from '../utils/projectCode';
@@ -17,6 +18,12 @@ interface EntrySaveOptions {
 }
 
 export type SaveKnowledgeEntry = (input: EntryInput, options?: EntrySaveOptions) => string;
+
+function entryCodeAnnotations(entry: KnowledgeEntry, links: CodeLink[]): NonNullable<KnowledgeEntry['codeAnnotations']> {
+  if (entry.codeVersionIds !== undefined) return entry.codeAnnotations ?? [];
+  return links.flatMap(({ target, versionId, annotation }) =>
+    target.kind === 'entry' && target.id === entry.id && annotation ? [{ versionId, annotation }] : []);
+}
 
 export interface EntryCategoryChange { id: string; from: string; to: string }
 
@@ -46,14 +53,15 @@ export function sameEntryEdit(first: EntryEditSnapshot, second: EntryEditSnapsho
   return comparable(first) === comparable(second);
 }
 
-interface KnowledgeStore extends KnowledgeData {
+interface KnowledgeStore extends StoredKnowledgeData {
   isLoaded: boolean;
   error: string;
   loadKnowledge: () => void;
   saveEntry: SaveKnowledgeEntry;
   applyEntryCategories: (changes: EntryCategoryChange[]) => void;
   restoreEntryEdit: (expected: EntryEditSnapshot, replacement: EntryEditSnapshot) => void;
-  deleteEntry: (id: string) => void;
+  trashEntry: (id: string) => void;
+  restoreEntry: (id: string, names?: Pick<KnowledgeEntry, 'title' | 'aliases'>) => Promise<void>;
   linkLog: (entryId: string, logId: string, note: string, annotation?: RelationAnnotation) => void;
   saveReviewedLog: (logId: string, content: string, originalContent: string, suggestions: LogReviewSuggestion[], draft?: StudyLog) => void;
   unlinkLog: (id: string) => void;
@@ -65,13 +73,16 @@ interface KnowledgeStore extends KnowledgeData {
 }
 
 export const useKnowledgeStore = create<KnowledgeStore>((set, get) => {
-  const persist = (data: KnowledgeData) => {
+  const persist = (data: StoredKnowledgeData) => {
     if (get().error) throw new Error(get().error);
     validateKnowledge(data, storedStudyLogIds(useStudyLogStore.getState()));
     localStorage.setItem(STORAGE_KEYS.KNOWLEDGE, JSON.stringify(data));
     set(data);
   };
-  const data = (): KnowledgeData => ({ version: 1, entries: get().entries, logLinks: get().logLinks, relations: get().relations });
+  const data = (): StoredKnowledgeData => {
+    const { entries, logLinks, relations, trash } = get();
+    return { version: 1, entries, logLinks, relations, trash };
+  };
   return {
     ...emptyKnowledge(), isLoaded: false, error: '',
     loadKnowledge: () => {
@@ -90,11 +101,14 @@ export const useKnowledgeStore = create<KnowledgeStore>((set, get) => {
         .filter((alias) => alias && normalizedName(alias) !== normalizedName(title));
       const now = Date.now();
       const codeVersionIds = references?.codeVersionIds ?? old?.codeVersionIds;
+      const code = useProjectCodeStore.getState().data;
+      const codeAnnotations = old && codeVersionIds
+        ? entryCodeAnnotations(old, [...code.links, ...code.trash.links]).filter(({ versionId }) => codeVersionIds.includes(versionId)) : [];
       const item: KnowledgeEntry = {
         ...input, title, aliases, category: input.category.trim(),
         id: old?.id ?? generateId(), createdAt: old?.createdAt ?? now, updatedAt: now,
         codeVersionIds,
-        codeAnnotations: old?.codeAnnotations?.filter(({ versionId }) => codeVersionIds?.includes(versionId)),
+        codeAnnotations: codeAnnotations.length ? codeAnnotations : undefined,
       };
       const next = data();
       next.entries = old ? next.entries.map((entry) => entry.id === id ? item : entry) : [...next.entries, item];
@@ -143,11 +157,50 @@ export const useKnowledgeStore = create<KnowledgeStore>((set, get) => {
       next.relations = [...next.relations.filter((relation) => otherEntryId(relation, id) === undefined), ...replacement.relations];
       persist(next);
     },
-    deleteEntry: (id) => persist({
-      ...data(), entries: get().entries.filter((item) => item.id !== id),
-      logLinks: get().logLinks.filter((item) => item.entryId !== id),
-      relations: get().relations.filter((item) => item.sourceId !== id && item.targetId !== id),
-    }),
+    trashEntry: (id) => {
+      const next = data();
+      const snapshot = entryEditSnapshot(next, id);
+      if (!snapshot) throw new Error('这个词条已不存在。');
+      persist({
+        ...next,
+        entries: next.entries.filter((item) => item.id !== id),
+        logLinks: next.logLinks.filter((item) => item.entryId !== id),
+        relations: next.relations.filter((item) => otherEntryId(item, id) === undefined),
+        trash: {
+          entries: [...next.trash.entries, { ...snapshot.entry, deletedAt: Date.now() }],
+          logLinks: [...next.trash.logLinks, ...snapshot.logLinks],
+          relations: [...next.trash.relations, ...snapshot.relations],
+        },
+      });
+    },
+    restoreEntry: async (id, names) => {
+      await useProjectCodeStore.getState().load();
+      const next = data();
+      const archived = next.trash.entries.find((item) => item.id === id);
+      if (!archived) throw new Error('这个词条已不在回收站。');
+      const { deletedAt: _deletedAt, ...stored } = archived;
+      const restored = { ...stored, ...names };
+      const code = useProjectCodeStore.getState();
+      if (!code.error && restored.codeVersionIds) {
+        const knownVersions = new Set([...code.data.versions, ...code.data.trash.versions].map((version) => version.id));
+        restored.codeVersionIds = restored.codeVersionIds.filter((versionId) => knownVersions.has(versionId));
+        restored.codeAnnotations = restored.codeAnnotations?.filter(({ versionId }) => knownVersions.has(versionId));
+      }
+      const trashEntries = next.trash.entries.filter((item) => item.id !== id);
+      const inactive = new Set(trashEntries.map((item) => item.id));
+      const stillTrashed = ({ sourceId, targetId }: KnowledgeRelation) => inactive.has(sourceId) || inactive.has(targetId);
+      persist({
+        ...next,
+        entries: [...next.entries, restored],
+        logLinks: [...next.logLinks, ...next.trash.logLinks.filter((item) => item.entryId === id)],
+        relations: [...next.relations, ...next.trash.relations.filter((item) => !stillTrashed(item))],
+        trash: {
+          entries: trashEntries,
+          logLinks: next.trash.logLinks.filter((item) => item.entryId !== id),
+          relations: next.trash.relations.filter(stillTrashed),
+        },
+      });
+    },
     saveReviewedLog: (logId, content, originalContent, suggestions, draft) => {
       const study = useStudyLogStore.getState();
       const log = draft ?? study.logs.find(({ id }) => id === logId);
@@ -223,12 +276,11 @@ export const useKnowledgeStore = create<KnowledgeStore>((set, get) => {
       if (!entry) throw new Error('这个词条已不存在。');
       const code = useProjectCodeStore.getState().data;
       if (linked && !code.versions.some((version) => version.id === versionId)) throw new Error('这个代码版本已不存在。');
-      const previous = entryCodeIds(entry, code.links);
+      const links = [...code.links, ...code.trash.links];
+      const previous = entryCodeIds(entry, links);
       if (previous.includes(versionId) === linked) return;
       const codeVersionIds = linked ? [...previous, versionId] : previous.filter((id) => id !== versionId);
-      const legacyAnnotations = entry.codeVersionIds === undefined ? code.links.flatMap((link) =>
-        link.target.kind === 'entry' && link.target.id === entryId && link.annotation ? [{ versionId: link.versionId, annotation: link.annotation }] : []) : [];
-      const codeAnnotations = (entry.codeAnnotations ?? legacyAnnotations).filter((item) => codeVersionIds.includes(item.versionId));
+      const codeAnnotations = entryCodeAnnotations(entry, links).filter((item) => codeVersionIds.includes(item.versionId));
       if (linked && annotation) codeAnnotations.push({ versionId, annotation });
       const updated = { ...entry, codeVersionIds, codeAnnotations: codeAnnotations.length ? codeAnnotations : undefined };
       persist({ ...data(), entries: get().entries.map((item) => item.id === entryId ? updated : item) });
@@ -246,11 +298,12 @@ export const useKnowledgeStore = create<KnowledgeStore>((set, get) => {
       const annotation = cleanRelationAnnotation(input);
       const entry = get().entries.find((item) => item.id === entryId);
       const code = useProjectCodeStore.getState().data;
-      const codeVersionIds = entry ? entryCodeIds(entry, code.links) : [];
+      const links = [...code.links, ...code.trash.links];
+      const codeVersionIds = entry ? entryCodeIds(entry, links) : [];
       if (!entry || !codeVersionIds.includes(versionId) || !code.versions.some((version) => version.id === versionId)) {
         throw new Error('这条关联已不存在。');
       }
-      const codeAnnotations = (entry.codeAnnotations ?? []).filter((item) => item.versionId !== versionId);
+      const codeAnnotations = entryCodeAnnotations(entry, links).filter((item) => item.versionId !== versionId);
       if (annotation) codeAnnotations.push({ versionId, annotation });
       const updated = { ...entry, codeVersionIds, codeAnnotations: codeAnnotations.length ? codeAnnotations : undefined };
       persist({ ...data(), entries: get().entries.map((item) => item.id === entryId ? updated : item) });

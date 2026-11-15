@@ -178,7 +178,7 @@ test('完整备份在独立浏览器恢复实践与回链，v3 继续恢复词�
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出完整备份' }).click();
   const backup = JSON.parse(await readFile((await (await download).path())!, 'utf8'));
-  expect(backup.version).toBe(6);
+  expect(backup.version).toBe(8);
 
   const context = await browser.newContext();
   try {

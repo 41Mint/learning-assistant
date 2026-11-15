@@ -380,7 +380,7 @@ test('项目目录预览、批量保存、职责说明、日志回链与备份�
 
   const backup = await downloadBackup(page);
   const code: ProjectCodeData = backup.data.projectCode;
-  expect(backup.version).toBe(6);
+  expect(backup.version).toBe(8);
   expect(code.versions.map(({ path }) => path)).toEqual([scriptPath, 'Assets/Scripts/Mole.cs']);
   expect(code.projects[0].directory).toMatchObject({
     files: ['Assets/Scenes/Game.unity', 'Assets/Scripts/Bad.cs', scriptPath, 'Assets/Scripts/Mole.cs', 'ProjectSettings/ProjectVersion.txt'],
@@ -501,11 +501,103 @@ test('同名脚本分版本保存，日志、词条与两次实践打开对应�
   await deleteVersion.getByRole('button', { name: '取消', exact: true }).click();
   await expect(preview).toBeVisible();
   await page.getByRole('button', { name: '删除代码版本', exact: true }).click();
-  await deleteVersion.getByRole('button', { name: '确认删除' }).click();
+  await deleteVersion.getByRole('button', { name: '移入回收站' }).click();
   await expect(page.getByRole('article', { name: '打地鼠练习' })).toContainText('1 个代码版本');
   await page.goto('/#history/' + firstDate);
   await expect(page.getByRole('region', { name: '项目代码', exact: true }).getByText('项目代码（0）', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: '点击判断笔记' })).toBeVisible();
+});
+
+test('回收站分类并排显示，代码版本随备份恢复并清理彻底删除的关联', async ({ page, browser }) => {
+  await seedStudyContext(page);
+  await page.goto('/#code');
+  const { archivedId, latestId } = await page.evaluate(async ({ script, original, latest }) => {
+    const { useProjectCodeStore } = await import('/src/store/projectCodeStore.ts');
+    const { useKnowledgeStore } = await import('/src/store/knowledgeStore.ts');
+    const { useStudyLogStore } = await import('/src/store/studyLogStore.ts');
+    const { useGrowthStore } = await import('/src/store/growthStore.ts');
+    const code = useProjectCodeStore.getState();
+    const archivedId = await code.saveVersion({ project: { name: '回收测试项目', repositoryUrl: '', tutorialUrl: '' },
+      path: script, content: original, githubUrl: '', note: '旧快照' }, { kind: 'log', id: 'code-log' });
+    const project = useProjectCodeStore.getState().data.projects[0];
+    const latestId = await code.saveVersion({ project: { id: project.id }, path: script, content: latest, githubUrl: '', note: '在用快照' });
+    await code.annotateLogCode(archivedId, 'code-log', { label: '初版', note: '保留关联说明' });
+    const knowledge = useKnowledgeStore.getState();
+    knowledge.setEntryCodeLinked('code-entry', archivedId, true, { label: '示例', note: '来自实践' });
+    knowledge.trashEntry('code-entry');
+    const growth = useGrowthStore.getState();
+    const originalOutcome = growth.outcomes[0];
+    growth.savePractice(originalOutcome, { ...originalOutcome.practices[0], codeVersionIds: [archivedId] });
+    useStudyLogStore.getState().trashLog('code-log');
+    return { archivedId, latestId };
+  }, { script: scriptPath, original: firstContent, latest: secondContent });
+  await page.goto('/#code/' + archivedId);
+  await page.getByRole('button', { name: '删除代码版本' }).click();
+  await page.getByRole('button', { name: '移入回收站' }).click();
+  const project = page.getByRole('article', { name: '回收测试项目' });
+  await expect(project.getByRole('link', { name: scriptPath, exact: true })).toHaveAttribute('href', '#code/' + latestId);
+  await project.getByRole('link', { name: '回收站' }).click();
+  const bin = page.getByRole('region', { name: '回收站' });
+  const categories = bin.getByRole('navigation', { name: '回收站分类' });
+  await page.setViewportSize({ width: 375, height: 780 });
+  await expect(categories.getByRole('link', { name: '代码', exact: true })).toHaveAttribute('aria-current', 'page');
+  expect(await categories.getByRole('link').evaluateAll((links) => new Set(links.map((link) => link.getBoundingClientRect().top)).size)).toBe(1);
+  await expect(bin.getByRole('listitem')).toHaveCount(1);
+  await expect(bin.getByRole('listitem')).toContainText('旧快照');
+  await categories.getByRole('link', { name: '词条', exact: true }).click();
+  await expect(bin.getByRole('listitem')).toHaveText(/点击判断/);
+  await categories.getByRole('link', { name: '日志', exact: true }).click();
+  await expect(bin.getByRole('listitem')).toHaveText(/点击判断笔记/);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const backup = await downloadBackup(page);
+  expect(backup.version).toBe(8);
+  expect(backup.data.projectCode.trash.versions[0].id).toBe(archivedId);
+
+  const context = await browser.newContext();
+  try {
+    const restored = await context.newPage();
+    const restoredBin = restored.getByRole('region', { name: '回收站' });
+    await restored.goto('/#data?trash=entry');
+    await restored.getByLabel('选择备份文件').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+    await expect(restored.getByText('回收站中有 1 个代码版本。')).toBeVisible();
+    await Promise.all([restored.waitForEvent('load'), restored.getByRole('button', { name: '确认恢复并刷新' }).click()]);
+    await restoredBin.getByRole('button', { name: '恢复词条' }).click();
+    await restored.getByRole('button', { name: '确认恢复' }).click();
+    await restoredBin.getByRole('link', { name: '代码', exact: true }).click();
+    await restoredBin.getByRole('button', { name: '恢复代码版本' }).click();
+    await restored.getByRole('button', { name: '确认恢复' }).click();
+    await restoredBin.getByRole('link', { name: scriptPath, exact: true }).click();
+    await expect(restored).toHaveURL(new RegExp(`#code/${archivedId}$`));
+    await expect(restored.locator('.code-version pre code')).toContainText('hits = 1');
+    await expect(restored.getByRole('link', { name: '知识词条 · 点击判断' })).toBeVisible();
+    await expect(restored.getByRole('link', { name: /成长实践 · 点击目标时增加分数/ })).toBeVisible();
+    await restored.goto('/#data');
+    await restoredBin.getByRole('button', { name: '恢复日志' }).click();
+    await restored.getByRole('button', { name: '确认恢复' }).click();
+    const afterRestore = await downloadBackup(restored);
+    expect(afterRestore.data.projectCode.versions.map(({ id }: { id: string }) => id)).toEqual([archivedId, latestId]);
+    expect(afterRestore.data.projectCode.links[0].annotation.note).toBe('保留关联说明');
+
+    await restored.goto('/#code/' + archivedId);
+    await restored.getByRole('button', { name: '删除代码版本' }).click();
+    await restored.getByRole('button', { name: '移入回收站' }).click();
+    await restored.getByRole('article', { name: '回收测试项目' }).getByRole('link', { name: '回收站' }).click();
+    await restoredBin.getByRole('button', { name: '彻底删除' }).click();
+    await restored.getByRole('button', { name: '确认彻底删除' }).click();
+    await expect(restoredBin.getByText('代码版本已彻底删除。')).toBeVisible();
+    const final = await downloadBackup(restored);
+    expect(final.data.projectCode.versions[0].id).toBe(latestId);
+    expect(final.data.projectCode.trash.versions).toHaveLength(0);
+    expect(final.data.knowledge.entries[0].codeVersionIds).toEqual([]);
+    expect(final.data.knowledge.entries[0].codeAnnotations).toEqual([]);
+    expect(final.data.growth.outcomes[0].practices[0].codeVersionIds).toEqual([]);
+    const { trash: _trash, ...oldCode } = final.data.projectCode;
+    const oldVersion = await restored.evaluate(async (legacy) => {
+      const { parseBackup } = await import('/src/utils/dataBackup.ts');
+      return parseBackup(legacy).data.projectCode.trash.versions.length;
+    }, { ...final, version: 7, data: { ...final.data, projectCode: oldCode } });
+    expect(oldVersion).toBe(0);
+  } finally { await context.close(); }
 });
 
 test('实践编辑统一保存三类资料，旧代码关联可预选、取消和移除', async ({ page }) => {
@@ -600,7 +692,7 @@ test('完整备份带回本地文本、仅链接版本和关联，v4 继续恢�
   await wordForm.getByRole('button', { name: '保存词条', exact: true }).click();
   await expect(page.getByRole('region', { name: '项目用例' }).getByRole('link', { name: /只留固定链接/ })).toBeVisible();
   const backup = await downloadBackup(page);
-  expect(backup.version).toBe(6);
+  expect(backup.version).toBe(8);
   expect(backup.data.projectCode.versions.map((version: { content: string | null }) => version.content)).toEqual([firstContent, null]);
 
   const context = await browser.newContext();

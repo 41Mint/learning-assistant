@@ -33,9 +33,14 @@ type BoardMenuEvent = Pick<globalThis.MouseEvent, 'target' | 'shiftKey' | 'clien
 function PracticeSources({ outcomeId, practice }: { outcomeId?: string; practice: SourceIds & { id?: string } }) {
   const logs = useStudyLogStore((state) => state.logs);
   const entries = useKnowledgeStore((state) => state.entries);
+  const trashedEntries = useKnowledgeStore((state) => state.trash.entries);
   const code = useProjectCodeStore((state) => state.data);
-  const codeIds = outcomeId && practice.id ? practiceCodeIds(outcomeId, { ...practice, id: practice.id }, code.links) : practice.codeVersionIds ?? [];
-  if (practice.logIds.length === 0 && practice.entryIds.length === 0 && codeIds.length === 0) return null;
+  const trashedVersions = new Set(code.trash.versions.map(({ id }) => id));
+  const linkedCodeIds = outcomeId && practice.id ? practiceCodeIds(outcomeId, { ...practice, id: practice.id }, code.links) : practice.codeVersionIds ?? [];
+  const codeIds = linkedCodeIds.filter((id) => !trashedVersions.has(id));
+  const hiddenEntryIds = new Set(trashedEntries.map(({ id }) => id));
+  const entryIds = practice.entryIds.filter((id) => !hiddenEntryIds.has(id));
+  if (practice.logIds.length === 0 && entryIds.length === 0 && codeIds.length === 0) return null;
 
   return (
     <ul className="growth-source-list" aria-label="关联资料">
@@ -44,7 +49,7 @@ function PracticeSources({ outcomeId, practice }: { outcomeId?: string; practice
         const href = log && `#history/${log.date}`;
         return <li key={`log:${id}`}>{log && href ? <a href={href} {...workspaceResourceTarget(href)}>{logLabel(log)}</a> : '关联日志已不可用'}</li>;
       })}
-      {practice.entryIds.map((id) => {
+      {entryIds.map((id) => {
         const entry = entries.find((item) => item.id === id);
         const href = `#knowledge/${encodeURIComponent(id)}`;
         return <li key={`entry:${id}`}>{entry ? <a href={href} {...workspaceResourceTarget(href)}>{entry.title}</a> : '关联词条已不可用'}</li>;
@@ -445,7 +450,7 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
         onDragOver={(event) => { if (!(event.target instanceof Element && event.target.closest('.growth-board-toolbar, article, a'))) acceptDrop(event, group?.id); }}
         onDrop={(event) => { if (!(event.target instanceof Element && event.target.closest('.growth-board-toolbar, article, a'))) dropOn(event, group?.id); }}>
         <div className="growth-board-toolbar">
-          <nav className="growth-views" aria-label="实践状态">
+          <nav className="workspace-segments" aria-label="实践状态">
             {group && <a href={growthBoardHref('all', group.id)} aria-current={activeView === 'all' ? 'page' : undefined}>全部</a>}
             {GROWTH_VIEWS.map((view) => <a key={view.id} href={growthBoardHref(view.id, group?.id)} aria-current={activeView === view.id ? 'page' : undefined}>{view.label}</a>)}
           </nav>

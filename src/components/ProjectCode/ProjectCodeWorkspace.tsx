@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
-import { useWorkspaceStore } from '../../store/workspaceStore';
+import { recycleBinHref, useWorkspaceStore } from '../../store/workspaceStore';
 import type { CodeProject, CodeVersion } from '../../types/projectCode';
 import { codeVersionHref, codeVersionSource } from '../../utils/projectCode';
 import CodeVersionDetail from './CodeVersionDetail';
@@ -9,9 +9,10 @@ import CodeVersionForm from './CodeVersionForm';
 import ProjectDirectoryImport from './ProjectDirectoryImport';
 import ProjectDirectoryView from './ProjectDirectoryView';
 
-function ProjectCard({ project, versions, importStatus, onImport }: {
+function ProjectCard({ project, versions, trashedCount, importStatus, onImport }: {
   project: CodeProject;
   versions: CodeVersion[];
+  trashedCount: number;
   importStatus?: string;
   onImport: () => void;
 }) {
@@ -61,12 +62,13 @@ function ProjectCard({ project, versions, importStatus, onImport }: {
           setDraft(project);
           setMessage('');
         }}>编辑项目资料</button>}
-        {versions.length === 0 && !draft && (
+        {versions.length === 0 && trashedCount === 0 && !draft && (
           <button type="button" className="knowledge-text-button danger" disabled={busy} onClick={() => void remove()}>
             {project.directory ? '删除项目' : '删除空项目'}
           </button>
         )}
       </div>
+      {trashedCount > 0 && <p className="code-muted">此项目有 {trashedCount} 个代码版本在<a href={recycleBinHref('code')}>回收站</a>。</p>}
       {draft && (
         <form className="code-form" aria-label="编辑项目资料" onSubmit={submit}>
           <fieldset disabled={busy}>
@@ -108,6 +110,7 @@ export default function ProjectCodeWorkspace({ adding, setAdding }: { adding: bo
   const [directoryImport, setDirectoryImport] = useState<{ projectId?: string } | null>(null);
   const [importResult, setImportResult] = useState<{ projectId: string; added: number; reused: number } | null>(null);
   const version = data.versions.find((item) => item.id === versionId);
+  const archived = data.trash.versions.some((item) => item.id === versionId);
   const project = version && data.projects.find((item) => item.id === version.projectId);
 
   useEffect(() => { void load(); }, [load]);
@@ -140,12 +143,14 @@ export default function ProjectCodeWorkspace({ adding, setAdding }: { adding: bo
       {isLoaded && !error && (
         versionId ? (
           version && project ? <CodeVersionDetail key={version.id} version={version} project={project} />
-            : <p className="module-card">未找到这个代码版本。<a href="#code">查看所有项目</a></p>
+            : archived ? <p className="module-card">代码版本已移入回收站。 <a href={recycleBinHref('code')}>打开回收站</a></p>
+              : <p className="module-card">未找到这个代码版本。<a href="#code">查看所有项目</a></p>
         ) : !directoryImport && (
           <>
             {data.projects.length === 0 && <p className="module-card">还没有项目。导入目录或保存代码版本时可以创建项目。</p>}
             {data.projects.map((project) => (
               <ProjectCard key={project.id} project={project}
+                trashedCount={data.trash.versions.filter((item) => item.projectId === project.id).length}
                 onImport={() => setDirectoryImport({ projectId: project.id })}
                 importStatus={importResult?.projectId === project.id ? `目录快照已保存 · 新增 ${importResult.added} 个代码版本 · 复用 ${importResult.reused} 个已有版本` : undefined}
                 versions={data.versions.filter((item) => item.projectId === project.id).reverse()} />

@@ -25,8 +25,11 @@ function CodeReferences({ versionId }: { versionId: string }) {
   const data = useProjectCodeStore((state) => state.data);
   const logs = useStudyLogStore((state) => state.logs);
   const entries = useKnowledgeStore((state) => state.entries);
+  const trashedEntries = useKnowledgeStore((state) => state.trash.entries);
   const outcomes = useGrowthStore((state) => state.outcomes);
-  const references = effectiveCodeLinks(data, outcomes, entries).filter((link) => link.versionId === versionId);
+  const trashedIds = new Set(trashedEntries.map(({ id }) => id));
+  const references = effectiveCodeLinks(data, outcomes, entries).filter(({ versionId: linkedVersion, target }) =>
+    linkedVersion === versionId && (target.kind !== 'entry' || !trashedIds.has(target.id)));
 
   return (
     <section aria-label="引用记录">
@@ -216,7 +219,7 @@ function ScriptPreview({ content, version, search }: { content: string; version:
 }
 
 export default function CodeVersionDetail({ version, project }: { version: CodeVersion; project: CodeProject }) {
-  const { saveVersionDetails, deleteVersion } = useProjectCodeStore();
+  const { saveVersionDetails, trashVersion } = useProjectCodeStore();
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [note, setNote] = useState(version.note);
@@ -249,7 +252,7 @@ export default function CodeVersionDetail({ version, project }: { version: CodeV
   };
 
   const remove = async () => {
-    await deleteVersion(version.id);
+    await trashVersion(version.id);
     const { page, id } = readWorkspaceHash();
     if (page === 'code' && id === version.id) window.location.hash = 'code';
   };
@@ -305,8 +308,8 @@ export default function CodeVersionDetail({ version, project }: { version: CodeV
         ? <p className="code-muted">此版本仅保存链接。私有文件可用有权限的 GitHub 账号打开。</p>
         : <ScriptPreview content={version.content} version={version} search={search} />}
       <CodeReferences versionId={version.id} />
-      {confirmDelete && <WorkspaceDialog title="删除代码版本" action="确认删除" destructive onClose={() => setConfirmDelete(false)} onSave={remove}>
-        <p>删除「{version.path}」的这个版本及其关联？</p>
+      {confirmDelete && <WorkspaceDialog title="删除代码版本" action="移入回收站" destructive onClose={() => setConfirmDelete(false)} onSave={remove}>
+        <p>将「{version.path}」的这个版本移入回收站？可在「数据管理」的「代码」分类恢复。</p>
       </WorkspaceDialog>}
     </article>
   );

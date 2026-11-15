@@ -40,7 +40,7 @@ export default function GrowthPracticeForm({ draft, onClose }: { draft: GrowthDr
   const entries = useKnowledgeStore((state) => state.entries);
   const savePractice = useGrowthStore((state) => state.savePractice);
   const { data: projectCode, isLoaded: codeLoaded, error: codeError } = useProjectCodeStore();
-  const codeIds = codeSelection ?? (draft.practice ? practiceCodeIds(draft.outcome.id, draft.practice, projectCode.links) : []);
+  const codeIds = codeSelection ?? (draft.practice ? practiceCodeIds(draft.outcome.id, draft.practice, [...projectCode.links, ...projectCode.trash.links]) : []);
   const codeOptions = [...projectCode.versions].reverse().map((version) => {
     const projectName = projectCode.projects.find((project) => project.id === version.projectId)?.name ?? '';
     return { id: version.id, label: codeVersionLabel(version, projectName), fields: codeSearchFields(version, projectName) };

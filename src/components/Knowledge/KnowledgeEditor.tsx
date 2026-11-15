@@ -37,7 +37,7 @@ export default function KnowledgeEditor({ entry, categories, initialCategory, sa
   const previousLogs = new Map(logLinks.filter((link) => link.entryId === entry?.id).map((link) => [link.logId, link.note]));
   const logIds = logSelection ?? [...previousLogs.keys()];
   const entryIds = entrySelection ?? (entry ? relations.flatMap((relation) => otherEntryId(relation, entry.id) ?? []) : []);
-  const codeIds = codeSelection ?? (current ? entryCodeIds(current, code.links) : []);
+  const codeIds = codeSelection ?? (current ? entryCodeIds(current, [...code.links, ...code.trash.links]) : []);
 
   const save = () => {
     try {

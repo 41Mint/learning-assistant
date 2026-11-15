@@ -78,7 +78,7 @@ test('新版备份包含真实图片；取消无写入；确认恢复后图文�
   await page.getByRole('button', { name: '导出完整备份', exact: true }).click();
   const download = await downloadEvent;
   const backup = JSON.parse(await readFile((await download.path())!, 'utf8'));
-  expect(backup.version).toBe(6);
+  expect(backup.version).toBe(8);
   expect(backup.data.knowledge.entries).toHaveLength(1);
   expect(backup.images).toHaveLength(1);
   expect(Buffer.from(backup.images[0].base64, 'base64').equals(png)).toBe(true);
@@ -243,7 +243,7 @@ test('今日日志可移出并恢复到原日期，刷新不会自动创建冲�
   const dialog = page.getByRole('dialog', { name: '恢复学习日志' });
   await expect(dialog.getByLabel('恢复到日期')).toHaveCount(0);
   await dialog.getByRole('button', { name: '确认恢复' }).click();
-  await expect(page.getByText('回收站里没有学习日志。')).toBeVisible();
+  await expect(page.getByText('回收站为空。')).toBeVisible();
   await page.goto('/#today');
   await expect(today.getByText('今天整理的内容')).toBeVisible();
   expect(await page.evaluate(async () => {

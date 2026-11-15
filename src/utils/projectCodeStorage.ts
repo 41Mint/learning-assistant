@@ -1,27 +1,27 @@
-import type { ProjectCodeData } from '../types/projectCode';
+import type { ProjectCodeData, StoredProjectCodeData } from '../types/projectCode';
 import type { StoredImage } from './imageStorage';
 import { IMAGE_STORE, PROJECT_CODE_STORE, transactAssets } from './assetDatabase';
 import { emptyProjectCode, validateProjectCode } from './projectCode';
 
 const LIBRARY_KEY = 'library';
 
-function storedProjectCode(value: unknown): ProjectCodeData {
+function storedProjectCode(value: unknown): StoredProjectCodeData {
   return value === undefined ? emptyProjectCode() : validateProjectCode(value);
 }
 
-export function readProjectCode(): Promise<ProjectCodeData> {
+export function readProjectCode(): Promise<StoredProjectCodeData> {
   return transactAssets([PROJECT_CODE_STORE], 'readonly', (transaction) => {
     const request = transaction.objectStore(PROJECT_CODE_STORE).get(LIBRARY_KEY);
     return () => storedProjectCode(request.result);
   });
 }
 
-export function updateProjectCode(edit: (data: ProjectCodeData) => ProjectCodeData, deleteImageIds?: () => string[]): Promise<ProjectCodeData> {
+export function updateProjectCode(edit: (data: StoredProjectCodeData) => StoredProjectCodeData, deleteImageIds?: () => string[]): Promise<StoredProjectCodeData> {
   const stores = deleteImageIds ? [PROJECT_CODE_STORE, IMAGE_STORE] : [PROJECT_CODE_STORE];
   return transactAssets(stores, 'readwrite', (transaction, abort) => {
     const store = transaction.objectStore(PROJECT_CODE_STORE);
     const request = store.get(LIBRARY_KEY);
-    let next: ProjectCodeData;
+    let next: StoredProjectCodeData;
     request.onsuccess = () => {
       try {
         next = validateProjectCode(edit(storedProjectCode(request.result)));
@@ -38,7 +38,7 @@ export function updateProjectCode(edit: (data: ProjectCodeData) => ProjectCodeDa
   });
 }
 
-export function readBackupAssets(): Promise<{ images: StoredImage[]; projectCode: ProjectCodeData }> {
+export function readBackupAssets(): Promise<{ images: StoredImage[]; projectCode: StoredProjectCodeData }> {
   return transactAssets([IMAGE_STORE, PROJECT_CODE_STORE], 'readonly', (transaction) => {
     const images = transaction.objectStore(IMAGE_STORE).getAll();
     const code = transaction.objectStore(PROJECT_CODE_STORE).get(LIBRARY_KEY);

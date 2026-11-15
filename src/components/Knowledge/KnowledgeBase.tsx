@@ -3,7 +3,7 @@ import type { KnowledgeEntry } from '../../types';
 import { useKnowledgeStore } from '../../store/knowledgeStore';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
-import { knowledgeNetworkHref, useWorkspaceStore } from '../../store/workspaceStore';
+import { knowledgeNetworkHref, recycleBinHref, useWorkspaceStore } from '../../store/workspaceStore';
 import { logLabel } from '../../utils/growth';
 import { entryNames, normalizedName, otherEntryId } from '../../utils/knowledge';
 import { codeVersionHref, codeVersionLabel, entryCodeIds } from '../../utils/projectCode';
@@ -31,6 +31,7 @@ export default function KnowledgeBase() {
   const detail = useRef<HTMLElement>(null);
   useEffect(() => { loadKnowledge(); }, [loadKnowledge]);
   const selected = store.entries.find((entry) => entry.id === entryId);
+  const archived = store.trash.entries.find((entry) => entry.id === entryId);
   const search = searchLocation?.page === 'knowledge' && searchLocation.id === entryId ? searchLocation : null;
   useScrollToSearchMatch(detail, search, selected?.content);
   const categories = [...new Set(store.entries.map((entry) => entry.category))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
@@ -56,7 +57,8 @@ export default function KnowledgeBase() {
   };
   const links = selected ? store.logLinks.filter((link) => link.entryId === selected.id) : [];
   const related = selected ? store.relations.flatMap((relation) => otherEntryId(relation, selected.id) ?? []) : [];
-  const codeIds = selected ? entryCodeIds(selected, code.links) : [];
+  const trashedVersions = new Set(code.trash.versions.map(({ id }) => id));
+  const codeIds = selected ? entryCodeIds(selected, code.links).filter((id) => !trashedVersions.has(id)) : [];
 
   return (
     <div className="knowledge-workspace" data-editing={Boolean(draft) || undefined}>
@@ -136,14 +138,15 @@ export default function KnowledgeBase() {
                 </li>;
               })}</ul>
             </section>}
-            {confirmDelete === selected.id && <WorkspaceDialog title="删除词条" action="确认删除" destructive onClose={() => setConfirmDelete(undefined)} onSave={() => {
-              store.deleteEntry(selected.id);
-              setMessage('词条已删除。');
+            {confirmDelete === selected.id && <WorkspaceDialog title="删除词条" action="移入回收站" destructive onClose={() => setConfirmDelete(undefined)} onSave={() => {
+              store.trashEntry(selected.id);
+              setMessage('');
             }}>
-              <p>删除「{selected.title}」及其关联？</p>
+              <p>将「{selected.title}」移入回收站？可在「数据管理」恢复词条及仍有效的关联。</p>
             </WorkspaceDialog>}
           </>
-        ) : <><h2>{entryId ? '词条未找到' : '选择或新建一个知识词条'}</h2><p className="knowledge-muted">从左侧目录选择词条，或从学习日志中为反复遇到的知识创建词条。</p></>}
+        ) : archived ? <><h2>{archived.title}</h2><p role="status">词条已移入回收站。 <a href={recycleBinHref('entry')}>打开回收站</a></p></>
+          : <><h2>{entryId ? '词条未找到' : '选择或新建一个知识词条'}</h2><p className="knowledge-muted">从左侧目录选择词条，或从学习日志中为反复遇到的知识创建词条。</p></>}
         {message && <p className="knowledge-message" role="status">{message}</p>}
       </section>
     </div>

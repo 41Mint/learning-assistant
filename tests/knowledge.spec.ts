@@ -147,12 +147,15 @@ test('名称/别名冲突阻止保存；相关词条双向且去重；解除及�
   await page.keyboard.press('Escape');
   await expect(deleteEntry).toHaveCount(0);
   await page.getByRole('button', { name: '删除词条', exact: true }).click();
-  await deleteEntry.getByRole('button', { name: '确认删除' }).click();
+  await deleteEntry.getByRole('button', { name: '移入回收站' }).click();
   await expect(deleteEntry).toHaveCount(0);
   const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), knowledgeKey);
   expect(saved.entries.map((entry: { title: string }) => entry.title)).toEqual(['Sprite 切割']);
   expect(saved.logLinks).toHaveLength(0);
   expect(saved.relations).toHaveLength(0);
+  expect(saved.trash.entries[0].title).toBe('PPU');
+  expect(saved.trash.logLinks).toHaveLength(1);
+  expect(saved.trash.relations).toHaveLength(1);
   expect(await page.evaluate((key) => localStorage.getItem(key), logsKey)).toBe(beforeLogs);
 });
 
@@ -174,7 +177,7 @@ test('完整备份在独立浏览器恢复词条、说明与双向关联', async
   const download = await downloadEvent;
   const buffer = await readFile((await download.path())!);
   const backup = JSON.parse(buffer.toString('utf8'));
-  expect(backup.version).toBe(6);
+  expect(backup.version).toBe(8);
   expect(backup.data.knowledge.entries).toHaveLength(2);
   const context = await browser.newContext();
   try {
@@ -195,6 +198,98 @@ test('完整备份在独立浏览器恢复词条、说明与双向关联', async
   } finally { await context.close(); }
 });
 
+test('回收站备份保留词条图片和关联，处理别名冲突并清理彻底删除的资料', async ({ page, browser }) => {
+  await page.goto('/#knowledge');
+  await seedLogs(page);
+  const { entryId, peerId, versionId } = await page.evaluate(async () => {
+    const { useKnowledgeStore } = await import('/src/store/knowledgeStore.ts');
+    const { useStudyLogStore } = await import('/src/store/studyLogStore.ts');
+    const { useProjectCodeStore } = await import('/src/store/projectCodeStore.ts');
+    const { useGrowthStore } = await import('/src/store/growthStore.ts');
+    const { purgeTrashedResource } = await import('/src/store/recycleBin.ts');
+    const { writeImages } = await import('/src/utils/imageStorage.ts');
+    const png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jfeoAAAAASUVORK5CYII='), (character) => character.charCodeAt(0));
+    await writeImages(['shared', 'only-entry'].map((id) => ({ id, name: `${id}.png`, blob: new Blob([png], { type: 'image/png' }) })));
+    const study = useStudyLogStore.getState();
+    const logId = study.getLogByDate('2026-10-02')!.id;
+    study.appendToDate('2026-11-04', '![共享示意图](learning-image:shared)');
+    const removedLogId = study.getLogByDate('2026-11-04')!.id;
+    const knowledge = useKnowledgeStore.getState();
+    const entryId = knowledge.saveEntry({ title: 'PPU 实践', aliases: ['像素单位'], category: 'Unity',
+      content: '还原原正文。\n\n![共享示意图](learning-image:shared)\n\n![独占示意图](learning-image:only-entry)' }, { fromLog: { id: logId, note: '导入时核对像素大小。' } });
+    knowledge.linkLog(entryId, removedLogId, '这一篇将被彻底删除。');
+    const peerId = knowledge.saveEntry({ title: '精灵图集', aliases: [], category: 'Unity', content: '![共享示意图](learning-image:shared)' });
+    knowledge.relate(entryId, peerId, { label: '互相参照', note: '两者都影响素材处理。' });
+    const versionId = await useProjectCodeStore.getState().saveVersion({ project: { name: 'Unity 示例', tutorialUrl: '', repositoryUrl: '' },
+      path: 'Assets/SpriteSize.cs', content: 'public class SpriteSize {}', githubUrl: '', note: '' }, { kind: 'entry', id: entryId });
+    const growth = useGrowthStore.getState();
+    growth.loadGrowth();
+    growth.savePractice({ id: 'sprite-scale', title: '核对精灵大小', domains: ['Unity'] },
+      { id: 'sprite-practice', date: '2026-10-02', note: '', logIds: [], entryIds: [entryId] });
+    knowledge.trashEntry(entryId);
+    knowledge.trashEntry(peerId);
+    study.trashLog(removedLogId);
+    await purgeTrashedResource('log', removedLogId);
+    knowledge.saveEntry({ title: '像素单位', aliases: [], category: '', content: '新建词条。' });
+    return { entryId, peerId, versionId };
+  });
+  await page.goto(`/#knowledge/${entryId}`);
+  await expect(page.getByRole('link', { name: '打开回收站' })).toBeVisible();
+  await page.getByRole('link', { name: '打开回收站' }).click();
+  const downloadEvent = page.waitForEvent('download');
+  await page.getByRole('button', { name: '导出完整备份' }).click();
+  const buffer = await readFile((await (await downloadEvent).path())!);
+  const exported = JSON.parse(buffer.toString('utf8'));
+  expect(exported.data.knowledge.trash.logLinks).toHaveLength(1);
+  expect(exported.images).toHaveLength(2);
+
+  const context = await browser.newContext();
+  try {
+    const restored = await context.newPage();
+    await restored.goto('/#data');
+    await restored.getByLabel('选择备份文件').setInputFiles({ name: 'trash.json', mimeType: 'application/json', buffer });
+    await expect(restored.getByText('回收站中有 2 个词条。')).toBeVisible();
+    await Promise.all([restored.waitForEvent('load'), restored.getByRole('button', { name: '确认恢复并刷新' }).click()]);
+    const bin = restored.getByRole('region', { name: '回收站' });
+    await bin.getByRole('link', { name: '词条', exact: true }).click();
+    const row = (name: string) => bin.getByRole('listitem').filter({ hasText: name });
+    await row('PPU 实践').getByRole('button', { name: '恢复词条' }).click();
+    const confirm = restored.getByRole('button', { name: '确认恢复' });
+    await expect(confirm).toBeDisabled();
+    await restored.getByLabel(/别名（/).fill('像素尺寸');
+    await confirm.click();
+    await bin.getByRole('link', { name: 'PPU 实践' }).click();
+    await expect(restored).toHaveURL(new RegExp(`#knowledge/${entryId}$`));
+    await expect(restored.getByText('还原原正文。')).toBeVisible();
+    await expect(restored.getByRole('img', { name: '独占示意图' })).toBeVisible();
+    await expect(restored.getByText('导入时核对像素大小。')).toBeVisible();
+    await expect(restored.getByRole('link', { name: /SpriteSize\.cs/ })).toBeVisible();
+    await expect(restored.getByRole('link', { name: '精灵图集' })).toHaveCount(0);
+    await restored.goto('/#data?trash=entry');
+    await row('精灵图集').getByRole('button', { name: '恢复词条' }).click();
+    await confirm.click();
+    await bin.getByRole('link', { name: '精灵图集' }).click();
+    await expect(restored).toHaveURL(new RegExp(`#knowledge/${peerId}$`));
+    await restored.getByRole('link', { name: 'PPU 实践' }).click();
+    await expect(restored.getByRole('link', { name: '精灵图集' })).toBeVisible();
+    await restored.getByRole('button', { name: '删除词条', exact: true }).click();
+    await restored.getByRole('button', { name: '移入回收站' }).click();
+    await restored.getByRole('link', { name: '打开回收站' }).click();
+    await row('PPU 实践').getByRole('button', { name: '彻底删除' }).click();
+    await restored.getByRole('button', { name: '确认彻底删除' }).click();
+    await expect(bin.getByText('回收站为空。')).toBeVisible();
+    const after = await restored.evaluate(async () => {
+      const { createBackup } = await import('/src/utils/dataBackup.ts');
+      return createBackup();
+    });
+    expect(after.images.map(({ id }) => id)).toEqual(['shared']);
+    expect(after.data.knowledge.trash.relations).toHaveLength(0);
+    expect(after.data.growth.outcomes[0].practices[0].entryIds).toHaveLength(0);
+    expect(after.data.projectCode.versions[0].id).toBe(versionId);
+    expect(after.data.projectCode.links).toHaveLength(0);
+  } finally { await context.close(); }
+});
+
 test('旧 v1/v2 备份兼容；孤立/重复关联拒绝；词条持久化失败与恢复失败不破坏旧数据', async ({ page }) => {
   await page.goto('/');
   await seedLogs(page);
@@ -208,6 +303,10 @@ test('旧 v1/v2 备份兼容；孤立/重复关联拒绝；词条持久化失败
     const backup = await createBackup();
     const old1 = parseBackup({ ...backup, version: 1, images: undefined, data: { ...backup.data, knowledge: undefined } });
     const old2 = parseBackup({ ...backup, version: 2, data: { ...backup.data, knowledge: undefined } });
+    const { trash: _trash, ...oldKnowledge } = backup.data.knowledge;
+    if (parseBackup({ ...backup, version: 6, data: { ...backup.data, knowledge: oldKnowledge } }).data.knowledge.trash.entries.length) {
+      throw new Error('v6 备份应以空词条回收站恢复。');
+    }
     const invalid = [
       { ...backup.data.knowledge, logLinks: [{ id: 'missing', entryId: id, logId: 'missing', note: '' }] },
       { ...backup.data.knowledge, logLinks: [...backup.data.knowledge.logLinks, { ...backup.data.knowledge.logLinks[0], id: 'duplicate' }] },
