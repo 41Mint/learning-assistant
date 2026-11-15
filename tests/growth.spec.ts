@@ -31,7 +31,7 @@ async function seedLearning(page: Page) {
 }
 
 async function recordPreset(page: Page) {
-  await page.getByRole('link', { name: '待尝试', exact: true }).click();
+  await page.getByRole('link', { name: '想尝试', exact: true }).click();
   const card = page.getByRole('article', { name: title, exact: true });
   await card.click({ button: 'right' });
   await card.getByRole('button', { name: '我做到了' }).click();
@@ -49,7 +49,7 @@ test('跨领域成果可事后补记、多次实践，并回到原日志和词�
   await seedLearning(page);
   await page.goto('/#path');
   await recordPreset(page);
-  const recent = page.getByRole('region', { name: '已完成' });
+  const recent = page.getByRole('region', { name: '实践记录' });
   const outcome = recent.getByRole('article', { name: title, exact: true });
   await recent.getByRole('link', { name: '返回卡片' }).click();
   await outcome.getByRole('button', { name: '卡片操作' }).click();
@@ -104,15 +104,15 @@ test('跨领域成果可事后补记、多次实践，并回到原日志和词�
   await expect(recent.getByRole('article', { name: '让拾取计数出现在屏幕上' })).toContainText('用文本组件显示玩家本次的拾取数量。');
 });
 
-test('待尝试支持创建、编辑、详情和恢复移出的内置练习', async ({ page }) => {
+test('想尝试支持创建、编辑、详情和恢复移出的内置练习', async ({ page }) => {
   await page.goto('/#path/try');
-  const board = page.getByRole('region', { name: '待尝试' });
-  const form = page.getByRole('form', { name: '待尝试卡片表单' });
-  await board.getByRole('button', { name: '添加待尝试' }).click();
+  const board = page.getByRole('region', { name: '想尝试' });
+  const form = page.getByRole('form', { name: '练习卡片表单' });
+  await board.getByRole('button', { name: '添加练习' }).click();
   await board.getByRole('button', { name: '自己填写' }).click();
   await form.getByLabel('卡片名称').fill('做一个暂停菜单');
   await form.getByLabel('卡片说明（可选）').fill('学习如何切换暂停状态。');
-  await form.getByLabel('完成条件（可选）').fill('恢复时角色可继续移动。');
+  await form.getByLabel('验证方法（可选）').fill('恢复时角色可继续移动。');
   await form.getByRole('button', { name: '保存卡片' }).click();
   await page.reload();
   const own = board.getByRole('article', { name: '做一个暂停菜单', exact: true });
@@ -130,22 +130,25 @@ test('待尝试支持创建、编辑、详情和恢复移出的内置练习', as
   await preset.getByRole('link', { name: '返回卡片' }).click();
   await expect(preset).toContainText('测试松开方向键后能否立刻停止。');
   await preset.getByRole('button', { name: '卡片操作' }).click();
-  await preset.getByRole('button', { name: '移出待尝试' }).click();
-  await page.getByRole('dialog', { name: '移出待尝试' }).getByRole('button', { name: '确认移出' }).click();
+  await preset.getByRole('button', { name: '移出「想尝试」' }).click();
+  await page.getByRole('dialog', { name: '移出「想尝试」' }).getByRole('button', { name: '确认移出' }).click();
   await page.reload();
   await expect(preset).toHaveCount(0);
   await board.getByRole('button', { name: '恢复内置练习' }).click();
   await page.getByRole('dialog', { name: '恢复内置练习' }).getByRole('button', { name: '恢复', exact: true }).click();
   await expect(preset).toContainText('测试松开方向键后能否立刻停止。');
   await own.getByRole('button', { name: '卡片操作' }).click();
-  await own.getByRole('button', { name: '移出待尝试' }).click();
-  await page.getByRole('dialog', { name: '移出待尝试' }).getByRole('button', { name: '确认移出' }).click();
+  await own.getByRole('button', { name: '移出「想尝试」' }).click();
+  await page.getByRole('dialog', { name: '移出「想尝试」' }).getByRole('button', { name: '确认移出' }).click();
   await expect(own).toHaveCount(0);
 });
 
 test('旧节点和任务保留，参考基础不锁住后续节点，目标可直接清除', async ({ page }) => {
   await seedLearning(page);
   await page.goto('/');
+  const today = page.getByRole('region', { name: '今日学习' });
+  await expect(today.getByText('当前学习目标', { exact: true })).toBeVisible();
+  await expect(today.getByText('旧任务', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '清除当前目标' }).click();
   await expect(page.getByText('可以直接开始学习', { exact: true })).toBeVisible();
   await page.reload();
@@ -167,7 +170,164 @@ test('旧节点和任务保留，参考基础不锁住后续节点，目标可�
   await unity.getByPlaceholder('添加一个可执行任务').fill('改一下角色移动速度');
   await unity.getByRole('button', { name: '保存任务', exact: true }).click();
   await expect(unity.getByText('改一下角色移动速度', { exact: true })).toBeVisible();
-  await expect(page.getByRole('region', { name: '已完成' }).getByRole('article')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: '实践记录' }).getByRole('article')).toHaveCount(0);
+});
+
+test('参考主题可增改删，主题、任务、完成标记和引用可随备份恢复', async ({ page, browser }) => {
+  await seedLearning(page);
+  await page.goto('/#path/topics');
+  const board = page.getByRole('region', { name: '参考路径与任务' });
+  const nav = board.getByRole('navigation', { name: '参考主题' });
+  const unity = board.getByRole('article', { name: 'Unity 核心工作流', exact: true });
+  await nav.getByRole('button', { name: 'Unity 核心工作流', exact: true }).click();
+  await unity.getByRole('button', { name: '设为当前目标' }).click();
+  await unity.getByRole('button', { name: '编辑主题' }).click();
+  const edit = page.getByRole('dialog', { name: '编辑主题' });
+  await edit.getByLabel('主题名称').fill('Unity 场景与组件');
+  await edit.getByLabel('主题说明').fill('验证场景切换和组件复用。');
+  await edit.getByRole('button', { name: '保存主题' }).click();
+  const renamed = board.getByRole('article', { name: 'Unity 场景与组件', exact: true });
+  await expect(renamed.getByText('旧任务', { exact: true })).toBeVisible();
+  await expect(renamed.getByRole('button', { name: '当前目标', exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('learning-assistant:current-goal')!).goal.label)).toBe('Unity 场景与组件');
+
+  await board.getByRole('button', { name: '添加主题' }).click();
+  const create = page.getByRole('dialog', { name: '添加主题' });
+  await create.getByLabel('主题名称').fill('场景切换练习');
+  await create.getByLabel('领域').selectOption('Unity');
+  await create.getByText('可参考的主题', { exact: true }).click();
+  await create.getByRole('checkbox', { name: 'Unity 场景与组件' }).check();
+  await create.getByRole('button', { name: '保存主题' }).click();
+  const custom = board.getByRole('article', { name: '场景切换练习', exact: true });
+  await expect(custom.getByText('可参考 Unity 场景与组件')).toBeVisible();
+  await custom.getByRole('button', { name: '标记完成', exact: true }).click();
+  await expect(custom.getByText('已标记完成')).toBeVisible();
+
+  await nav.getByRole('button', { name: 'Unity 场景与组件', exact: true }).click();
+  await renamed.getByRole('button', { name: '设为目标', exact: true }).click();
+  await page.getByRole('link', { name: '数据管理', exact: true }).click();
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: '导出完整备份' }).click();
+  const file = await readFile((await (await download).path())!);
+  const backup = JSON.parse(file.toString());
+  const savedTopic = backup.data.skillTree.topics.find(({ name }: { name: string }) => name === 'Unity 场景与组件');
+  expect(savedTopic.id).toBe('unity-foundations');
+
+  await page.getByRole('link', { name: '参考路径与任务', exact: true }).click();
+  await renamed.getByRole('button', { name: '删除主题', exact: true }).click();
+  const remove = page.getByRole('dialog', { name: '删除主题' });
+  await expect(remove).toContainText('及其下的 1 项任务');
+  await remove.getByRole('button', { name: '取消' }).click();
+  await expect(renamed.getByText('旧任务', { exact: true })).toBeVisible();
+  await renamed.getByRole('button', { name: '删除主题', exact: true }).click();
+  await page.evaluate(() => {
+    const set = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'learning-assistant:current-goal') {
+        Storage.prototype.setItem = set;
+        throw new Error('Simulated storage write failure');
+      }
+      set.call(this, key, value);
+    };
+  });
+  await remove.getByRole('button', { name: '确认删除' }).click();
+  await expect(remove.getByRole('alert')).toHaveText('保存参考路径失败，请重试。');
+  expect(await page.evaluate(() => [
+    JSON.parse(localStorage.getItem('learning-assistant:skill-tree')!).topics.some(({ id }: { id: string }) => id === 'unity-foundations'),
+    JSON.parse(localStorage.getItem('learning-assistant:tasks')!).length,
+    JSON.parse(localStorage.getItem('learning-assistant:current-goal')!).goal.id,
+  ])).toEqual([true, 1, 'task-one']);
+  await remove.getByRole('button', { name: '确认删除' }).click();
+  await page.reload();
+  await expect(nav.getByRole('button', { name: 'Unity 场景与组件', exact: true })).toHaveCount(0);
+  await expect(nav.getByRole('button', { name: 'Unity 核心工作流', exact: true })).toHaveCount(0);
+  await nav.getByRole('button', { name: /场景切换练习/ }).click();
+  await expect(custom.getByText(/可参考/)).toHaveCount(0);
+  expect(await page.evaluate(() => [
+    JSON.parse(localStorage.getItem('learning-assistant:tasks')!),
+    JSON.parse(localStorage.getItem('learning-assistant:current-goal')!).goal,
+  ])).toEqual([[], null]);
+
+  const context = await browser.newContext();
+  try {
+    const restored = await context.newPage();
+    await restored.goto('/#data');
+    await restored.getByLabel('选择备份文件').setInputFiles({ name: 'topics.json', mimeType: 'application/json', buffer: file });
+    await Promise.all([
+      restored.waitForEvent('load'),
+      restored.getByRole('button', { name: '确认恢复并刷新' }).click(),
+    ]);
+    await restored.getByRole('link', { name: '成长记录', exact: true }).click();
+    await restored.getByRole('link', { name: '参考路径与任务', exact: true }).click();
+    const restoredNav = restored.getByRole('navigation', { name: '参考主题' });
+    await restoredNav.getByRole('button', { name: /场景切换练习/ }).click();
+    const restoredTopic = restored.getByRole('article', { name: '场景切换练习', exact: true });
+    await expect(restoredTopic.getByText('已标记完成')).toBeVisible();
+    await expect(restoredTopic.getByText('可参考 Unity 场景与组件')).toBeVisible();
+    await restoredNav.getByRole('button', { name: 'Unity 场景与组件', exact: true }).click();
+    const oldTask = restored.getByRole('article', { name: 'Unity 场景与组件', exact: true });
+    await expect(oldTask.getByText('旧任务', { exact: true })).toBeVisible();
+    await expect(oldTask.getByRole('button', { name: '当前目标', exact: true })).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
+test('智能体主题任务可编辑、取消和添加到原主题，后续提问读取新任务', async ({ page }) => {
+  await seedLearning(page);
+  const requests: ChatRequest[] = [];
+  await page.route('**/api/assistant-chat', async (route) => {
+    requests.push(route.request().postDataJSON());
+    await route.fulfill({ json: requests.length === 1 ? {
+      answer: '先练习复用角色。',
+      tasks: [{ title: '制作角色 Prefab', action: '在两个场景各放一个角色实例。', done: '两个实例都能响应输入。' },
+        { title: '不完整', action: '只有行动建议' }],
+    } : { answer: '继续验证实例的配置。', tasks: [] } });
+  });
+  await page.goto('/#path/topics');
+  const nav = page.getByRole('navigation', { name: '参考主题' });
+  await nav.getByRole('button', { name: 'Unity 核心工作流', exact: true }).click();
+  const unity = page.getByRole('article', { name: 'Unity 核心工作流', exact: true });
+  await unity.getByRole('button', { name: '询问智能体', exact: true }).click();
+  const assistant = page.getByRole('dialog', { name: '学习智能体' });
+  await expect(assistant.getByText('引用 主题「Unity 核心工作流」')).toBeVisible();
+  await assistant.getByRole('button', { name: '帮我拆成小任务' }).click();
+  await assistant.getByRole('button', { name: '发送', exact: true }).click();
+  const suggestions = assistant.getByRole('region', { name: '任务建议' });
+  await expect(suggestions.getByRole('article')).toHaveCount(1);
+  await expect(suggestions.getByText('两个实例都能响应输入。', { exact: false })).toBeVisible();
+  expect(requests[0].topic).toMatchObject({ name: 'Unity 核心工作流', category: 'Unity',
+    related: ['C# 与面向对象基础'], completed: false, totalTasks: 1, tasks: [{ title: '旧任务', completed: false }] });
+  expect(requests[0].topic).not.toHaveProperty('id');
+  const add = suggestions.getByRole('button', { name: '添加为任务' });
+  const form = page.getByRole('dialog', { name: '添加为任务' });
+
+  await add.click();
+  await expect(form.getByLabel('任务名称')).toHaveValue('制作角色 Prefab');
+  await expect(form.getByLabel('任务说明')).toHaveValue(/完成条件/);
+  await form.getByRole('button', { name: '取消' }).click();
+  await expect(unity.getByText('制作角色 Prefab', { exact: true })).toHaveCount(0);
+  await assistant.getByRole('button', { name: '最小化学习智能体' }).click();
+  await nav.getByRole('button', { name: /算法基础保持/ }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: '恢复学习智能体' }).click();
+  await add.click();
+  await expect(form.getByText('添加到「Unity 核心工作流」')).toBeVisible();
+  await form.getByLabel('任务名称').fill('验证两个场景的角色 Prefab');
+  await form.getByRole('button', { name: '保存任务' }).click();
+  await expect(suggestions.getByRole('status')).toContainText('已将「验证两个场景的角色 Prefab」保存到「Unity 核心工作流」。');
+  await assistant.getByRole('textbox', { name: '输入问题' }).fill('帮我推荐几个练习');
+  await assistant.getByRole('button', { name: '发送', exact: true }).click();
+  await expect(assistant.getByText('继续验证实例的配置。')).toBeVisible();
+  expect(requests[1].topic?.tasks).toContainEqual({ title: '验证两个场景的角色 Prefab', completed: false });
+
+  await assistant.getByRole('button', { name: '最小化学习智能体' }).click();
+  await nav.getByRole('button', { name: 'Unity 核心工作流', exact: true }).click();
+  await expect(unity.getByText('验证两个场景的角色 Prefab', { exact: true })).toBeVisible();
+  await unity.getByRole('button', { name: '删除主题' }).click();
+  await page.getByRole('dialog', { name: '删除主题' }).getByRole('button', { name: '确认删除' }).click();
+  await page.getByRole('button', { name: '恢复学习智能体' }).click();
+  await expect(add).toBeDisabled();
 });
 
 test('完整备份在独立浏览器恢复实践与回链，v3 继续恢复词条和任务', async ({ page, browser }) => {
@@ -178,7 +338,7 @@ test('完整备份在独立浏览器恢复实践与回链，v3 继续恢复词�
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出完整备份' }).click();
   const backup = JSON.parse(await readFile((await (await download).path())!, 'utf8'));
-  expect(backup.version).toBe(8);
+  expect(backup.version).toBe(9);
 
   const context = await browser.newContext();
   try {
@@ -195,7 +355,7 @@ test('完整备份在独立浏览器恢复实践与回链，v3 继续恢复词�
 
     await restore(backup);
     await restored.getByRole('link', { name: '成长记录', exact: true }).click();
-    const recent = restored.getByRole('region', { name: '已完成' });
+    const recent = restored.getByRole('region', { name: '实践记录' });
     await expect(recent.getByRole('article', { name: title })).toContainText('跟教程实现移动');
     await recent.getByRole('link', { name: title, exact: true }).click();
     await expect(recent.getByRole('link', { name: '输入处理' })).toHaveAttribute('href', '#knowledge/entry-one');
@@ -237,12 +397,12 @@ test('窄屏成长视图独立切换，智能推荐换一批并预填实际引�
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/#path');
-  await page.getByRole('link', { name: '待尝试', exact: true }).click();
-  await expect(page.getByRole('region', { name: '已完成' })).toBeHidden();
+  await page.getByRole('link', { name: '想尝试', exact: true }).click();
+  await expect(page.getByRole('region', { name: '实践记录' })).toBeHidden();
   await expect(page.getByRole('region', { name: '参考路径与任务' })).toBeHidden();
-  const candidates = page.getByRole('region', { name: '待尝试' });
+  const candidates = page.getByRole('region', { name: '想尝试' });
   await candidates.getByLabel('按领域筛选').selectOption('C#');
-  await candidates.getByRole('button', { name: '添加待尝试' }).click();
+  await candidates.getByRole('button', { name: '添加练习' }).click();
   await candidates.getByRole('button', { name: '让智能体推荐' }).click();
   await expect(page).toHaveURL(/#path\/try$/);
   const assistant = page.getByRole('dialog', { name: '学习智能体' });
@@ -259,6 +419,7 @@ test('窄屏成长视图独立切换，智能推荐换一批并预填实际引�
   const card = suggestions.getByRole('article', { name: '为输入增加边界检查' });
   await expect(card.getByRole('link', { name: /角色移动笔记/ })).toHaveAttribute('href', '#history/' + oldDate);
   await expect(card.getByRole('link', { name: /输入处理/ })).toHaveAttribute('href', '#knowledge/entry-one');
+  await expect(card.getByText('验证方法', { exact: true })).toBeVisible();
   expect(requests[1].exclude).toContain('记录方向键的状态');
   await expect(suggestions.getByRole('article', { name: '记录方向键的状态' })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
@@ -283,8 +444,8 @@ test('窄屏成长视图独立切换，智能推荐换一批并预填实际引�
   await expect(candidates.getByRole('article', { name: '为输入增加边界检查' })).toBeVisible();
   await candidates.getByRole('button', { name: '撤销整理' }).click();
   await expect(candidates.getByRole('article', { name: '为输入增加边界检查' })).toHaveCount(0);
-  await page.getByRole('link', { name: '已完成', exact: true }).click();
-  const completedBoard = page.getByRole('region', { name: '已完成' });
+  await page.getByRole('link', { name: '实践记录', exact: true }).click();
+  const completedBoard = page.getByRole('region', { name: '实践记录' });
   const completedBounds = (await completedBoard.boundingBox())!;
   await card.dragTo(completedBoard, { sourcePosition: { x: 20, y: 20 },
     targetPosition: { x: 24, y: completedBounds.height - 35 } });
@@ -300,11 +461,11 @@ test('窄屏成长视图独立切换，智能推荐换一批并预填实际引�
   await expect(directlyCompleted).toContainText('输入超出范围时返回失败。');
   await directlyCompleted.getByRole('button', { name: '删除实践' }).click();
   await page.getByRole('dialog', { name: '删除实践' }).getByRole('button', { name: '确认删除' }).click();
-  await page.getByRole('link', { name: '待尝试', exact: true }).click();
+  await page.getByRole('link', { name: '想尝试', exact: true }).click();
   const returned = candidates.getByRole('article', { name: '为输入增加边界检查' });
   await returned.getByRole('button', { name: '卡片操作' }).click();
-  await returned.getByRole('button', { name: '移出待尝试' }).click();
-  await page.getByRole('dialog', { name: '移出待尝试' }).getByRole('button', { name: '确认移出' }).click();
+  await returned.getByRole('button', { name: '移出「想尝试」' }).click();
+  await page.getByRole('dialog', { name: '移出「想尝试」' }).getByRole('button', { name: '确认移出' }).click();
   await page.getByRole('button', { name: '打开学习智能体' }).click();
   await card.dragTo(nearby, { sourcePosition: { x: 20, y: 20 }, targetPosition: { x: 15, y: 25 } });
   const createGroup = page.getByRole('dialog', { name: '新建卡组' });
@@ -315,9 +476,9 @@ test('窄屏成长视图独立切换，智能推荐换一批并预填实际引�
   await expect(nearby).toBeVisible();
   await page.getByRole('button', { name: '打开学习智能体' }).click();
   await card.getByRole('button', { name: '卡片操作' }).click();
-  await card.getByRole('button', { name: '加入待尝试' }).click();
+  await card.getByRole('button', { name: '加入「想尝试」' }).click();
   await card.getByRole('button', { name: '卡片操作' }).click();
-  await expect(card.getByRole('button', { name: '已在待尝试' })).toBeDisabled();
+  await expect(card.getByRole('button', { name: '已在「想尝试」' })).toBeDisabled();
   await assistant.getByRole('heading', { name: '学习智能体' }).click();
   await assistant.getByRole('button', { name: '关闭学习智能体' }).click();
   const resized = await nearby.boundingBox();
@@ -341,7 +502,7 @@ test('窄屏成长视图独立切换，智能推荐换一批并预填实际引�
   await form.getByText('关联知识词条（1）', { exact: true }).click();
   await expect(form.getByRole('checkbox', { name: '输入处理' })).toBeChecked();
   await form.getByRole('button', { name: '保存实践' }).click();
-  const completed = page.getByRole('region', { name: '已完成' });
+  const completed = page.getByRole('region', { name: '实践记录' });
   const completedCard = completed.getByRole('article', { name: '为输入增加边界检查' });
   const confirm = page.getByRole('dialog', { name: '删除实践' });
   await expect(completedCard).toContainText('输入超出范围时返回失败。');
@@ -352,29 +513,30 @@ test('窄屏成长视图独立切换，智能推荐换一批并预填实际引�
       await completedCard.getByRole('button', { name: '卡片操作' }).click();
     }
     await completedCard.getByRole('button', { name: '删除实践', exact: true }).click();
-    await expect(confirm).toContainText('这是最后一次实践，删除后卡片将回到「待尝试」。');
+    await expect(confirm).toContainText('这是最后一次实践，删除后卡片将回到「想尝试」。');
     await confirm.getByRole('button', { name: '确认删除' }).click();
     await expect(confirm).toHaveCount(0);
     await expect(completedCard).toHaveCount(0);
-    await page.getByRole('link', { name: '待尝试', exact: true }).click();
+    await page.getByRole('link', { name: '想尝试', exact: true }).click();
     await saved.getByRole('button', { name: '卡片操作' }).click();
     await saved.getByRole('button', { name: '我做到了' }).click();
     await form.getByRole('button', { name: '保存实践' }).click();
     await expect(completedCard).toContainText('实践已保存。');
     await expect(confirm).toHaveCount(0);
   }
-  await page.getByRole('link', { name: '待尝试', exact: true }).click();
+  await page.getByRole('link', { name: '想尝试', exact: true }).click();
   await expect(saved).toHaveCount(0);
 });
 
 test('卡组可混合状态、改名和检索定位，备份保留成员', async ({ page, browser }) => {
+  await seedLearning(page);
   const questions: ChatRequest[] = [];
   await page.route('**/api/assistant-chat', async (route) => {
     questions.push(route.request().postDataJSON());
     await route.fulfill({ json: { answer: '可以取名为「角色移动与跳跃」。' } });
   });
   await page.goto('/#path/try');
-  const board = page.getByRole('region', { name: '待尝试' });
+  const board = page.getByRole('region', { name: '想尝试' });
   await board.getByRole('button', { name: '新建卡组' }).click();
   const create = page.getByRole('dialog', { name: '新建卡组' });
   await create.getByLabel('卡组名称').fill('角色控制');
@@ -399,6 +561,18 @@ test('卡组可混合状态、改名和检索定位，备份保留成员', async
   await expect(group.getByRole('article')).toHaveCount(2);
   const card = group.getByRole('article', { name: title });
   await card.getByRole('button', { name: '卡片操作' }).click();
+  await card.getByRole('button', { name: '带到今日学习', exact: true }).click();
+  const replace = page.getByRole('dialog', { name: '替换今日学习内容' });
+  await expect(replace).toContainText('替换当前学习目标「旧任务」');
+  await page.keyboard.press('Escape');
+  await expect(replace).toBeHidden();
+  await expect(group).toBeVisible();
+  await expect(card.getByText('练习参考', { exact: true })).toHaveCount(0);
+  await card.getByRole('button', { name: '卡片操作' }).click();
+  await card.getByRole('button', { name: '带到今日学习', exact: true }).click();
+  await replace.getByRole('button', { name: '确认替换' }).click();
+  await expect(card.getByText('练习参考', { exact: true })).toBeVisible();
+  await card.getByRole('button', { name: '卡片操作' }).click();
   await card.getByRole('button', { name: '询问智能体' }).click();
   await expect(group).toHaveCount(0);
   const assistant = page.getByRole('dialog', { name: '学习智能体' });
@@ -410,8 +584,8 @@ test('卡组可混合状态、改名和检索定位，备份保留成员', async
   await page.getByRole('button', { name: '保存实践' }).click();
   await page.getByRole('link', { name: '返回卡片' }).click();
   const groupPage = page.getByRole('region', { name: '角色控制' });
-  await expect(groupPage.getByRole('heading', { name: '已完成' })).toBeVisible();
-  await expect(groupPage.getByRole('heading', { name: '待尝试' })).toBeVisible();
+  await expect(groupPage.getByRole('heading', { name: '实践记录' })).toBeVisible();
+  await expect(groupPage.getByRole('heading', { name: '想尝试' })).toBeVisible();
 
   for (const view of ['/#path/try', '/#path']) {
     await page.goto(view);
@@ -447,6 +621,8 @@ test('卡组可混合状态、改名和检索定位，备份保留成员', async
   const search = page.getByRole('dialog', { name: '检索资料' });
   await search.getByRole('button', { name: '实践卡片与卡组' }).click();
   await search.getByRole('searchbox').fill('角色动作练习');
+  await expect(search.getByText('想尝试 · 角色动作练习', { exact: true })).toBeVisible();
+  await expect(search.getByText('实践记录 · 角色动作练习', { exact: true })).toBeVisible();
   await search.getByRole('link', { name: jumpTitle, exact: true }).click();
   await expect(board.getByRole('article', { name: jumpTitle }).getByRole('button', { name: '卡片操作' })).toBeFocused();
   await page.getByRole('link', { name: '数据管理', exact: true }).click();
@@ -475,8 +651,8 @@ test('卡组可混合状态、改名和检索定位，备份保留成员', async
     await restoredGroup.getByRole('button', { name: '管理卡组' }).click();
     await restored.getByRole('button', { name: '删除卡组' }).click();
     await deleteGroup.getByRole('button', { name: '确认删除' }).click();
-    await expect(restored.getByRole('region', { name: '已完成' }).getByRole('article', { name: title })).toBeVisible();
-    await restored.getByRole('link', { name: '待尝试', exact: true }).click();
+    await expect(restored.getByRole('region', { name: '实践记录' }).getByRole('article', { name: title })).toBeVisible();
+    await restored.getByRole('link', { name: '想尝试', exact: true }).click();
     await expect(restored.getByRole('article', { name: jumpTitle })).toBeVisible();
   } finally {
     await context.close();
@@ -485,7 +661,7 @@ test('卡组可混合状态、改名和检索定位，备份保留成员', async
 
 test('拖两张卡片成组，再拖入已有卡组并撤销', async ({ page }) => {
   await page.goto('/#path/try');
-  const board = page.getByRole('region', { name: '待尝试' });
+  const board = page.getByRole('region', { name: '想尝试' });
   const first = board.getByRole('article', { name: title, exact: true });
   const second = board.getByRole('article', { name: '让角色跳起并落回地面', exact: true });
   const third = board.getByRole('article', { name: '让角色在待机和移动动作间切换', exact: true });
@@ -498,9 +674,9 @@ test('拖两张卡片成组，再拖入已有卡组并撤销', async ({ page }) 
   await expect(folder).toBeVisible();
   await expect(board.locator('.growth-card-grid').filter({ has: page.getByRole('link', { name: /打开卡组 角色动作/ }) })
     .getByRole('article', { name: '让角色在待机和移动动作间切换', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: '已完成', exact: true }).click();
+  await page.getByRole('link', { name: '实践记录', exact: true }).click();
   await expect(page.getByRole('link', { name: /打开卡组 角色动作/ })).toHaveCount(0);
-  await page.getByRole('link', { name: '待尝试', exact: true }).click();
+  await page.getByRole('link', { name: '想尝试', exact: true }).click();
   await third.dragTo(board.getByRole('link', { name: '打开卡组 角色动作，2 张卡片' }));
   await expect(board.getByRole('link', { name: '打开卡组 角色动作，3 张卡片' })).toBeVisible();
   const bounds = (await board.boundingBox())!;
@@ -540,7 +716,7 @@ test('拖两张卡片成组，再拖入已有卡组并撤销', async ({ page }) 
   await expect(folder).toBeVisible();
 });
 
-test('卡片右键与键盘菜单联动目标和智能体，完成后移入已完成', async ({ page }, testInfo) => {
+test('卡片右键与键盘菜单联动练习参考和智能体，记录后移入实践记录', async ({ page }, testInfo) => {
   let input: ChatRequest | undefined;
   await page.route('**/api/assistant-chat', async (route) => {
     input = route.request().postDataJSON();
@@ -556,10 +732,19 @@ test('卡片右键与键盘菜单联动目标和智能体，完成后移入已�
   await page.screenshot({ path: testInfo.outputPath('growth-board-dark.png') });
   await card.click({ button: 'right' });
   await expect(menu).toBeVisible();
-  await menu.getByRole('button', { name: '设为学习目标' }).click();
-  await expect(card.getByText('当前目标')).toBeVisible();
+  await menu.getByRole('button', { name: '带到今日学习' }).click();
+  await expect(card.getByText('练习参考')).toBeVisible();
   await page.goto('/#today');
-  await expect(page.getByRole('region', { name: '今日学习' }).getByText(title, { exact: true })).toBeVisible();
+  const today = page.getByRole('region', { name: '今日学习' });
+  await expect(today.getByText(title, { exact: true })).toBeVisible();
+  await expect(today.getByText('练习参考', { exact: true })).toBeVisible();
+  await expect(today.getByRole('button', { name: '移除练习参考' })).toBeVisible();
+  await page.getByTitle('开发者工具 (可拖动)').click();
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: /模拟完成 1 个番茄钟/ }).click();
+  await expect.poll(() => page.evaluate((label) => JSON.parse(localStorage.getItem('learning-assistant:study-logs')!)
+    .some((log: { tags: string[] }) => log.tags.includes(`练习参考：${label}`)), title)).toBe(true);
+  await page.getByTitle('开发者工具 (可拖动)').click();
   await page.goto('/#path/try');
   await trigger.press('Enter');
   await expect(menu.getByRole('button', { name: '我做到了' })).toBeFocused();
@@ -581,10 +766,10 @@ test('卡片右键与键盘菜单联动目标和智能体，完成后移入已�
   await trigger.click();
   await menu.getByRole('button', { name: '我做到了' }).click();
   await page.getByRole('button', { name: '保存实践' }).click();
-  await page.getByRole('link', { name: '待尝试', exact: true }).click();
+  await page.getByRole('link', { name: '想尝试', exact: true }).click();
   await expect(card).toHaveCount(0);
-  await page.getByRole('link', { name: '已完成', exact: true }).click();
-  await expect(card.getByText('当前目标')).toBeVisible();
+  await page.getByRole('link', { name: '实践记录', exact: true }).click();
+  await expect(card.getByText('练习参考')).toBeVisible();
 });
 
 test('成长看板可单选和 Shift 多选，仅将选中的卡片交给智能体分组', async ({ page }) => {
@@ -595,7 +780,7 @@ test('成长看板可单选和 Shift 多选，仅将选中的卡片交给智能�
     await route.fulfill({ json: { answer: request.growthSelection ? '可以把它们放进「角色控制」。' : '先测试角色移动。' } });
   });
   await page.goto('/#path/try');
-  const board = page.getByRole('region', { name: '待尝试' });
+  const board = page.getByRole('region', { name: '想尝试' });
   const jump = '让角色跳起并落回地面';
   const first = board.getByRole('article', { name: title, exact: true });
   const second = board.getByRole('article', { name: jump, exact: true });
@@ -614,7 +799,7 @@ test('成长看板可单选和 Shift 多选，仅将选中的卡片交给智能�
   const cardMenu = first.getByRole('group', { name: '所选卡片操作' });
   const ask = cardMenu.getByRole('button', { name: '询问智能体', exact: true });
   await expect(cardMenu).toContainText('已选 2 张卡片');
-  await expect(cardMenu.getByRole('button', { name: '设为学习目标' })).toHaveCount(0);
+  await expect(cardMenu.getByRole('button', { name: '带到今日学习' })).toHaveCount(0);
   await ask.click();
   await expect(cardMenu).toBeHidden();
   await expect(assistant.getByText('引用 2 张选中的卡片')).toBeVisible();
@@ -642,7 +827,7 @@ test('成长看板可单选和 Shift 多选，仅将选中的卡片交给智能�
 
 test('多选菜单的移动和移出按选区执行，图标与快捷键可多步撤销和重做', async ({ page }) => {
   await page.goto('/#path/try');
-  const board = page.getByRole('region', { name: '待尝试' });
+  const board = page.getByRole('region', { name: '想尝试' });
   const undo = board.getByRole('button', { name: '撤销整理' });
   const redo = board.getByRole('button', { name: '重做整理' });
   await expect(undo).toBeDisabled();
@@ -700,8 +885,8 @@ test('多选菜单的移动和移出按选区执行，图标与快捷键可多�
   await first.click({ position: { x: 12, y: 70 } });
   await second.click({ modifiers: ['Shift'], position: { x: 12, y: 70 } });
   await first.click({ button: 'right' });
-  await first.getByRole('button', { name: '移出待尝试' }).click();
-  const remove = page.getByRole('dialog', { name: '移出待尝试' });
+  await first.getByRole('button', { name: '移出「想尝试」' }).click();
+  const remove = page.getByRole('dialog', { name: '移出「想尝试」' });
   await expect(remove).toContainText('将所选的 2 张卡片移出');
   await remove.getByRole('button', { name: '确认移出' }).click();
   await expect(first).toHaveCount(0);
@@ -729,7 +914,7 @@ test('智能体分组可逐组确认、加入已有卡组并撤销重做', async
     } });
   });
   await page.goto('/#path/try');
-  const board = page.getByRole('region', { name: '待尝试' });
+  const board = page.getByRole('region', { name: '想尝试' });
   await board.getByRole('button', { name: '新建卡组' }).click();
   const create = page.getByRole('dialog', { name: '新建卡组' });
   await create.getByLabel('卡组名称').fill('c# 练习');

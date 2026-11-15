@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { GROWTH_DOMAINS } from '../../data/growthPresets';
 import { useGrowthStore } from '../../store/growthStore';
 import type { SavedExercise } from '../../types';
+import { ADD_EXERCISE_LABEL, PRACTICE_VERIFICATION_LABEL } from '../../utils/growthLabels';
 import FocusEditor from '../common/FocusEditor';
 
 export interface GrowthExerciseDraft {
@@ -18,8 +19,8 @@ export default function GrowthExerciseForm({ exercise, creating, groupId, onSave
   const [error, setError] = useState('');
   const save = useGrowthStore((state) => state.editExercise);
 
-  return <FocusEditor title={creating ? '添加待尝试' : '编辑待尝试卡片'} formLabel="待尝试卡片表单"
-    description="记下想做的事，完成后可以记录实践。" saveLabel="保存卡片" cancelLabel="取消" error={error}
+  return <FocusEditor title={creating ? ADD_EXERCISE_LABEL : '编辑练习卡片'} formLabel="练习卡片表单"
+    description="记下想试的点子或练习，做过以后可以记录实践。" saveLabel="保存卡片" cancelLabel="取消" error={error}
     onCancel={onCancel} onSave={() => {
       try {
         save({ ...draft, title: draft.title.trim(), action: draft.action.trim(), done: draft.done.trim() }, groupId);
@@ -40,7 +41,7 @@ export default function GrowthExerciseForm({ exercise, creating, groupId, onSave
     </fieldset>
     <label className="growth-field">卡片说明（可选）<textarea rows={4} maxLength={1200} value={draft.action}
       onChange={(event) => setDraft({ ...draft, action: event.target.value })} /></label>
-    <label className="growth-field">完成条件（可选）<textarea rows={3} maxLength={1200} value={draft.done}
+    <label className="growth-field">{PRACTICE_VERIFICATION_LABEL}（可选）<textarea rows={3} maxLength={1200} value={draft.done}
       onChange={(event) => setDraft({ ...draft, done: event.target.value })} /></label>
   </FocusEditor>;
 }

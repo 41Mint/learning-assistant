@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { GROWTH_PRESETS } from '../data/growthPresets';
 import type { GrowthData, GrowthGroup, GrowthOutcome, GrowthPractice, SavedExercise } from '../types';
 import { emptyGrowth, growthExercises, validateGrowth } from '../utils/growth';
+import { PRACTICE_IDEAS_LABEL } from '../utils/growthLabels';
 import { normalizedName } from '../utils/knowledge';
 import { generateId, getTodayDate, STORAGE_KEYS } from '../utils/storage';
 import type { HistoryDirection } from '../utils/workspaceHistory';
@@ -102,7 +103,7 @@ export const useGrowthStore = create<GrowthStore>((set, get) => {
     editExercise: (exercise, groupId) => {
       const { exercises, outcomes, groups, hiddenPresetIds } = get();
       if (outcomes.some(({ id }) => id === exercise.id) || hiddenPresetIds.includes(exercise.id)) {
-        throw new Error('这张卡片已离开「待尝试」。');
+        throw new Error(`这张卡片已离开「${PRACTICE_IDEAS_LABEL}」。`);
       }
       const title = normalizedName(exercise.title);
       if (!title) throw new Error('请输入卡片名称。');

@@ -9,13 +9,15 @@ import { emptyKnowledge, validateKnowledge } from './knowledge';
 import { emptyGrowth, validateGrowth } from './growth';
 import { emptyProjectCode, validateProjectCode } from './projectCode';
 import { readBackupAssets, replaceBackupAssets } from './projectCodeStorage';
+import { validateSkillTree } from './skillPathStorage';
+import type { SkillTreeStorage } from './skillPathStorage';
 
 interface BackupImage { id: string; name: string; type: string; base64: string }
 interface BackupData {
   studyLogs: StudyLog[];
   trashedLogs: TrashedStudyLog[];
   tasks: LearningTask[];
-  skillTree: Record<string, unknown> | null;
+  skillTree: SkillTreeStorage | null;
   currentGoal: Record<string, unknown> | null;
   streak: Record<string, unknown> | null;
   settings: Record<string, unknown> | null;
@@ -26,7 +28,7 @@ interface BackupData {
 }
 export interface BackupFile {
   format: 'learning-assistant-backup';
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   exportedAt: string;
   data: BackupData;
   images: BackupImage[];
@@ -56,7 +58,7 @@ function optionalRecord(value: unknown): Record<string, unknown> | null {
 export function parseBackup(value: unknown): BackupFile {
   if (!isRecord(value) || value.format !== 'learning-assistant-backup'
     || (value.version !== 1 && value.version !== 2 && value.version !== 3 && value.version !== 4
-      && value.version !== 5 && value.version !== 6 && value.version !== 7 && value.version !== 8)
+      && value.version !== 5 && value.version !== 6 && value.version !== 7 && value.version !== 8 && value.version !== 9)
     || typeof value.exportedAt !== 'string' || !Number.isFinite(Date.parse(value.exportedAt)) || !isRecord(value.data)) {
     throw new Error('无法识别该备份，请选择由学习助手导出的 JSON 文件。');
   }
@@ -77,14 +79,13 @@ export function parseBackup(value: unknown): BackupFile {
   if (new Set(studyLogs.map((log) => log.date)).size !== studyLogs.length
     || logIds.size !== allLogs.length
     || new Set(tasks.map((task) => task.id)).size !== tasks.length) throw new Error('备份存在重复记录，无法恢复。');
-  const skillTree = optionalRecord(raw.skillTree);
-  if (skillTree && (skillTree.version !== 1 || !strings(skillTree.completedIds))) throw new Error('技能进度格式不正确。');
+  const skillTree = raw.skillTree == null ? null : validateSkillTree(raw.skillTree);
   const currentGoal = optionalRecord(raw.currentGoal);
   if (currentGoal && !(
     currentGoal.version === 1 && (currentGoal.skillId === null || typeof currentGoal.skillId === 'string')
     || currentGoal.version === 2 && (currentGoal.goal === null || isRecord(currentGoal.goal)
       && ['skill', 'task', 'practice', 'growth-card'].includes(String(currentGoal.goal.type)) && typeof currentGoal.goal.id === 'string' && typeof currentGoal.goal.label === 'string')
-  )) throw new Error('当前学习目标格式不正确。');
+  )) throw new Error('学习目标或练习参考格式不正确。');
   const streak = optionalRecord(raw.streak);
   if (streak && (!number(streak.currentStreak) || !number(streak.longestStreak) || !number(streak.totalDays)
     || !(streak.lastStudyDate === null || isCalendarDate(streak.lastStudyDate)))) throw new Error('打卡记录格式不正确。');
@@ -144,7 +145,7 @@ export async function createBackup(): Promise<BackupFile> {
   const assets = await readBackupAssets();
   raw.projectCode = assets.projectCode;
   const images = await Promise.all(assets.images.map(encodeImage));
-  return parseBackup({ format: 'learning-assistant-backup', version: 8, exportedAt: new Date().toISOString(), data: raw, images });
+  return parseBackup({ format: 'learning-assistant-backup', version: 9, exportedAt: new Date().toISOString(), data: raw, images });
 }
 
 export async function restoreBackup(backup: BackupFile): Promise<void> {

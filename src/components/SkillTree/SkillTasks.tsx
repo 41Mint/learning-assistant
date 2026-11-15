@@ -1,25 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { LearningTask } from '../../types';
 import { useCurrentGoalStore } from '../../store/currentGoalStore';
 import { useTaskStore } from '../../store/taskStore';
+import TaskFields from './TaskFields';
 
 interface SkillTasksProps {
   skillId: string;
 }
 
 export default function SkillTasks({ skillId }: SkillTasksProps) {
-  const { tasks, isLoaded, loadTasks, addTask, updateTask, toggleTask, deleteTask } = useTaskStore();
+  const { tasks, isLoaded, addTask, updateTask, toggleTask, deleteTask } = useTaskStore();
   const { goal, setCurrentGoal, clearCurrentGoal } = useCurrentGoalStore();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState('');
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [editingDescription, setEditingDescription] = useState('');
-
-  useEffect(() => {
-    loadTasks();
-  }, [loadTasks]);
 
   const skillTasks = tasks.filter((task) => task.parentSkillId === skillId);
   const pendingTasks = skillTasks.filter((task) => !task.completed);
@@ -27,7 +25,13 @@ export default function SkillTasks({ skillId }: SkillTasksProps) {
 
   const handleAdd = () => {
     if (!title.trim()) return;
-    addTask(skillId, title.trim(), description.trim());
+    try {
+      addTask(skillId, title.trim(), description.trim());
+    } catch (error) {
+      setAddError(error instanceof Error ? error.message : '保存任务失败，请重试。');
+      return;
+    }
+    setAddError('');
     setTitle('');
     setDescription('');
     setAdding(false);
@@ -80,8 +84,9 @@ export default function SkillTasks({ skillId }: SkillTasksProps) {
               onKeyDown={(event) => event.key === 'Enter' && saveEditing()}
               className="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
             />
-            <input
+            <textarea
               value={editingDescription}
+              rows={3}
               onChange={(event) => setEditingDescription(event.target.value)}
               placeholder="补充说明（可选）"
               className="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
@@ -102,7 +107,7 @@ export default function SkillTasks({ skillId }: SkillTasksProps) {
             />
             <div className="min-w-0 flex-1">
               <p className={`text-sm ${task.completed ? 'text-green-800 line-through dark:text-green-300' : 'text-gray-800 dark:text-gray-200'}`}>{task.title}</p>
-              {task.description && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{task.description}</p>}
+              {task.description && <p className="mt-1 whitespace-pre-wrap text-xs text-gray-500 dark:text-gray-400">{task.description}</p>}
             </div>
             <div className="flex shrink-0 gap-1">
               {!task.completed && (
@@ -145,22 +150,10 @@ export default function SkillTasks({ skillId }: SkillTasksProps) {
       )}
 
       {adding && <form className="growth-task-form" data-preserves-on-navigation onSubmit={(event) => { event.preventDefault(); handleAdd(); }}>
-          <input
-            autoFocus aria-label="任务名称"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="添加一个可执行任务"
-            className="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-          />
-          <input
-            aria-label="任务说明"
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            placeholder="补充说明（可选）"
-            className="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-          />
+          <TaskFields title={title} description={description} onTitle={setTitle} onDescription={setDescription} />
+          {addError && <p role="alert">{addError}</p>}
           <div className="code-actions"><button type="submit" className="note-button" disabled={!title.trim()}>保存任务</button>
-            <button type="button" className="note-button secondary" onClick={() => setAdding(false)}>取消</button></div>
+            <button type="button" className="note-button secondary" onClick={() => { setAdding(false); setAddError(''); }}>取消</button></div>
       </form>}
     </div>
   );

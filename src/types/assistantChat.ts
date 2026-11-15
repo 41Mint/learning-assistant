@@ -9,6 +9,7 @@ export const CHAT_CODE_CONTEXT_LIMIT = 4000;
 export const CHAT_SCRIPT_LIMIT = 24000;
 export const CHAT_GROUP_CARD_LIMIT = 30;
 export const CHAT_GROUP_DESCRIPTION_LIMIT = 240;
+export const CHAT_TOPIC_TASK_LIMIT = 20;
 export const ASSISTANT_REQUEST_BYTES = 256 * 1024;
 
 export interface ChatMessage {
@@ -46,6 +47,39 @@ export interface ChatGrowthGrouping {
   reason: string;
 }
 
+export interface ChatTopic {
+  name: string;
+  category: string;
+  description: string;
+  related: string[];
+  completed: boolean;
+  totalTasks: number;
+  tasks: { title: string; completed: boolean }[];
+}
+
+export interface ChatTaskSuggestion {
+  title: string;
+  action: string;
+  done: string;
+}
+
+export function readTaskSuggestions(value: unknown): ChatTaskSuggestion[] {
+  if (!Array.isArray(value)) return [];
+  const titles = new Set<string>();
+  const suggestions: ChatTaskSuggestion[] = [];
+  for (const item of value.slice(0, 3)) {
+    if (!reviewRecord(item)) continue;
+    const title = reviewText(item.title, 100);
+    const action = reviewText(item.action, 360);
+    const done = reviewText(item.done, 240);
+    const key = title.normalize('NFKC').trim().toLocaleLowerCase();
+    if (!key || !action || !done || titles.has(key)) continue;
+    titles.add(key);
+    suggestions.push({ title, action, done });
+  }
+  return suggestions;
+}
+
 export function readGrowthGrouping(value: unknown, cardCount: number): ChatGrowthGrouping[] {
   if (!Array.isArray(value) || value.length > Math.floor(cardCount / 2)) return [];
   const usedCards = new Set<number>();
@@ -77,4 +111,5 @@ export interface ChatRequest {
   growthCard?: ChatGrowthCard;
   growthGroup?: ChatGrowthGroup;
   growthSelection?: ChatGrowthCards;
+  topic?: ChatTopic;
 }

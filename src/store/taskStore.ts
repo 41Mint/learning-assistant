@@ -32,9 +32,13 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       createdAt: now,
       updatedAt: now,
     };
-    const tasks = [...get().tasks, task];
+    const current = get();
+    if (!current.isLoaded) throw new Error('任务正在加载。');
+    const stored: unknown = JSON.parse(localStorage.getItem(STORAGE_KEYS.TASKS) ?? '[]');
+    if (JSON.stringify(stored) !== JSON.stringify(current.tasks)) throw new Error('任务已在其他页面更新，请刷新后重试。');
+    const tasks = [...current.tasks, task];
+    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
     set({ tasks });
-    setStorageItem(STORAGE_KEYS.TASKS, tasks);
   },
 
   updateTask: (id, title, description) => {

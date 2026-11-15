@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { ASSISTANT_CHAT_ENDPOINT, ASSISTANT_REQUEST_BYTES, CHAT_ANSWER_LIMIT, CHAT_HISTORY_LIMIT, CHAT_QUESTION_LIMIT, readGrowthGrouping } from '../../types/assistantChat';
-import type { ChatRequest } from '../../types/assistantChat';
+import { ASSISTANT_CHAT_ENDPOINT, ASSISTANT_REQUEST_BYTES, CHAT_ANSWER_LIMIT, CHAT_HISTORY_LIMIT, CHAT_QUESTION_LIMIT, CHAT_TOPIC_TASK_LIMIT, readGrowthGrouping, readTaskSuggestions } from '../../types/assistantChat';
+import type { ChatRequest, ChatTaskSuggestion, ChatTopic } from '../../types/assistantChat';
 import { LOG_REVIEW_MAX_TEXT, reviewRecord, reviewText } from '../../types/logReview';
 import { assistantAction, isAssistantGuideQuestion } from './assistantActions';
 import type { AssistantAction } from './assistantActions';
@@ -11,12 +11,22 @@ import type { AssistantCodeExcerpt, AssistantCodeReference, AssistantGrowthRefer
 import AssistantGuide from './AssistantGuide';
 import type { AssistantStart } from './AssistantGuide';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
+import { useSkillTreeStore } from '../../store/skillTreeStore';
+import { useTaskStore } from '../../store/taskStore';
 import { describeScript, lineLabel, surroundingCode } from '../../utils/assistantCode';
 import GrowthGroupingPlan from './GrowthGroupingPlan';
 import type { ProposedGrowthGroup } from './GrowthGroupingPlan';
+import TopicTaskPlan from './TopicTaskPlan';
 
 export interface AssistantChatSource { id: string; date: string; text: string; draft: boolean }
-interface Turn { question: string; answer: string; source?: { id: string; label: string }; guide?: boolean; groups?: ProposedGrowthGroup[] }
+interface Turn {
+  question: string;
+  answer: string;
+  source?: { id: string; label: string };
+  guide?: boolean;
+  groups?: ProposedGrowthGroup[];
+  taskPlan?: { topicId: string; suggestions: ChatTaskSuggestion[] };
+}
 const excerptLabel = (excerpt: AssistantCodeExcerpt) => `${excerpt.path} · ${lineLabel(excerpt)}`;
 
 async function askAssistant(input: ChatRequest, signal: AbortSignal) {
@@ -33,7 +43,9 @@ async function askAssistant(input: ChatRequest, signal: AbortSignal) {
   if (!response.ok || !answer) {
     throw new Error((reviewRecord(value) && reviewText(value.error, 300)) || '暂时无法获取回复，请重试。');
   }
-  return { answer, groups: readGrowthGrouping(reviewRecord(value) ? value.groups : undefined, input.growthSelection?.cards.length ?? 0) };
+  const result = reviewRecord(value) ? value : {};
+  return { answer, groups: readGrowthGrouping(result.groups, input.growthSelection?.cards.length ?? 0),
+    tasks: input.topic ? readTaskSuggestions(result.tasks) : [] };
 }
 
 export default function AssistantChat({ source, active, onAction, codeExcerpt, onRemoveCode, onPickCode, growthReference, onRemoveGrowthReference, page, onTool, onStart }: {
@@ -71,10 +83,24 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
   const growthCard = growthReference?.kind === 'card' ? growthReference.card : undefined;
   const growthGroup = growthReference?.kind === 'group' ? growthReference.group : undefined;
   const growthSelection = growthReference?.kind === 'selection' ? growthReference.selection : undefined;
-  const growthLabel = growthGroup ? `卡组「${growthGroup.name}」` : growthSelection ? `${growthSelection.totalCards} 张选中的卡片` : growthCard?.title;
-  const growthPrompts = growthGroup ? ['这个卡组叫什么更合适？', '组内卡片的分类合适吗？']
+  const topicId = growthReference?.kind === 'topic' ? growthReference.id : undefined;
+  const topics = useSkillTreeStore((state) => state.topics);
+  const completedIds = useSkillTreeStore((state) => state.completedIds);
+  const tasks = useTaskStore((state) => state.tasks);
+  const topicNode = topicId ? topics.find(({ id }) => id === topicId) : undefined;
+  const topicTasks = topicNode ? tasks.filter(({ parentSkillId }) => parentSkillId === topicNode.id) : [];
+  const topic: ChatTopic | undefined = topicNode && {
+    name: topicNode.name, category: topicNode.category, description: topicNode.description, completed: completedIds.includes(topicNode.id),
+    related: topics.filter(({ id }) => topicNode.prerequisites.includes(id)).slice(0, CHAT_TOPIC_TASK_LIMIT).map(({ name }) => name),
+    totalTasks: topicTasks.length, tasks: topicTasks.toSorted((a, b) => b.updatedAt - a.updatedAt).slice(0, CHAT_TOPIC_TASK_LIMIT)
+      .map(({ title, completed }) => ({ title: title.trim().slice(0, 100), completed })),
+  };
+  const growthLabel = topicId ? (topic ? `主题「${topic.name}」` : '已删除的主题') : growthGroup ? `卡组「${growthGroup.name}」`
+    : growthSelection ? `${growthSelection.totalCards} 张选中的卡片` : growthCard?.title;
+  const growthPrompts = topicId ? (topic ? ['这个主题从哪里开始？', '帮我拆成小任务'] : [])
+    : growthGroup ? ['这个卡组叫什么更合适？', '组内卡片的分类合适吗？']
     : growthSelection ? ['这些卡片可以怎么分组？']
-    : ['这张卡片要我做到什么？', '这个练习可以怎么开始？'];
+    : ['这张卡片可以练习哪些内容？', '这个练习可以怎么开始？'];
   const prompts = growthReference ? growthPrompts : codeExcerpt && (!wholeScript || script) ? [suggestedQuestion] : [];
   const availableLogId = codeExcerpt || growthReference ? undefined : source?.id;
   if (sourceId !== availableLogId) {
@@ -99,7 +125,7 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
       return;
     }
     const action = assistantAction(text);
-    if (action && ((!codeExcerpt && !growthReference) || action.kind === 'recommend')) {
+    if (action && ((!codeExcerpt && !growthReference) || (action.kind === 'recommend' && !topicId))) {
       setError('');
       setQuestion('');
       onAction(action);
@@ -107,6 +133,10 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
     }
     if (wholeScript && !script) {
       setError('脚本快照已不可用，请重新选择。');
+      return;
+    }
+    if (topicId && !topic) {
+      setError('原主题已不可用，请重新选择或移除引用。');
       return;
     }
     const current = new AbortController();
@@ -125,13 +155,15 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
     const log = attached && { date: attached.date, text: attached.text.slice(0, LOG_REVIEW_MAX_TEXT) };
     const code = fragment && { path: fragment.path, text: fragment.text, startLine: fragment.startLine, endLine: fragment.endLine, context: includedContext };
     try {
-      const reply = await askAssistant({ question: text, history, log, code, script, growthCard, growthGroup, growthSelection }, current.signal);
+      const reply = await askAssistant({ question: text, history, log, code, script, growthCard, growthGroup, growthSelection, topic }, current.signal);
       if (current.signal.aborted) return;
       const groups = growthReference?.kind === 'selection' && growthReference.cardIds.length === growthReference.selection.cards.length
         ? reply.groups.map(({ name, reason, members }) => ({ name, reason, cards: members.map((number) => ({
           id: growthReference.cardIds[number - 1], title: growthReference.selection.cards[number - 1].title,
         })) })) : undefined;
-      setTurns((previous) => [...previous, { question: text, answer: reply.answer, source: sourceInfo, groups }]);
+      const taskPlan = growthReference?.kind === 'topic' && reply.tasks.length > 0
+        ? { topicId: growthReference.id, suggestions: reply.tasks } : undefined;
+      setTurns((previous) => [...previous, { question: text, answer: reply.answer, source: sourceInfo, groups, taskPlan }]);
       setQuestion('');
     } catch (error) {
       if (!current.signal.aborted) setError(error instanceof Error ? error.message : '暂时无法获取回复，请重试。');
@@ -161,6 +193,7 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
           <ReactMarkdown skipHtml disallowedElements={['img', 'a']} unwrapDisallowed>{turn.answer}</ReactMarkdown>
         </div>}
         {turn.groups && turn.groups.length > 0 && <GrowthGroupingPlan suggestions={turn.groups} />}
+        {turn.taskPlan && <TopicTaskPlan {...turn.taskPlan} />}
       </div>)}
       {pending && <div className="assistant-turn">{renderQuestion(pending)}<p role="status">正在生成回复…</p></div>}
     </div>
@@ -180,11 +213,15 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
       </div>}
       {growthReference && <div className="assistant-code-context">
         <p>引用 {growthLabel}</p>
-        <button type="button" className="knowledge-text-button" disabled={Boolean(pending)} onClick={onRemoveGrowthReference}>{growthGroup ? '移除卡组' : growthSelection ? '移除所选卡片' : '移除卡片'}</button>
-        <p className="knowledge-muted">{growthGroup ? growthGroup.totalCards
-          ? `发送时附上卡组名称和 ${growthGroup.cards.length === growthGroup.totalCards ? growthGroup.totalCards : `前 ${growthGroup.cards.length} 张（共 ${growthGroup.totalCards} 张）`}卡片的标题、领域、状态和说明摘要。`
+        <button type="button" className="knowledge-text-button" disabled={Boolean(pending)} onClick={onRemoveGrowthReference}>{topicId ? '移除主题' : growthGroup ? '移除卡组' : growthSelection ? '移除所选卡片' : '移除卡片'}</button>
+        <p className="knowledge-muted">{topicId
+          ? topic
+            ? `发送时附上主题说明、相关主题及${topic.totalTasks > topic.tasks.length ? `最近更新的 ${topic.tasks.length} 项任务` : '该主题的任务'}标题与完成状态。`
+            : '原主题已不可用。'
+          : growthGroup ? growthGroup.totalCards
+          ? `发送时附上卡组名称和 ${growthGroup.cards.length === growthGroup.totalCards ? growthGroup.totalCards : `前 ${growthGroup.cards.length} 张（共 ${growthGroup.totalCards} 张）`}卡片的标题、领域、所属看板和说明摘要。`
           : '此卡组暂无卡片，发送时附上卡组名称。' : growthSelection
-          ? '发送时附上所选卡片的标题、领域、状态和说明摘要。' : '发送时附上卡片标题、领域及当前说明。'}</p>
+          ? '发送时附上所选卡片的标题、领域、所属看板和说明摘要。' : '发送时附上卡片标题、领域及当前说明。'}</p>
       </div>}
       {source && !codeExcerpt && !growthReference && <label className="assistant-reference">
         <input type="checkbox" checked={Boolean(attached)} disabled={Boolean(pending) || !source.text.trim()}

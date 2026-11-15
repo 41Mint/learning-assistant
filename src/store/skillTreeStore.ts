@@ -1,59 +1,113 @@
 import { create } from 'zustand';
-import { SKILL_PATH, getSkillNode } from '../data/skillPath';
-import { getStorageItem, setStorageItem, STORAGE_KEYS } from '../utils/storage';
+import { SKILL_PATH } from '../data/skillPath';
+import type { SkillNodeDefinition } from '../data/skillPath';
+import type { LearningTask } from '../types';
+import { generateId, STORAGE_KEYS } from '../utils/storage';
+import { readSkillTree, validateSkillTree } from '../utils/skillPathStorage';
+import type { SkillTreeStorage } from '../utils/skillPathStorage';
+import { readCurrentGoal, useCurrentGoalStore } from './currentGoalStore';
+import type { CurrentGoal } from './currentGoalStore';
+import { useTaskStore } from './taskStore';
 
-interface SkillTreeStorage {
-  version: 1;
-  completedIds: string[];
-}
-
-interface ToggleResult {
-  changed: boolean;
-  reason?: string;
-}
+export type TopicFields = Pick<SkillNodeDefinition, 'name' | 'description' | 'category' | 'prerequisites'>;
 
 interface SkillTreeStore {
+  topics: SkillNodeDefinition[];
   completedIds: string[];
   isLoaded: boolean;
+  error: string;
   loadSkillTree: () => void;
-  toggleCompleted: (id: string) => ToggleResult;
+  saveTopic: (fields: TopicFields, id?: string) => string;
+  deleteTopic: (id: string) => void;
+  toggleCompleted: (id: string) => void;
 }
 
-const INITIAL_STORAGE: SkillTreeStorage = {
-  version: 1,
-  completedIds: [],
-};
-
-function persist(completedIds: string[]) {
-  setStorageItem<SkillTreeStorage>(STORAGE_KEYS.SKILL_TREE, {
-    version: 1,
-    completedIds,
-  });
-}
-
-export const useSkillTreeStore = create<SkillTreeStore>((set, get) => ({
-  completedIds: [],
-  isLoaded: false,
-
-  loadSkillTree: () => {
-    const stored = getStorageItem<SkillTreeStorage>(STORAGE_KEYS.SKILL_TREE, INITIAL_STORAGE);
-    const validIds = new Set(SKILL_PATH.map((node) => node.id));
-    const completedIds = [...new Set(stored.completedIds)].filter((id) => validIds.has(id));
-    set({ completedIds, isLoaded: true });
-  },
-
-  toggleCompleted: (id: string) => {
-    const node = getSkillNode(id);
-    if (!node) {
-      return { changed: false, reason: '未找到这个学习节点。' };
+function writeChanges(tree: SkillTreeStorage, goal?: CurrentGoal | null, tasks?: LearningTask[]) {
+  const pairs: [string, unknown][] = [[STORAGE_KEYS.SKILL_TREE, validateSkillTree(tree)]];
+  if (tasks) pairs.push([STORAGE_KEYS.TASKS, tasks]);
+  if (goal !== undefined) pairs.push([STORAGE_KEYS.CURRENT_GOAL, { version: 2, goal }]);
+  const writes = pairs.map(([key, value]) => ({ key, next: JSON.stringify(value), before: localStorage.getItem(key) }));
+  let written = 0;
+  try {
+    for (const { key, next } of writes) {
+      localStorage.setItem(key, next);
+      written += 1;
     }
+  } catch {
+    for (const { key, before } of writes.slice(0, written).reverse()) {
+      if (before === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, before);
+    }
+    throw new Error('保存参考路径失败，请重试。');
+  }
+  if (tasks) useTaskStore.setState({ tasks });
+  if (goal !== undefined) useCurrentGoalStore.setState({ goal, isLoaded: true });
+}
 
-    const completedIds = get().completedIds;
-    const nextCompletedIds = completedIds.includes(id)
-      ? completedIds.filter((completedId) => completedId !== id)
-      : [...completedIds, id];
-    persist(nextCompletedIds);
-    set({ completedIds: nextCompletedIds });
-    return { changed: true };
-  },
-}));
+export const useSkillTreeStore = create<SkillTreeStore>((set, get) => {
+  const currentTree = () => {
+    const { isLoaded, error, topics, completedIds } = get();
+    if (!isLoaded || error) throw new Error(error || '参考路径正在加载。');
+    const tree = readSkillTree();
+    if (JSON.stringify(tree) !== JSON.stringify({ version: 1, topics, completedIds })) {
+      throw new Error('参考路径已在其他页面更新，请刷新后重试。');
+    }
+    return tree;
+  };
+  return {
+    topics: [],
+    completedIds: [],
+    isLoaded: false,
+    error: '',
+    loadSkillTree: () => {
+      if (get().isLoaded) return;
+      try {
+        const { topics, completedIds } = readSkillTree();
+        set({ topics, completedIds, isLoaded: true });
+      } catch {
+        set({ error: '参考路径读取失败，已保留浏览器中的原始数据。', isLoaded: true });
+      }
+    },
+    saveTopic: (fields, id) => {
+      const tree = currentTree();
+      const previous = tree.topics.find((topic) => topic.id === id);
+      if (id && !previous) throw new Error('找不到这个主题。');
+      const topic = { ...fields, name: fields.name.trim(), description: fields.description.trim(),
+        id: id ?? generateId(), estimatedTime: previous?.estimatedTime ?? 0 };
+      const topics = previous ? tree.topics.map((item) => item.id === id ? topic : item) : [...tree.topics, topic];
+      const goal = readCurrentGoal();
+      writeChanges({ ...tree, topics }, goal?.type === 'skill' && goal.id === topic.id ? { ...goal, label: topic.name } : undefined);
+      set({ topics });
+      return topic.id;
+    },
+    deleteTopic: (id) => {
+      const tree = currentTree();
+      if (!tree.topics.some((item) => item.id === id)) throw new Error('找不到这个主题。');
+      const { tasks, isLoaded } = useTaskStore.getState();
+      const storedTasks: unknown = JSON.parse(localStorage.getItem(STORAGE_KEYS.TASKS) ?? '[]');
+      if (!isLoaded || JSON.stringify(storedTasks) !== JSON.stringify(tasks)) {
+        throw new Error('任务已在其他页面更新，请刷新后重试。');
+      }
+      const topics = tree.topics.filter((item) => item.id !== id).map((topic) => ({
+        ...topic, prerequisites: topic.prerequisites.filter((reference) => reference !== id),
+      }));
+      const completedIds = tree.completedIds.filter((completedId) => completedId !== id);
+      const remaining = tasks.filter((task) => task.parentSkillId !== id);
+      const goal = readCurrentGoal();
+      const clearGoal = (goal?.type === 'skill' && goal.id === id)
+        || (goal?.type === 'task' && tasks.some((task) => task.id === goal.id && task.parentSkillId === id));
+      writeChanges({ ...tree, topics, completedIds }, clearGoal ? null : undefined, remaining.length !== tasks.length ? remaining : undefined);
+      set({ topics, completedIds });
+    },
+    toggleCompleted: (id) => {
+      const tree = currentTree();
+      if (!tree.topics.some((item) => item.id === id)) throw new Error('找不到这个主题。');
+      const wasCompleted = tree.completedIds.includes(id);
+      const completedIds = wasCompleted ? tree.completedIds.filter((item) => item !== id) : [...tree.completedIds, id];
+      const goal = readCurrentGoal();
+      writeChanges({ ...tree, completedIds, topics: tree.topics === SKILL_PATH ? undefined : tree.topics },
+        !wasCompleted && goal?.type === 'skill' && goal.id === id ? null : undefined);
+      set({ completedIds });
+    },
+  };
+});

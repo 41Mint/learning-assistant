@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { getSkillNode } from '../data/skillPath';
+import { readSkillTree } from '../utils/skillPathStorage';
 import { getStorageItem, setStorageItem, STORAGE_KEYS } from '../utils/storage';
 
 export interface CurrentGoal {
@@ -32,12 +32,17 @@ function persist(goal: CurrentGoal | null) {
   setStorageItem<CurrentGoalStorageV2>(STORAGE_KEYS.CURRENT_GOAL, { version: 2, goal });
 }
 
-function readGoal(): CurrentGoal | null {
+export function readCurrentGoal(): CurrentGoal | null {
   const stored = getStorageItem<CurrentGoalStorageV1 | CurrentGoalStorageV2>(STORAGE_KEYS.CURRENT_GOAL, INITIAL_STATE);
   if (stored.version === 2) return stored.goal;
 
-  const skill = stored.skillId ? getSkillNode(stored.skillId) : undefined;
-  return skill ? { type: 'skill', id: skill.id, label: skill.name } : null;
+  if (!stored.skillId) return null;
+  try {
+    const skill = readSkillTree().topics.find(({ id }) => id === stored.skillId);
+    return skill ? { type: 'skill', id: skill.id, label: skill.name } : null;
+  } catch {
+    return null;
+  }
 }
 
 export const useCurrentGoalStore = create<CurrentGoalStore>((set) => ({
@@ -45,7 +50,7 @@ export const useCurrentGoalStore = create<CurrentGoalStore>((set) => ({
   isLoaded: false,
 
   loadCurrentGoal: () => {
-    const goal = readGoal();
+    const goal = readCurrentGoal();
     set({ goal, isLoaded: true });
     persist(goal);
   },

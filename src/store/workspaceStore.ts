@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { RelationNodeRef } from '../types/relations';
 import { searchWords } from '../utils/resourceSearch';
 import { getTodayDate } from '../utils/storage';
+import { PRACTICE_IDEAS_LABEL, PRACTICE_RECORDS_LABEL } from '../utils/growthLabels';
 
 export interface SearchLocation {
   page: 'history' | 'knowledge' | 'code';
@@ -11,8 +12,8 @@ export interface SearchLocation {
 }
 
 export const GROWTH_VIEWS = [
-  { id: 'recent', label: '已完成', href: '#path' },
-  { id: 'try', label: '待尝试', href: '#path/try' },
+  { id: 'recent', label: PRACTICE_RECORDS_LABEL, href: '#path' },
+  { id: 'try', label: PRACTICE_IDEAS_LABEL, href: '#path/try' },
 ] as const;
 export type GrowthView = typeof GROWTH_VIEWS[number]['id'] | 'topics' | 'all';
 

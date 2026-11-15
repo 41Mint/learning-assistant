@@ -23,6 +23,7 @@ export const SKILL_CATEGORIES = [
     title: '图形学 / 引擎工具（探索）',
     description: '在客户端基础稳定后，探索渲染与编辑器工具方向。',
   },
+  { id: '其他', title: '其他', description: '' },
 ] as const;
 
 export const SKILL_PATH: SkillNodeDefinition[] = [
@@ -83,7 +84,3 @@ export const SKILL_PATH: SkillNodeDefinition[] = [
     estimatedTime: 20,
   },
 ];
-
-export function getSkillNode(id: string) {
-  return SKILL_PATH.find((node) => node.id === id);
-}

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { usePomodoroStore } from '../../store/pomodoroStore';
 import { useCurrentGoalStore } from '../../store/currentGoalStore';
+import { PRACTICE_REFERENCE_LABEL } from '../../utils/growthLabels';
 
 // 格式化时间显示（MM:SS）
 const formatTime = (seconds: number): string => {
@@ -22,6 +23,7 @@ export default function Pomodoro() {
     tick,
   } = usePomodoroStore();
   const { goal, loadCurrentGoal, clearCurrentGoal } = useCurrentGoalStore();
+  const isPracticeReference = goal?.type === 'growth-card';
 
   useEffect(() => {
     loadCurrentGoal();
@@ -52,11 +54,11 @@ export default function Pomodoro() {
       </div>
 
       <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 p-3 text-center dark:border-blue-900/60 dark:bg-blue-900/20">
-        <div className="text-xs font-medium text-blue-700 dark:text-blue-300">当前学习目标</div>
+        <div className="text-xs font-medium text-blue-700 dark:text-blue-300">{isPracticeReference ? PRACTICE_REFERENCE_LABEL : '当前学习目标'}</div>
         <div className="mt-1 text-sm font-semibold text-blue-950 dark:text-blue-100">
           {goal ? goal.label : '可以直接开始学习'}
         </div>
-        {goal && <button type="button" className="note-button secondary" onClick={clearCurrentGoal}>清除当前目标</button>}
+        {goal && <button type="button" className="note-button secondary" onClick={clearCurrentGoal}>{isPracticeReference ? '移除练习参考' : '清除当前目标'}</button>}
       </div>
 
       {/* 计时器显示 */}

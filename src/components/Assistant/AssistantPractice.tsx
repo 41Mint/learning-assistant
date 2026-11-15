@@ -6,6 +6,7 @@ import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
 import { practiceHref, searchHref, workspaceResourceTarget } from '../../store/workspaceStore';
 import { logLabel } from '../../utils/growth';
+import { PRACTICE_REFERENCE_LABEL } from '../../utils/growthLabels';
 import { codeVersionHref, codeVersionLabel, practiceCodeIds } from '../../utils/projectCode';
 import { entrySearchFields, logSearchFields, matchesWords, searchWords } from '../../utils/resourceSearch';
 import { matchScriptLine } from '../../utils/searchMatches';
@@ -90,7 +91,7 @@ export default function AssistantPractice({ query, onQuery, onNavigate, active }
         <label htmlFor="assistant-practice-goal">这次要做什么</label>
         <input id="assistant-practice-goal" className="search-input" value={proposal.label} maxLength={100}
           onChange={(event) => setProposal({ ...proposal, label: event.target.value })} />
-        {goal && <p className="knowledge-muted">确认后将替换当前目标「{goal.label}」。</p>}
+        {goal && <p className="knowledge-muted">确认后将替换{goal.type === 'growth-card' ? PRACTICE_REFERENCE_LABEL : '当前学习目标'}「{goal.label}」。</p>}
         <div className="code-actions">
           <button type="submit" className="note-button" disabled={!proposal.label.trim()}>确认设定</button>
           <button type="button" className="note-button secondary" onClick={() => { setProposal(undefined); setNotice(undefined); }}>取消</button>

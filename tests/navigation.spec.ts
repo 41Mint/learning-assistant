@@ -22,7 +22,7 @@ test('主要入口分开呈现，刷新和浏览器前后退保留入口', async
   await expect(page.getByRole('heading', { name: '📅 学习历史' })).toBeHidden();
   await navigate(page, '成长记录');
   await expect(page).toHaveURL(/#path$/);
-  await expect(page.getByRole('region', { name: '已完成' })).toBeVisible();
+  await expect(page.getByRole('region', { name: '实践记录' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '📝 今日学习记录' })).toBeHidden();
   await navigate(page, '数据管理');
   await expect(page.getByRole('button', { name: '导出完整备份', exact: true })).toBeVisible();

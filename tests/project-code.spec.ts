@@ -92,10 +92,10 @@ test('智能体从历史实践定位关联代码，确认目标后沿用番茄�
   await expect(page.getByText('命中第 2 行', { exact: true })).toBeVisible();
   await restore.click();
   await assistant.getByRole('button', { name: '设为当前目标', exact: true }).click();
-  await expect(assistant.getByText('确认后将替换当前目标「原目标」。')).toBeVisible();
+  await expect(assistant.getByText('确认后将替换当前学习目标「原目标」。')).toBeVisible();
   await assistant.getByRole('button', { name: '取消', exact: true }).click();
   await assistant.getByRole('button', { name: '设为当前目标', exact: true }).click();
-  await expect(assistant.getByText('确认后将替换当前目标「原目标」。')).toBeVisible();
+  await expect(assistant.getByText('确认后将替换当前学习目标「原目标」。')).toBeVisible();
   const goal = '验证松开鼠标后停止计分';
   await assistant.getByLabel('这次要做什么').fill(goal);
   await assistant.getByRole('button', { name: '确认设定', exact: true }).click();
@@ -380,7 +380,7 @@ test('项目目录预览、批量保存、职责说明、日志回链与备份�
 
   const backup = await downloadBackup(page);
   const code: ProjectCodeData = backup.data.projectCode;
-  expect(backup.version).toBe(8);
+  expect(backup.version).toBe(9);
   expect(code.versions.map(({ path }) => path)).toEqual([scriptPath, 'Assets/Scripts/Mole.cs']);
   expect(code.projects[0].directory).toMatchObject({
     files: ['Assets/Scenes/Game.unity', 'Assets/Scripts/Bad.cs', scriptPath, 'Assets/Scripts/Mole.cs', 'ProjectSettings/ProjectVersion.txt'],
@@ -550,7 +550,7 @@ test('回收站分类并排显示，代码版本随备份恢复并清理彻底�
   await expect(bin.getByRole('listitem')).toHaveText(/点击判断笔记/);
   await page.setViewportSize({ width: 1280, height: 800 });
   const backup = await downloadBackup(page);
-  expect(backup.version).toBe(8);
+  expect(backup.version).toBe(9);
   expect(backup.data.projectCode.trash.versions[0].id).toBe(archivedId);
 
   const context = await browser.newContext();
@@ -616,7 +616,7 @@ test('实践编辑统一保存三类资料，旧代码关联可预选、取消�
   const old = page.getByRole('article', { name: '点击目标时增加分数' }).locator('.growth-practices > li').filter({ hasText: '第一次实现点击' });
   const codeLink = old.getByRole('link', { name: '代码 · ' + scriptPath, exact: true });
   await expect(codeLink).toHaveAttribute('href', '#code/' + versionId);
-  const recent = page.getByRole('region', { name: '已完成' });
+  const recent = page.getByRole('region', { name: '实践记录' });
   const form = page.getByRole('form', { name: '实践记录表单' });
   const choice = form.getByRole('checkbox', { name: /可选的代码版本/ });
   const save = form.getByRole('button', { name: '保存实践', exact: true });
@@ -692,7 +692,7 @@ test('完整备份带回本地文本、仅链接版本和关联，v4 继续恢�
   await wordForm.getByRole('button', { name: '保存词条', exact: true }).click();
   await expect(page.getByRole('region', { name: '项目用例' }).getByRole('link', { name: /只留固定链接/ })).toBeVisible();
   const backup = await downloadBackup(page);
-  expect(backup.version).toBe(8);
+  expect(backup.version).toBe(9);
   expect(backup.data.projectCode.versions.map((version: { content: string | null }) => version.content)).toEqual([firstContent, null]);
 
   const context = await browser.newContext();

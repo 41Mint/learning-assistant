@@ -489,6 +489,11 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .growth-topic-detail > [hidden] { display: none; }
 .growth-topic { background: var(--app-bg); }
 .growth-topic h4 { font-size: 17px; }
+.growth-topic-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.growth-topic-description { white-space: pre-wrap; }
+.growth-topic-references { margin-top: 10px; }
+.growth-topic-references > div { display: grid; gap: 6px; padding: 8px; max-height: 140px; overflow: auto; }
+.growth-topic-references label { display: flex; align-items: baseline; gap: 8px; }
 .growth-task-list { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--app-border); }
 .growth-task-list small { margin-inline-start: 6px; color: var(--app-muted); }
 .growth-task-form { display: grid; gap: 6px; margin-top: 8px; }

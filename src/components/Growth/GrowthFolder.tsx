@@ -29,7 +29,11 @@ export default function GrowthFolder({ name, origin, children, historyTools, onC
     return () => dialog.close();
   }, [origin]);
   return <dialog ref={ref} className="growth-folder" aria-label={name} data-drop-outside={outside || undefined}
-    onCancel={(event) => { event.preventDefault(); onClose(); }}
+    onCancel={(event) => {
+      if (event.target !== event.currentTarget) return;
+      event.preventDefault();
+      onClose();
+    }}
     onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
     onDragEnd={() => setOutside(false)}
     onDragLeave={(event) => { if (event.target === event.currentTarget) setOutside(false); }}

@@ -177,7 +177,7 @@ test('完整备份在独立浏览器恢复词条、说明与双向关联', async
   const download = await downloadEvent;
   const buffer = await readFile((await download.path())!);
   const backup = JSON.parse(buffer.toString('utf8'));
-  expect(backup.version).toBe(8);
+  expect(backup.version).toBe(9);
   expect(backup.data.knowledge.entries).toHaveLength(2);
   const context = await browser.newContext();
   try {

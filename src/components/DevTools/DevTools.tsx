@@ -145,7 +145,7 @@ export default function DevTools() {
   // 走与计时自然结束相同的状态流程，用于验证番茄钟、Streak、目标标签的联动。
   const simulatePomodoroCompletion = () => {
     completePomodoro();
-    alert('✅ 已模拟完成 1 个番茄钟：学习时长、打卡和当前目标标签会按正式流程更新。');
+    alert('✅ 已模拟完成 1 个番茄钟。学习时长、打卡、目标或练习参考标签会按正式流程更新。');
   };
 
   // 查看所有学习数据（调试用）
@@ -287,7 +287,7 @@ export default function DevTools() {
                 🍅 模拟番茄钟完成
               </p>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
-                用于验证完成数、打卡、学习日志和当前目标标签的完整联动。
+                用于验证完成数、打卡、学习日志、目标或练习参考标签的联动。
               </p>
               <button
                 onClick={simulatePomodoroCompletion}

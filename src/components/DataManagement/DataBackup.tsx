@@ -65,7 +65,7 @@ export default function DataBackup() {
     <RecycleBin />
     <section className="module-card backup-card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
       <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">💾 数据备份与恢复</h2>
-      <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">备份包含日志、回收站、图片、词条、成长记录、项目代码及学习进度。恢复会替换当前浏览器中的对应数据。</p>
+      <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">备份包含日志、回收站、图片、词条、成长记录、项目代码、参考主题与任务及学习进度。恢复会替换当前浏览器中的对应数据。</p>
       <div className="mt-5 flex flex-wrap gap-3">
         <button type="button" disabled={busy} onClick={handleExport} className="note-button">{busy ? '处理中…' : '导出完整备份'}</button>
         <button type="button" disabled={busy} onClick={() => inputRef.current?.click()} className="note-button secondary">选择备份文件恢复</button>
@@ -79,6 +79,7 @@ export default function DataBackup() {
           {pendingBackup.version >= 6 && <p>回收站中有 {pendingBackup.data.trashedLogs.length} 篇日志。</p>}
           {pendingBackup.version >= 7 && <p>回收站中有 {pendingBackup.data.knowledge.trash.entries.length} 个词条。</p>}
           {pendingBackup.version >= 8 && <p>回收站中有 {pendingBackup.data.projectCode.trash.versions.length} 个代码版本。</p>}
+          {pendingBackup.data.skillTree?.topics && <p>{pendingBackup.data.skillTree.topics.length} 个参考主题。</p>}
           <p>{pendingBackup.data.knowledge.entries.length} 个知识词条、{pendingBackup.data.knowledge.logLinks.length} 个日志关联、{pendingBackup.data.knowledge.relations.length} 个词条间关联。</p>
           <p>{pendingBackup.data.growth.outcomes.length} 项成果、{pendingBackup.data.growth.outcomes.reduce((count, outcome) => count + outcome.practices.length, 0)} 次实践。</p>
           <p>{pendingBackup.data.projectCode.projects.length} 个项目、{pendingBackup.data.projectCode.versions.length} 个代码版本、{effectiveCodeLinks(pendingBackup.data.projectCode, pendingBackup.data.growth.outcomes, pendingBackup.data.knowledge.entries).length} 条代码关联。</p>

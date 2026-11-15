@@ -5,7 +5,9 @@ import { GROWTH_DRAG_TYPE, useGrowthDragStore } from '../../store/growthDragStor
 import type { GrowthDrag } from '../../store/growthDragStore';
 import type { DragEventHandler } from 'react';
 import type { ChatGrowthCard } from '../../types/assistantChat';
+import { PRACTICE_REFERENCE_LABEL } from '../../utils/growthLabels';
 import { AssistantSlots } from '../Assistant/assistantSlots';
+import WorkspaceDialog from '../common/WorkspaceDialog';
 
 export interface GrowthCardAction {
   label: string;
@@ -36,6 +38,7 @@ export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, bat
   const setGoal = useCurrentGoalStore((state) => state.setCurrentGoal);
   const [error, setError] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [replacing, setReplacing] = useState(false);
   const current = goal?.type === 'growth-card' && goal.id === id;
   useEffect(() => {
     if (!highlighted || !trigger.current?.getClientRects().length) return;
@@ -76,6 +79,14 @@ export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, bat
     askAboutGrowth({ id, kind: 'card',
       card: { ...card, title: card.title.slice(0, 100), description: card.description.slice(0, 1200) } });
   });
+  const saveReference = () => {
+    try {
+      setGoal({ type: 'growth-card', id, label: card.title });
+    } catch {
+      throw new Error('练习参考保存失败，请重试。');
+    }
+    setError('');
+  };
 
   return <article className="growth-card growth-summary" aria-label={card.title} data-card-focus={highlighted || undefined}
     tabIndex={onSelect ? 0 : undefined} data-selected={selected || undefined} aria-description={selected ? '已选中' : undefined}
@@ -119,7 +130,7 @@ export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, bat
     </div>
     <div className="growth-card-meta">
       {card.domains.map((domain) => <span key={domain} className="growth-domain" data-domain={domain}>{domain}</span>)}
-      {current && <small className="growth-current">当前目标</small>}
+      {current && <small className="growth-current">{PRACTICE_REFERENCE_LABEL}</small>}
     </div>
     {children}
     {error && <small className="growth-muted" role="alert">{error}</small>}
@@ -129,15 +140,21 @@ export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, bat
       {!batch && <button type="button" disabled={!onRecord} onClick={() => act((button) => onRecord?.(button))}>{recordLabel}</button>}
       {(batch?.actions ?? actions)?.map(({ label, run }) => <button type="button" key={label} disabled={!run} onClick={() => { if (run) act(run); }}>{label}</button>)}
       {!batch && <><button type="button" disabled={current} onClick={() => act(() => {
-        if (goal && !window.confirm(`将当前目标「${goal.label}」换成「${card.title}」？`)) return;
-        try {
-          setGoal({ type: 'growth-card', id, label: card.title });
-          setError('');
-        } catch {
-          setError('学习目标保存失败，请重试。');
+        if (goal) {
+          setReplacing(true);
+          return;
         }
-      })}>{current ? '已设为学习目标' : '设为学习目标'}</button>
+        try {
+          saveReference();
+        } catch (error) {
+          setError(error instanceof Error ? error.message : '练习参考保存失败，请重试。');
+        }
+      })}>{current ? '已带到今日学习' : '带到今日学习'}</button>
       <button type="button" onClick={askAboutCard}>询问智能体</button></>}
     </div>
+    {replacing && <WorkspaceDialog title="替换今日学习内容" action="确认替换"
+      onClose={() => setReplacing(false)} onSave={saveReference}>
+      {goal && <p>将「{card.title}」用作{PRACTICE_REFERENCE_LABEL}，并替换{goal.type === 'growth-card' ? PRACTICE_REFERENCE_LABEL : '当前学习目标'}「{goal.label}」。</p>}
+    </WorkspaceDialog>}
   </article>;
 }

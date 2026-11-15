@@ -5,6 +5,7 @@ import { workspaceResourceTarget } from '../../store/workspaceStore';
 import type { GrowthDomain, SavedExercise } from '../../types';
 import { normalizedName } from '../../utils/knowledge';
 import { growthExercises } from '../../utils/growth';
+import { PRACTICE_IDEAS_LABEL, PRACTICE_VERIFICATION_LABEL } from '../../utils/growthLabels';
 import { suggestGrowth } from '../../utils/growthSuggestions';
 import GrowthCard from '../Growth/GrowthCard';
 
@@ -82,18 +83,18 @@ export default function GrowthSuggestions({ domain, onDomain, onRecord, onNaviga
         codeVersionIds: sources.filter(({ kind }) => kind === 'code').map(({ id }) => id),
       } };
       return <GrowthCard key={id} id={existing?.id ?? id} drag={existing ? undefined : { exercise }}
-        card={{ title: item.title, domains, description: `${item.action}\n完成条件：${item.done}` }} recordLabel={completed ? '追加实践' : '我做到了'}
+        card={{ title: item.title, domains, description: `${item.action}\n${PRACTICE_VERIFICATION_LABEL}：${item.done}` }} recordLabel={completed ? '追加实践' : '我做到了'}
         onRecord={recordDisabledReason ? undefined : () => onRecord(exercise)}
-        actions={[{ label: completed ? '已完成' : existing ? '已在待尝试' : '加入待尝试', run: existing ? undefined : () => {
+        actions={[{ label: completed ? '已有实践记录' : existing ? `已在「${PRACTICE_IDEAS_LABEL}」` : `加入「${PRACTICE_IDEAS_LABEL}」`, run: existing ? undefined : () => {
           try {
             saveExercise(exercise);
-            setSaveMessage({ text: `「${item.title}」已加入待尝试。` });
+            setSaveMessage({ text: `「${item.title}」已加入「${PRACTICE_IDEAS_LABEL}」。` });
           } catch (error) {
             setSaveMessage({ text: error instanceof Error ? error.message : '保存练习失败。', error: true });
           }
         } }]}>
         <p>{item.action}</p>
-        <p className="growth-completion"><strong>完成条件</strong> {item.done}</p>
+        <p className="growth-completion"><strong>{PRACTICE_VERIFICATION_LABEL}</strong> {item.done}</p>
         <ul className="growth-source-list" aria-label="推荐依据">{sources.map((source) => <li key={source.href}>
           <a href={source.href} {...workspaceResourceTarget(source.href)} onClick={(event) => {
             const target = workspaceResourceTarget(source.href);

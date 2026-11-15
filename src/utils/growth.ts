@@ -70,7 +70,7 @@ export function validateGrowth(value: unknown): GrowthData {
     || !Array.isArray(groups) || !groups.every(isGroup) || new Set(groups.map(({ id }) => id)).size !== groups.length
     || new Set(groups.map(({ name }) => normalizedName(name))).size !== groups.length
     || !uniqueStrings(hiddenPresetIds) || hiddenPresetIds.some((id) => !GROWTH_PRESETS.some((preset) => preset.id === id))) {
-    throw new Error('练习候选或卡组格式不正确。');
+    throw new Error('练习卡片或卡组格式不正确。');
   }
   const validIds = new Set([...value.outcomes, ...exercises, ...GROWTH_PRESETS].map(({ id }) => id));
   const groupedIds = groups.flatMap(({ cardIds }) => cardIds);

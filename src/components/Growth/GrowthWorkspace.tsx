@@ -10,6 +10,7 @@ import { exerciseHref, growthBoardHref, GROWTH_VIEWS, practiceHref, useWorkspace
 import type { GrowthDomain, GrowthGroup, GrowthOutcome, GrowthPractice, SavedExercise } from '../../types';
 import { CHAT_GROUP_CARD_LIMIT, CHAT_GROUP_DESCRIPTION_LIMIT } from '../../types/assistantChat';
 import { growthExercises, logLabel } from '../../utils/growth';
+import { ADD_EXERCISE_LABEL, PRACTICE_IDEAS_LABEL, PRACTICE_RECORDS_LABEL, PRACTICE_VERIFICATION_LABEL } from '../../utils/growthLabels';
 import { codeVersionHref, codeVersionLabel, practiceCodeIds } from '../../utils/projectCode';
 import { generateId } from '../../utils/storage';
 import { historyShortcut } from '../../utils/workspaceHistory';
@@ -31,6 +32,7 @@ import { AssistantSlots } from '../Assistant/assistantSlots';
 import type { AssistantGrowthSelection } from '../Assistant/assistantSlots';
 
 type SourceIds = Pick<GrowthPractice, 'logIds' | 'entryIds' | 'codeVersionIds'>;
+const REMOVE_EXERCISE_LABEL = `移出「${PRACTICE_IDEAS_LABEL}」`;
 type BoardDragEvent = Pick<DragEvent | globalThis.DragEvent, 'dataTransfer' | 'preventDefault' | 'stopPropagation'>;
 type BoardMenuEvent = Pick<globalThis.MouseEvent, 'target' | 'shiftKey' | 'clientX' | 'clientY' | 'preventDefault'>;
 function PracticeSources({ outcomeId, practice }: { outcomeId?: string; practice: SourceIds & { id?: string } }) {
@@ -248,7 +250,7 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
   const groupActions = (ids: string[], ownerId?: string): GrowthCardAction[] => [moveAction(ids), ...(ownerId ? [{
     label: '移出当前卡组', run: canOpenForm ? () => removeFromGroup(ids) : undefined,
   }] : [])];
-  const removeTryAction = (ids: string[]): GrowthCardAction => ({ label: '移出待尝试',
+  const removeTryAction = (ids: string[]): GrowthCardAction => ({ label: REMOVE_EXERCISE_LABEL,
     run: canOpenForm ? () => setDialog({ kind: 'remove-exercise', cardIds: ids }) : undefined });
   const acceptDrop = (event: BoardDragEvent, targetGroup?: string, targetCard?: string) => {
     if (!event.dataTransfer?.types.includes(GROWTH_DRAG_TYPE)) return;
@@ -281,7 +283,7 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
           begin({ outcome: { id: exercise.id, title: exercise.title, domains: exercise.domains, description: exercise.action },
             preset: false, suggestedSources: exercise.sources, exercise });
         } else if (saveExercise(exercise, targetGroup)) {
-          setFeedback({ text: targetGroup ? '已收藏并加入卡组的「待尝试」。' : '已加入待尝试。' });
+          setFeedback({ text: targetGroup ? `已收藏到卡组的「${PRACTICE_IDEAS_LABEL}」。` : `已加入「${PRACTICE_IDEAS_LABEL}」。` });
         }
       } else if (targetGroup) {
         moveCards([transfer.cardId], targetGroup);
@@ -399,7 +401,7 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
     if (!canOpenForm || !(event.target instanceof Element) || event.target.closest('article, a, button, select, .growth-board-toolbar') || event.shiftKey) return;
     event.preventDefault();
     setMenu({ x: event.clientX, y: event.clientY, title: '成长记录操作', actions: [
-      activeView === 'try' ? { label: '添加待尝试', run: () => editExercise(addTrigger.current ?? trigger) }
+      activeView === 'try' ? { label: ADD_EXERCISE_LABEL, run: () => editExercise(addTrigger.current ?? trigger) }
         : { label: '记录自定义成果', run: () => newOutcome() },
       { label: '让智能体推荐', run: () => openGrowthRecommendations(domain || undefined) },
       { label: '新建卡组', run: () => { setSelection(''); setDialog({ kind: 'group' }); } },
@@ -457,7 +459,7 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
     const { id, title, domains, action, done } = exercise;
     return <GrowthCard key={id} id={id} href={exerciseHref(id, ownerId)} highlighted={active && cardId === id} {...cardDrop(id)} {...selectionProps(id)}
       onAsk={dismissFolderForAsk}
-      card={{ title, domains, description: done ? `${action}\n完成条件：${done}` : action }} recordLabel="我做到了"
+      card={{ title, domains, description: done ? `${action}\n${PRACTICE_VERIFICATION_LABEL}：${done}` : action }} recordLabel="我做到了"
       actions={[{ label: '编辑卡片', run: canOpenForm ? (trigger) => editExercise(trigger, exercise) : undefined },
         ...groupActions([id], ownerId), removeTryAction([id])]}
       onRecord={canOpenForm ? (trigger) => recordExercise(exercise, trigger) : undefined}>
@@ -483,14 +485,14 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
           <GrowthPracticeForm draft={draft} onClose={closeEditor} />
         </section>
       )}
-      <section ref={board} className="growth-board" aria-label={group && activeView === 'all' ? group.name : activeView === 'try' ? '待尝试' : '已完成'}
+      <section ref={board} className="growth-board" aria-label={group && activeView === 'all' ? group.name : activeView === 'try' ? PRACTICE_IDEAS_LABEL : PRACTICE_RECORDS_LABEL}
         hidden={Boolean(draft || exerciseDraft) || activeView === 'topics'}
         onClick={(event) => { if (event.target instanceof Element && !event.target.closest('article, a, button, .growth-board-toolbar, .growth-selection')) setSelectedCards([]); }}
         onContextMenu={(event) => onBoardMenu(event, event.currentTarget)}
         onDragOver={(event) => { if (!(event.target instanceof Element && event.target.closest('.growth-board-toolbar, article, a'))) acceptDrop(event, group?.id); }}
         onDrop={(event) => { if (!(event.target instanceof Element && event.target.closest('.growth-board-toolbar, article, a'))) dropOn(event, group?.id); }}>
         <div className="growth-board-toolbar">
-          <nav className="workspace-segments" aria-label="实践状态">
+          <nav className="workspace-segments" aria-label="实践卡片视图">
             {group && <a href={growthBoardHref('all', group.id)} aria-current={activeView === 'all' ? 'page' : undefined}>全部</a>}
             {GROWTH_VIEWS.map((view) => <a key={view.id} href={growthBoardHref(view.id, group?.id)} aria-current={activeView === view.id ? 'page' : undefined}>{view.label}</a>)}
           </nav>
@@ -522,7 +524,7 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
               onClick={(event) => newOutcome(event.currentTarget)}>记录自定义成果</button>
           ) : (
             <div className="growth-board-primary">
-              <button ref={addTrigger} type="button" className="note-button" popoverTarget="growth-add-exercise" disabled={!canOpenForm}>添加待尝试</button>
+              <button ref={addTrigger} type="button" className="note-button" popoverTarget="growth-add-exercise" disabled={!canOpenForm}>{ADD_EXERCISE_LABEL}</button>
               <div ref={addMenu} id="growth-add-exercise" popover="auto" className="workspace-context-menu growth-add-exercise" onToggle={(event) => {
                 const menu = event.currentTarget;
                 const box = addTrigger.current?.getBoundingClientRect();
@@ -550,9 +552,9 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
         {feedback && <p className="growth-muted" role={feedback.error ? 'alert' : 'status'}>{feedback.text}</p>}
         {activeView !== 'try' && (
           <div>
-            {activeView === 'all' && completedCards.length > 0 && <h2 className="growth-group-status">已完成</h2>}
+            {activeView === 'all' && completedCards.length > 0 && <h2 className="growth-group-status">{PRACTICE_RECORDS_LABEL}</h2>}
             {activeView === 'recent' && isLoaded && !error && completedCards.length === 0 && stacks.length === 0 && (
-              <p className="growth-muted">{selectedDomain || group ? '当前筛选下没有已完成的卡片。' : '还没有成果记录。可以从「待尝试」选一项练习，或记录自己的成果。'}</p>
+              <p className="growth-muted">{selectedDomain || group ? '当前筛选下没有实践记录。' : `还没有实践记录。可以记录自己的成果，或从「${PRACTICE_IDEAS_LABEL}」选一项练习。`}</p>
             )}
             {activeOutcome ? (
               <article className="growth-card growth-outcome growth-detail" aria-label={activeOutcome.title}>
@@ -560,7 +562,7 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
                 <h2 ref={focusedOutcome} tabIndex={-1}>{activeOutcome.title}</h2>
                 <small className="growth-muted">{activeOutcome.practices.length} 次实践</small>
                 {activeDescription && <p className="growth-note">{activeDescription}</p>}
-                {activeExercise?.done && <p className="growth-note"><strong>完成条件</strong> {activeExercise.done}</p>}
+                {activeExercise?.done && <p className="growth-note"><strong>{PRACTICE_VERIFICATION_LABEL}</strong> {activeExercise.done}</p>}
                 <ol className="growth-practices">
                   {activeOutcome.practices.map((practice) => {
                     const focused = practiceTarget?.outcomeId === activeOutcome.id && practiceTarget.practiceId === practice.id;
@@ -594,9 +596,9 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
         )}
         {activeView !== 'recent' && (
           <div>
-            {activeView === 'all' && pendingCards.length > 0 && <h2 className="growth-group-status">待尝试</h2>}
+            {activeView === 'all' && pendingCards.length > 0 && <h2 className="growth-group-status">{PRACTICE_IDEAS_LABEL}</h2>}
             {pendingCards.length === 0 && stacks.length === 0 && (activeView === 'try' || completedCards.length === 0) &&
-              <p className="growth-muted">{activeView === 'all' ? '当前卡组没有符合筛选条件的卡片。' : '当前筛选下没有待尝试的卡片。'}</p>}
+              <p className="growth-muted">{activeView === 'all' ? '当前卡组没有符合筛选条件的卡片。' : `当前筛选下「${PRACTICE_IDEAS_LABEL}」里没有卡片。`}</p>}
             {activeExerciseDetails ? <article className="growth-card growth-outcome growth-detail" aria-label={activeExerciseDetails.title}>
               <a className="growth-back-link" href={boardHref}>← 返回卡片</a>
               <div className="growth-heading">
@@ -610,7 +612,7 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
               </div>
               <div className="growth-card-meta">{activeExerciseDetails.domains.map((tag) => <span key={tag} className="growth-domain" data-domain={tag}>{tag}</span>)}</div>
               {activeExerciseDetails.action && <p className="growth-note">{activeExerciseDetails.action}</p>}
-              {activeExerciseDetails.done && <p className="growth-note"><strong>完成条件</strong> {activeExerciseDetails.done}</p>}
+              {activeExerciseDetails.done && <p className="growth-note"><strong>{PRACTICE_VERIFICATION_LABEL}</strong> {activeExerciseDetails.done}</p>}
               <PracticeSources practice={activeExerciseDetails.sources} />
             </article> : <div className="growth-card-grid growth-pending-grid">
               {activeView === 'try' && stackTiles}
@@ -632,12 +634,12 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
         {selectionBar}
         {feedback && <p className="growth-muted" role={feedback.error ? 'alert' : 'status'}>{feedback.text}</p>}
         {openFolder.cardIds.some((id) => completedIds.has(id)) && <>
-          <h3>已完成</h3>
+          <h3>{PRACTICE_RECORDS_LABEL}</h3>
           <div className="growth-card-grid">{sortedOutcomes.filter(({ id }) => openFolder.cardIds.includes(id))
             .map((item) => renderOutcome(item, openFolder.id))}</div>
         </>}
         {allPending.some(({ id }) => openFolder.cardIds.includes(id)) && <>
-          <h3>待尝试</h3>
+          <h3>{PRACTICE_IDEAS_LABEL}</h3>
           <div className="growth-card-grid growth-pending-grid">{allPending.filter(({ id }) => openFolder.cardIds.includes(id))
             .map((item) => renderExercise(item, openFolder.id))}</div>
         </>}
@@ -672,14 +674,14 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
         }}>
         <p>删除「{dialogGroup.name}」后，组内卡片会保留在「所有卡片」中。</p>
       </WorkspaceDialog>}
-      {active && dialog?.kind === 'remove-exercise' && dialogExercises.length > 0 && <WorkspaceDialog title="移出待尝试" action="确认移出" destructive
+      {active && dialog?.kind === 'remove-exercise' && dialogExercises.length > 0 && <WorkspaceDialog title={REMOVE_EXERCISE_LABEL} action="确认移出" destructive
         valid={dialogExercises.length === dialog.cardIds?.length}
         onClose={() => setDialog(undefined)} onSave={() => {
           removeExercises(dialogExercises.map(({ id }) => id));
           setSelectedCards([]);
-          setFeedback({ text: dialogExercises.length > 1 ? `已将 ${dialogExercises.length} 张卡片移出待尝试。` : '已移出待尝试。' });
+          setFeedback({ text: dialogExercises.length > 1 ? `已将 ${dialogExercises.length} 张卡片${REMOVE_EXERCISE_LABEL}。` : `已${REMOVE_EXERCISE_LABEL}。` });
         }}>
-        <p>{dialogExercises.length === 1 ? `将「${dialogExercises[0].title}」移出「待尝试」？` : `将所选的 ${dialogExercises.length} 张卡片移出「待尝试」？`}</p>
+        <p>{dialogExercises.length === 1 ? `将「${dialogExercises[0].title}」${REMOVE_EXERCISE_LABEL}？` : `将所选的 ${dialogExercises.length} 张卡片${REMOVE_EXERCISE_LABEL}？`}</p>
       </WorkspaceDialog>}
       {active && dialog?.kind === 'move' && <WorkspaceDialog title="移到卡组" action="确认移动"
         valid={dialog.cardIds?.some((id) => (cardOwners.get(id) ?? '') !== selection)} onClose={() => setDialog(undefined)} onSave={() => {
@@ -723,7 +725,7 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
             </select>
           </label>}
           {dialog.kind === 'delete' && dialogOutcome.practices.length === 1 &&
-            <p>{returnsToTry ? '这是最后一次实践，删除后卡片将回到「待尝试」。' : '这是最后一次实践，删除后卡片将从成长记录移除。'}</p>}
+            <p>{returnsToTry ? `这是最后一次实践，删除后卡片将回到「${PRACTICE_IDEAS_LABEL}」。` : '这是最后一次实践，删除后卡片将从成长记录移除。'}</p>}
         </WorkspaceDialog>}
 
       <section className="module-card" aria-label="参考路径与任务" hidden={Boolean(draft || exerciseDraft) || activeView !== 'topics'}>

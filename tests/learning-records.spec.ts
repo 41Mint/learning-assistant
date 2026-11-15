@@ -238,7 +238,7 @@ test('新版备份包含真实图片；取消无写入；确认恢复后图文�
   await page.getByRole('button', { name: '导出完整备份', exact: true }).click();
   const download = await downloadEvent;
   const backup = JSON.parse(await readFile((await download.path())!, 'utf8'));
-  expect(backup.version).toBe(8);
+  expect(backup.version).toBe(9);
   expect(backup.data.knowledge.entries).toHaveLength(1);
   expect(backup.images).toHaveLength(1);
   expect(Buffer.from(backup.images[0].base64, 'base64').equals(png)).toBe(true);

@@ -6,6 +6,7 @@ import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
 import { growthBoardHref, hasWorkspaceEditor, searchHref, useWorkspaceStore } from '../../store/workspaceStore';
 import { growthExercises, logLabel } from '../../utils/growth';
+import { PRACTICE_IDEAS_LABEL, PRACTICE_RECORDS_LABEL } from '../../utils/growthLabels';
 import { entryNames, normalizedName } from '../../utils/knowledge';
 import { codeVersionHref } from '../../utils/projectCode';
 import { codeSearchFields, entrySearchFields, includesWords, logSearchFields, searchWords } from '../../utils/resourceSearch';
@@ -79,7 +80,7 @@ export function SearchResults({ query, words, scope, includeSource, editingPages
         })),
         ...cards.map(({ id, title, fields }) => {
           const group = cardGroups.get(id);
-          const status = completed.has(id) ? '已完成' : '待尝试';
+          const status = completed.has(id) ? PRACTICE_RECORDS_LABEL : PRACTICE_IDEAS_LABEL;
           return searchable({
             href: growthBoardHref(completed.has(id) ? 'recent' : 'try', group?.id, id), title,
             detail: [status, group?.name].filter(Boolean).join(' · '), fields: [title, group?.name ?? '', ...fields],

@@ -28,6 +28,7 @@ import { generateId } from './utils/storage';
 import { GROWTH_PRESETS } from './data/growthPresets';
 import { normalizedName } from './utils/knowledge';
 import { growthExercises } from './utils/growth';
+import { PRACTICE_REFERENCE_LABEL } from './utils/growthLabels';
 
 const PAGES = [
   { id: 'today', label: '今日学习' },
@@ -108,7 +109,8 @@ function App() {
   useEffect(() => {
     const newlyCompleted = completedPomodoros - processedPomodorosRef.current;
     if (newlyCompleted > 0) {
-      addDuration(25 * newlyCompleted, currentGoal ? `目标：${currentGoal.label}` : undefined);
+      const label = currentGoal?.type === 'growth-card' ? PRACTICE_REFERENCE_LABEL : '目标';
+      addDuration(25 * newlyCompleted, currentGoal ? `${label}：${currentGoal.label}` : undefined);
       updateStreak(); // 更新连续学习天数
       processedPomodorosRef.current = completedPomodoros;
     }
