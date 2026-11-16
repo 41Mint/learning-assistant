@@ -361,8 +361,25 @@ test('项目目录预览、批量保存、职责说明、日志回链与备份�
   const panel = page.getByRole('region', { name: '项目代码', exact: true });
   await panel.getByText('项目代码（0）', { exact: true }).click();
   await panel.getByRole('button', { name: '添加代码版本', exact: true }).click();
-  await expect(panel.locator('.code-form-reveal')).toHaveCSS('animation-name', 'code-form-reveal');
-  await panel.getByRole('form', { name: '保存代码版本' }).getByRole('button', { name: '取消', exact: true }).click();
+  const reveal = panel.locator('.code-form-reveal');
+  const collapse = await reveal.evaluate(async (element) => {
+    await Promise.allSettled(element.getAnimations().map(({ finished }) => finished));
+    const before = element.getBoundingClientRect().height;
+    element.querySelector<HTMLButtonElement>('form button[type="button"]')!.click();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const transition = element.getAnimations().find((animation) =>
+      animation instanceof CSSTransition && animation.transitionProperty === 'grid-template-rows');
+    if (!transition) return { before, middle: 0 };
+    transition.pause();
+    transition.currentTime = Number(transition.effect?.getComputedTiming().duration) / 2;
+    const middle = element.getBoundingClientRect().height;
+    transition.finish();
+    return { before, middle };
+  });
+  expect(collapse.middle).toBeGreaterThan(0);
+  expect(collapse.middle).toBeLessThan(collapse.before);
+  await expect(reveal).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: '添加代码版本', exact: true })).toBeFocused();
   const versionPicker = panel.getByRole('combobox', { name: '选择已有代码版本' });
   await versionPicker.fill('不同项目');
   await expect(panel.getByRole('option')).toHaveCount(0);

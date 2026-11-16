@@ -154,10 +154,23 @@ body {
   --app-accent-text: #1d4ed8;
   --app-danger: #b91c1c;
   --app-positive: #047857;
+  --app-scrollbar-thumb: color-mix(in srgb, var(--app-muted) 72%, var(--app-border));
   --app-motion-duration: 220ms;
   --app-motion-ease: cubic-bezier(.2, .7, .25, 1);
   color: var(--app-text);
   background: var(--app-bg);
+}
+@media (forced-colors: none) {
+  :root { scrollbar-color: var(--app-scrollbar-thumb) transparent; }
+  :where(*) { scrollbar-width: thin; }
+  @supports not (scrollbar-color: auto) {
+    :where(*)::-webkit-scrollbar { width: 10px; height: 10px; }
+    :where(*)::-webkit-scrollbar-thumb {
+      border: 2px solid transparent; border-radius: 999px; background: var(--app-scrollbar-thumb) padding-box;
+    }
+    :where(*)::-webkit-scrollbar-track, :where(*)::-webkit-scrollbar-corner { background: transparent; }
+    :where(*)::-webkit-scrollbar-button { display: none; }
+  }
 }
 *, *::before, *::after { box-sizing: border-box; }
 body { display: block; min-width: 320px; }
@@ -821,12 +834,13 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
   background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border); border-radius: 6px;
 }
 .code-form textarea { resize: vertical; }
-.code-form-reveal { display: grid; animation: code-form-reveal var(--app-motion-duration) var(--app-motion-ease) both; }
-.code-form-reveal > div { min-height: 0; overflow: clip; }
-@keyframes code-form-reveal {
-  from { grid-template-rows: 0fr; }
-  to { grid-template-rows: 1fr; }
+.code-form-reveal {
+  display: grid; grid-template-rows: 0fr;
+  transition: grid-template-rows var(--app-motion-duration) var(--app-motion-ease);
 }
+.code-form-reveal[data-open] { grid-template-rows: 1fr; }
+.code-form-reveal > div { min-height: 0; overflow: clip; }
+@starting-style { .code-form-reveal[data-open] { grid-template-rows: 0fr; } }
 .searchable-select-field { position: relative; }
 .searchable-select-field input { width: 100%; padding-inline-end: 32px; }
 .searchable-select-chevron {
