@@ -706,10 +706,18 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
       </WorkspaceDialog>}
       {active && dialog?.kind === 'group' && <WorkspaceDialog title={dialog.id ? '管理卡组' : '新建卡组'} action={dialog.id ? '保存卡组' : '创建卡组'}
         valid={Boolean(selection.trim())} onClose={() => setDialog(undefined)} onSave={() => {
+          const ids = dialog.cardIds ?? [];
+          if (!ids.every((id) => id === dialog.exercise?.id || stackMembers.has(id))) {
+            throw new Error('有卡片已离开当前视图，请重新选择。');
+          }
           const id = saveGroup(selection, dialog.id, dialog.cardIds, dialog.exercise, dialog.description);
-          if (!dialog.id) setFeedback({ text: '已创建卡组。' });
+          if (!dialog.id) {
+            if (ids.length) setSelectedCards([]);
+            setFeedback({ text: ids.length ? `已创建卡组，并移入 ${ids.length} 张卡片。` : '已创建卡组。' });
+          }
           else if (group?.id === id) window.location.assign(growthBoardHref('all', id));
         }}>
+        {!dialog.id && Boolean(dialog.cardIds?.length) && <p>创建后移入所选的 {dialog.cardIds?.length} 张卡片。</p>}
         <label className="growth-field">卡组名称<input autoFocus maxLength={60} value={selection} onChange={(event) => setSelection(event.target.value)} /></label>
         <label className="growth-field">卡组说明（可选）
           <textarea rows={3} maxLength={600} value={dialog.description ?? ''}
@@ -747,9 +755,16 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
       }}>
         {(dialog.cardIds?.length ?? 0) > 1 && <p>移动所选的 {dialog.cardIds?.length} 张卡片。</p>}
         <label className="growth-field">目标卡组
-          <select autoFocus value={selection} onChange={(event) => setSelection(event.target.value)}>
-            <option value="">未分组</option>
-            {groups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          <select autoFocus value={`group:${selection}`} onChange={(event) => {
+            const destination = event.target.value;
+            if (destination === 'create') {
+              setSelection('');
+              setDialog({ kind: 'group', cardIds: dialog.cardIds });
+            } else setSelection(destination.slice('group:'.length));
+          }}>
+            <option value="group:">未分组</option>
+            {groups.map((item) => <option key={item.id} value={`group:${item.id}`}>{item.name}</option>)}
+            <option value="create">新建卡组…</option>
           </select>
         </label>
       </WorkspaceDialog>}

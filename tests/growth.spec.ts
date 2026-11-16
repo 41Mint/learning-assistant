@@ -1037,6 +1037,47 @@ test('多选菜单的移动和移出按选区执行，图标与快捷键可多�
   await expect(second).toBeVisible();
 });
 
+test('多选卡片可从移动窗口新建卡组，创建与移入可一步撤销', async ({ page }) => {
+  await page.goto('/#path/try');
+  const board = page.getByRole('region', { name: '想尝试' });
+  const first = board.getByRole('article', { name: title, exact: true });
+  const second = board.getByRole('article', { name: '让角色跳起并落回地面', exact: true });
+  const outside = board.getByRole('article', { name: '用字典统计物品数量', exact: true });
+  await first.click({ position: { x: 12, y: 70 } });
+  await second.click({ modifiers: ['Shift'], position: { x: 12, y: 70 } });
+
+  const create = page.getByRole('dialog', { name: '新建卡组' });
+  const openCreate = async () => {
+    await first.click({ button: 'right' });
+    await first.getByRole('group', { name: '所选卡片操作' }).getByRole('button', { name: '移到卡组' }).click();
+    const move = page.getByRole('dialog', { name: '移到卡组' });
+    await move.getByLabel('目标卡组').selectOption({ label: '新建卡组…' });
+    await expect(create).toContainText('创建后移入所选的 2 张卡片');
+  };
+  await openCreate();
+  await create.getByLabel('卡组名称').fill('录入后取消');
+  await create.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(board.getByLabel('卡组', { exact: true }).getByRole('option')).toHaveCount(1);
+  await expect(board.getByRole('group', { name: '所选卡片' })).toContainText('已选 2 张');
+
+  await openCreate();
+  await create.getByLabel('卡组名称').fill('角色动作练习');
+  await create.getByRole('button', { name: '创建卡组' }).click();
+  const stack = board.getByRole('link', { name: '打开卡组 角色动作练习，2 张卡片' });
+  await expect(stack).toBeVisible();
+  await expect(first).toHaveCount(0);
+  await expect(second).toHaveCount(0);
+  await expect(outside).toBeVisible();
+  const undo = board.getByRole('button', { name: '撤销整理' });
+  await undo.click();
+  await expect(stack).toHaveCount(0);
+  await expect(first).toBeVisible();
+  await expect(second).toBeVisible();
+  await expect(undo).toBeDisabled();
+  await board.getByRole('button', { name: '重做整理' }).click();
+  await expect(stack).toBeVisible();
+});
+
 test('智能体分组可逐组确认、加入已有卡组并撤销重做', async ({ page }) => {
   const selected = [title, '让角色跳起并落回地面', '用字典统计物品数量', '让一个事件触发两种反馈'];
   const requests: ChatRequest[] = [];
