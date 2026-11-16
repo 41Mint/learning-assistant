@@ -1,6 +1,7 @@
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useStudyLogStore } from '../../store/studyLogStore';
-import { formatDate as formatLocalDate, getTodayDate } from '../../utils/storage';
+import { formatDate } from '../../utils/storage';
 
 interface DayData {
   date: string;
@@ -12,139 +13,58 @@ function createDayData(days: number, durationByDate: Map<string, number>): DayDa
   return Array.from({ length: days }, (_, index) => {
     const date = new Date(today);
     date.setDate(today.getDate() - (days - index - 1));
-    const dateString = formatLocalDate(date);
-    return { date: dateString, minutes: durationByDate.get(dateString) ?? 0 };
+    const key = formatDate(date);
+    return { date: key, minutes: durationByDate.get(key) ?? 0 };
   });
 }
 
-function formatDate(dateString: string, type: 'week' | 'month') {
-  const date = new Date(dateString);
-  if (type === 'week') {
-    return ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][date.getDay()];
-  }
-  return `${date.getMonth() + 1}/${date.getDate()}`;
+function shortDate(value: string) {
+  return Number(value.slice(5, 7)) + '/' + Number(value.slice(8, 10));
 }
 
-function averageDuration(data: DayData[]) {
-  const learningDays = data.filter((day) => day.minutes > 0);
-  if (learningDays.length === 0) return 0;
-  return Math.round(learningDays.reduce((sum, day) => sum + day.minutes, 0) / learningDays.length);
-}
+function StudyTrend({ data }: { data: DayData[] }) {
+  const title = `近 ${data.length} 天学习曲线`;
+  const studyDays = data.filter(({ minutes }) => minutes > 0);
+  const average = studyDays.length ? Math.round(studyDays.reduce((sum, day) => sum + day.minutes, 0) / studyDays.length) : 0;
+  const labels = [0, 1, 2, 3].map((step) => data[Math.round((data.length - 1) * step / 3)].date);
 
-function BarChart({ data, type }: { data: DayData[]; type: 'week' | 'month' }) {
-  const maxMinutes = Math.max(...data.map((day) => day.minutes), 60);
-  const today = getTodayDate();
-
-  return (
-    <div style={{
-      display: 'flex',
-      height: '144px',
-      alignItems: 'flex-end',
-      justifyContent: 'space-between',
-      gap: '4px',
-      border: '1px solid #e5e7eb',
-      backgroundColor: '#f9fafb',
-      borderRadius: '8px',
-      padding: '8px',
-    }}>
-      {data.map((day) => {
-        const isToday = day.date === today;
-        const height = `${(day.minutes / maxMinutes) * 100}%`;
-        return (
-          <div key={day.date} style={{
-            display: 'flex',
-            minWidth: 0,
-            flex: 1,
-            height: '100%',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'flex-end',
-            gap: '4px',
-          }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'flex-end',
-              width: '100%',
-              height: '96px',
-              overflow: 'hidden',
-              borderRadius: '4px',
-              backgroundColor: '#e5e7eb',
-            }}>
-              {day.minutes > 0 && (
-                <div
-                  style={{
-                    width: '100%',
-                    height,
-                    minHeight: '6px',
-                    borderRadius: '4px 4px 0 0',
-                    background: isToday
-                      ? 'linear-gradient(to top, #3b82f6, #60a5fa)'
-                      : 'linear-gradient(to top, #9ca3af, #d1d5db)',
-                    transition: 'height 0.3s ease',
-                  }}
-                  title={`${day.minutes} 分钟`}
-                />
-              )}
-            </div>
-            <span style={{
-              fontSize: '12px',
-              fontWeight: isToday ? 600 : 400,
-              color: isToday ? '#2563eb' : '#6b7280',
-            }}>
-              {formatDate(day.date, type)}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
+  return <section className="study-trend" aria-label={title}>
+    <header className="history-card-heading">
+      <h3>{title}</h3>
+      <span>学习日均 {average} 分钟</span>
+    </header>
+    <ResponsiveContainer width="100%" height={144}>
+      <LineChart data={data} margin={{ top: 10, right: 12, bottom: 0, left: 0 }} accessibilityLayer>
+        <CartesianGrid vertical={false} syncWithTicks stroke="var(--app-border)" strokeDasharray="3 3" />
+        <XAxis dataKey="date" ticks={labels} tickFormatter={shortDate} tick={{ fill: 'var(--app-muted)', fontSize: 11 }}
+          tickLine={false} axisLine={false} minTickGap={8} padding={{ left: 5, right: 4 }} />
+        <YAxis width={36} domain={[0, (max: number) => Math.max(25, max)]} allowDecimals={false}
+          tickCount={4} tick={{ fill: 'var(--app-muted)', fontSize: 11 }} tickLine={false} axisLine={false} />
+        <Tooltip formatter={(minutes) => [minutes + ' 分钟', '学习时长']}
+          contentStyle={{ background: 'var(--app-surface)', borderColor: 'var(--app-border)', borderRadius: 8, color: 'var(--app-text)' }}
+          labelStyle={{ color: 'var(--app-muted)' }} itemStyle={{ color: 'var(--app-text)' }} />
+        <Line dataKey="minutes" type="linear" stroke="var(--app-accent)" strokeWidth={2} dot={data.length === 7 ? { r: 2 } : false}
+          activeDot={{ r: 4 }} isAnimationActive={false} />
+      </LineChart>
+    </ResponsiveContainer>
+  </section>;
 }
 
 export default function Statistics() {
-  const { logs, loadLogs } = useStudyLogStore();
+  const logs = useStudyLogStore((state) => state.logs);
+  const month = useMemo(() => createDayData(30, new Map(logs.map(({ date, duration }) => [date, duration]))), [logs]);
+  const today = month[month.length - 1];
 
-  useEffect(() => {
-    loadLogs();
-  }, [loadLogs]);
-
-  const durationByDate = useMemo(
-    () => new Map(logs.map((log) => [log.date, log.duration])),
-    [logs],
-  );
-  const weekData = useMemo(() => createDayData(7, durationByDate), [durationByDate]);
-  const monthData = useMemo(() => createDayData(30, durationByDate), [durationByDate]);
-  const todayDuration = durationByDate.get(getTodayDate()) ?? 0;
-
-  return (
-    <div className="module-card stats-card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-      <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">📊 学习统计</h2>
-
-      <div className="mb-8 p-4 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-lg">
-        <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">今日学习时长</div>
-        <div className="text-4xl font-bold text-blue-600 dark:text-blue-400">
-          {todayDuration}<span className="text-lg ml-2">分钟</span>
-        </div>
-      </div>
-
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">本周学习曲线</h3>
-          <div className="text-sm text-gray-500 dark:text-gray-400">平均: <span className="font-semibold">{averageDuration(weekData)}</span> 分钟/天</div>
-        </div>
-        <BarChart data={weekData} type="week" />
-      </div>
-
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">近 30 天学习曲线</h3>
-          <div className="text-sm text-gray-500 dark:text-gray-400">平均: <span className="font-semibold">{averageDuration(monthData)}</span> 分钟/天</div>
-        </div>
-        <div className="chart-scroll"><div style={{ minWidth: '1000px' }}><BarChart data={monthData} type="month" /></div></div>
-      </div>
-
-      <div className="mt-6 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
-        <p className="text-xs text-gray-500 dark:text-gray-400">💡 统计直接读取学习日志；每完成一个番茄钟会自动累积 25 分钟。</p>
-      </div>
+  return <section className="module-card stats-card" aria-label="学习统计">
+    <div className="history-card-heading">
+      <h2>学习统计</h2>
+      <span>图中时长以分钟计</span>
     </div>
-  );
+    <div className="study-today-total">
+      <span>今日学习时长</span>
+      <strong>{today.minutes} <small>分钟</small></strong>
+    </div>
+    <StudyTrend data={month.slice(-7)} />
+    <StudyTrend data={month} />
+  </section>;
 }

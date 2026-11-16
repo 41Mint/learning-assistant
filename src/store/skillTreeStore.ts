@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { SKILL_PATH } from '../data/skillPath';
 import type { SkillNodeDefinition } from '../data/skillPath';
 import type { LearningTask } from '../types';
-import { generateId, STORAGE_KEYS } from '../utils/storage';
+import { generateId, STORAGE_KEYS, writeStorageItems } from '../utils/storage';
 import { readSkillTree, validateSkillTree } from '../utils/skillPathStorage';
 import type { SkillTreeStorage } from '../utils/skillPathStorage';
 import { readCurrentGoal, useCurrentGoalStore } from './currentGoalStore';
@@ -26,18 +26,9 @@ function writeChanges(tree: SkillTreeStorage, goal?: CurrentGoal | null, tasks?:
   const pairs: [string, unknown][] = [[STORAGE_KEYS.SKILL_TREE, validateSkillTree(tree)]];
   if (tasks) pairs.push([STORAGE_KEYS.TASKS, tasks]);
   if (goal !== undefined) pairs.push([STORAGE_KEYS.CURRENT_GOAL, { version: 2, goal }]);
-  const writes = pairs.map(([key, value]) => ({ key, next: JSON.stringify(value), before: localStorage.getItem(key) }));
-  let written = 0;
   try {
-    for (const { key, next } of writes) {
-      localStorage.setItem(key, next);
-      written += 1;
-    }
+    writeStorageItems(pairs);
   } catch {
-    for (const { key, before } of writes.slice(0, written).reverse()) {
-      if (before === null) localStorage.removeItem(key);
-      else localStorage.setItem(key, before);
-    }
     throw new Error('保存参考路径失败，请重试。');
   }
   if (tasks) useTaskStore.setState({ tasks });

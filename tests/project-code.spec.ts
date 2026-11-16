@@ -360,7 +360,16 @@ test('项目目录预览、批量保存、职责说明、日志回链与备份�
   await page.goto('/#history/' + firstDate);
   const panel = page.getByRole('region', { name: '项目代码', exact: true });
   await panel.getByText('项目代码（0）', { exact: true }).click();
-  await panel.getByRole('combobox').selectOption(saved.id);
+  await panel.getByRole('button', { name: '添加代码版本', exact: true }).click();
+  await expect(panel.locator('.code-form-reveal')).toHaveCSS('animation-name', 'code-form-reveal');
+  await panel.getByRole('form', { name: '保存代码版本' }).getByRole('button', { name: '取消', exact: true }).click();
+  const versionPicker = panel.getByRole('combobox', { name: '选择已有代码版本' });
+  await versionPicker.fill('不同项目');
+  await expect(panel.getByRole('option')).toHaveCount(0);
+  await versionPicker.fill('打地鼠项目 InputManager');
+  await expect(panel.getByRole('option')).toHaveCount(1);
+  await panel.getByRole('option').click();
+  await expect(versionPicker).toHaveValue(/InputManager\.cs/);
   await panel.getByRole('button', { name: '关联所选版本' }).click();
   await panel.getByRole('link', { name: scriptPath, exact: true }).click();
   await expect(page.getByRole('link', { name: /学习日志 ·/ })).toHaveAttribute('href', '#history/' + firstDate);

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
 import type { CodeTarget, CodeVersion } from '../../types/projectCode';
 import { codeTargetKey, codeVersionHref, codeVersionLabel, codeVersionSource } from '../../utils/projectCode';
+import { codeSearchFields } from '../../utils/resourceSearch';
+import SearchableSelect from '../common/SearchableSelect';
 import CodeVersionForm from './CodeVersionForm';
 
 interface CodeLinksPanelProps {
@@ -19,6 +21,8 @@ export default function CodeLinksPanel({ target, title }: CodeLinksPanelProps) {
   const linkedIds = new Set(data.links.filter((link) => codeTargetKey(link.target) === targetKey).map((link) => link.versionId));
   const linked = data.versions.filter((version) => linkedIds.has(version.id));
   const available = data.versions.filter((version) => !linkedIds.has(version.id)).reverse();
+  const canLink = isLoaded && !error && available.length > 0;
+  const canAdd = isLoaded && !error && target.kind === 'log';
   const projectName = (version: CodeVersion) => data.projects.find((project) => project.id === version.projectId)?.name;
 
   const change = async (action: () => Promise<void>, success: string) => {
@@ -53,31 +57,26 @@ export default function CodeLinksPanel({ target, title }: CodeLinksPanelProps) {
             ))}
           </ul>
         )}
-        {isLoaded && !error && available.length > 0 && (
+        {(canLink || canAdd) && (
           <div className="code-form">
-            <label>选择已有代码版本
-              <select value={selected} onChange={(event) => setSelected(event.target.value)}>
-                <option value="">请选择</option>
-                {available.map((version) => (
-                  <option key={version.id} value={version.id}>
-                    {codeVersionLabel(version, projectName(version))}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="button" className="note-button secondary" disabled={busy || !available.some((version) => version.id === selected)}
-              onClick={() => void change(() => linkVersion(selected, target), '已关联代码版本。')}>关联所选版本</button>
+            {canLink && <SearchableSelect label="选择已有代码版本" placeholder="按项目、路径或版本说明筛选"
+              value={selected} onChange={setSelected} options={available.map((version) => ({
+                id: version.id, label: codeVersionLabel(version, projectName(version)), fields: codeSearchFields(version, projectName(version) ?? ''),
+              }))} />}
+            <div className="code-actions">
+              {canLink && <button type="button" className="note-button secondary" disabled={busy || !available.some((version) => version.id === selected)}
+                onClick={() => void change(() => linkVersion(selected, target), '已关联代码版本。')}>关联所选版本</button>}
+              {canAdd && <button type="button" className="note-button secondary" aria-expanded={adding} disabled={adding}
+                onClick={() => { setMessage(''); setAdding(true); }}>添加代码版本</button>}
+            </div>
           </div>
         )}
-        {isLoaded && !error && target.kind === 'log' && !adding && (
-          <button type="button" className="note-button secondary" onClick={() => { setMessage(''); setAdding(true); }}>添加代码版本</button>
-        )}
-        {adding && (
+        {adding && <div className="code-form-reveal"><div>
           <CodeVersionForm target={target} onCancel={() => setAdding(false)} onSaved={() => {
             setAdding(false);
             setMessage('代码版本已保存并关联到这篇日志。');
           }} />
-        )}
+        </div></div>}
         {isLoaded && !error && data.versions.length === 0 && target.kind !== 'log' && (
           <p className="code-muted">可从学习日志或<a href="#code">项目代码</a>保存一个版本，再在这里关联。</p>
         )}

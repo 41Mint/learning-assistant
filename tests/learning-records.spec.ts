@@ -9,7 +9,8 @@ const markdown = '# 学习步骤\n\nPPU 笔记\n\n![示意截图](images/step.pn
 
 async function openImport(page: Page, content = markdown) {
   await page.goto('/');
-  await page.getByText('导入图文学习记录（Markdown + 图片）', { exact: true }).click();
+  await page.getByRole('button', { name: '导入图文学习记录', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: '导入图文学习记录', exact: true })).toBeVisible();
   await page.getByLabel('导入学习日期').fill(day);
   await page.getByLabel('Markdown 文件', { exact: true }).setInputFiles({ name: '学习整理.md', mimeType: 'text/markdown', buffer: Buffer.from(content) });
 }
@@ -143,7 +144,7 @@ test('历史日志粘贴保存失败时保留正文草稿并回退新图片，�
   expect(await savedImageIds(page)).toHaveLength(3);
 });
 
-test('大截图保存后在折叠正文中持续显示，展开与收起时复用同一张图片', async ({ page }) => {
+test('大截图保存后稳定显示，单击切换尺寸，双击打开原图详情', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/#today');
   const today = page.getByRole('region', { name: '今日学习', exact: true });
@@ -163,6 +164,7 @@ test('大截图保存后在折叠正文中持续显示，展开与收起时复�
     element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: clipboard, bubbles: true, cancelable: true }));
   });
   await expect(today.getByRole('region', { name: '学习内容实时预览' }).getByRole('img', { name: '截图' })).toBeVisible();
+  await editor.fill(await editor.inputValue() + '\n\n' + '截图后的学习记录。\n\n'.repeat(16));
   await today.getByRole('button', { name: '保存记录' }).click();
   const expand = today.getByRole('button', { name: '展开全文', exact: true });
   await expect(expand).toBeVisible();
@@ -181,7 +183,22 @@ test('大截图保存后在折叠正文中持续显示，展开与收起时复�
   expect(stable).toBe(true);
   const image = reading.getByRole('img', { name: '截图' });
   const original = await image.elementHandle();
-  await expand.click();
+  const thumbnailHeight = (await image.boundingBox())!.height;
+  expect(thumbnailHeight).toBeLessThanOrEqual(160);
+  const resize = reading.getByRole('button', { name: '切换图片尺寸 · 截图', exact: true });
+  await resize.click();
+  await expect(resize).toHaveAttribute('aria-pressed', 'true');
+  expect((await image.boundingBox())!.height).toBeGreaterThan(thumbnailHeight);
+  await expect(today.getByRole('button', { name: '收起正文', exact: true })).toBeVisible();
+  await resize.dblclick();
+  const detail = page.getByRole('dialog', { name: '图片详情' });
+  await expect(detail.getByText('3840 × 2400 像素')).toBeVisible();
+  await expect(detail.getByRole('link', { name: '在新标签页打开原图' })).toHaveAttribute('href', /^blob:/);
+  await page.keyboard.press('Escape');
+  await expect(detail).toBeHidden();
+  await expect(resize).toHaveAttribute('aria-pressed', 'true');
+  await resize.click();
+  await expect(resize).toHaveAttribute('aria-pressed', 'false');
   await today.getByRole('button', { name: '收起正文', exact: true }).click();
   await expect(expand).toBeVisible();
   expect(await image.evaluate((element, first) => element === first, original)).toBe(true);
@@ -193,6 +210,9 @@ test('缺图阻止保存；代码块里的图片语法不当作实际图片', as
   await expect(page.getByText('未匹配：images/step.png', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '保存到该日期', exact: true })).toBeDisabled();
   await expect(page.locator('.import-errors li')).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: '导入图文学习记录' })).toBeHidden();
+  await expect(page.getByRole('button', { name: '导入图文学习记录' })).toBeFocused();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('learning-assistant:study-logs') ?? '[]').some((log: { date: string }) => log.date === '2026-11-04'))).toBe(false);
 });
 

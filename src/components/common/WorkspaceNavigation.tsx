@@ -59,10 +59,10 @@ export default function WorkspaceNavigation({ activePage, activeLabel, growthVie
       aria-expanded={drawer} aria-controls="app-navigation-links" onClick={() => setDrawer(!drawer)}>
       <NavIcon path="M4 6h16M4 12h16M4 18h16" /><span>{activeLabel}</span>
     </button>
-    {drawer && <button className="app-navigation-backdrop" type="button" tabIndex={-1} aria-label="关闭页面菜单" onClick={closeDrawer} />}
+    <button className="app-navigation-backdrop" type="button" tabIndex={-1} aria-hidden={!drawer} aria-label="关闭页面菜单" onClick={closeDrawer} />
     <div className="app-navigation-links" id="app-navigation-links">
       <div className="app-navigation-heading">
-        <button ref={drawerClose} type="button" className="app-drawer-close" aria-label="收起页面菜单" onClick={closeDrawer}><NavIcon path="m6 6 12 12M18 6 6 18" /></button>
+        <button ref={drawerClose} type="button" className="app-drawer-close" aria-label="收起导航" onClick={closeDrawer}><NavIcon path="m6 6 12 12M18 6 6 18" /></button>
       </div>
       {items.map(({ id, label, icon }) => <div key={id} className="app-nav-group">
         <a href={`#${id}`} className="app-nav-item" aria-label={label}

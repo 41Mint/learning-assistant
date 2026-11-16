@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import Pomodoro from './components/Pomodoro/Pomodoro';
 import StudyLog from './components/StudyLog/StudyLog';
 import Streak from './components/Streak/Streak';
-import Statistics from './components/Statistics/Statistics';
 import History from './components/History/History';
 import GrowthWorkspace from './components/Growth/GrowthWorkspace';
 import DataBackup from './components/DataManagement/DataBackup';
@@ -29,6 +28,8 @@ import { GROWTH_PRESETS } from './data/growthPresets';
 import { normalizedName } from './utils/knowledge';
 import { growthExercises } from './utils/growth';
 import { PRACTICE_REFERENCE_LABEL } from './utils/growthLabels';
+
+const Statistics = lazy(() => import('./components/Statistics/Statistics'));
 
 const PAGES = [
   { id: 'today', label: '今日学习' },
@@ -191,7 +192,7 @@ function App() {
         <section id="history" className="workspace-panel history-layout" aria-label="历史回顾" hidden={activePage !== 'history'} data-editing={Boolean(historyDraft) || undefined}>
           <History draft={historyDraft} setDraft={setHistoryDraft} />
           <aside className="history-sidebar" aria-label="学习统计与打卡" hidden={Boolean(historyDraft)}>
-            <Statistics />
+            {activePage === 'history' && !historyDraft && <Suspense fallback={null}><Statistics /></Suspense>}
             <Streak />
           </aside>
         </section>

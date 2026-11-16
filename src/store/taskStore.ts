@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { LearningTask } from '../types';
-import { generateId, getStorageItem, setStorageItem, STORAGE_KEYS } from '../utils/storage';
+import { generateId, getStorageItem, setStorageItem, STORAGE_KEYS, writeStorageItems } from '../utils/storage';
+import { readCurrentGoal, useCurrentGoalStore } from './currentGoalStore';
 
 interface TaskStore {
   tasks: LearningTask[];
@@ -58,8 +59,22 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   },
 
   deleteTask: (id) => {
-    const tasks = get().tasks.filter((task) => task.id !== id);
+    const current = get();
+    const stored: unknown = JSON.parse(localStorage.getItem(STORAGE_KEYS.TASKS) ?? '[]');
+    if (!current.isLoaded || JSON.stringify(stored) !== JSON.stringify(current.tasks)) {
+      throw new Error('任务已在其他页面更新，请刷新后重试。');
+    }
+    const tasks = current.tasks.filter((task) => task.id !== id);
+    const goal = readCurrentGoal();
+    const clearGoal = goal?.type === 'task' && goal.id === id;
+    const writes: [string, unknown][] = [[STORAGE_KEYS.TASKS, tasks]];
+    if (clearGoal) writes.push([STORAGE_KEYS.CURRENT_GOAL, { version: 2, goal: null }]);
+    try {
+      writeStorageItems(writes);
+    } catch {
+      throw new Error('删除任务失败，请重试。');
+    }
     set({ tasks });
-    setStorageItem(STORAGE_KEYS.TASKS, tasks);
+    if (clearGoal) useCurrentGoalStore.setState({ goal: null, isLoaded: true });
   },
 }));

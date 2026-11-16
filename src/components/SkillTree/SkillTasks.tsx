@@ -3,6 +3,7 @@ import type { LearningTask } from '../../types';
 import { useCurrentGoalStore } from '../../store/currentGoalStore';
 import { useTaskStore } from '../../store/taskStore';
 import TaskFields from './TaskFields';
+import WorkspaceDialog from '../common/WorkspaceDialog';
 
 interface SkillTasksProps {
   skillId: string;
@@ -18,10 +19,12 @@ export default function SkillTasks({ skillId }: SkillTasksProps) {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [editingDescription, setEditingDescription] = useState('');
+  const [deletingId, setDeletingId] = useState<string>();
 
   const skillTasks = tasks.filter((task) => task.parentSkillId === skillId);
   const pendingTasks = skillTasks.filter((task) => !task.completed);
   const completedTasks = skillTasks.filter((task) => task.completed);
+  const deleting = skillTasks.find(({ id }) => id === deletingId);
 
   const handleAdd = () => {
     if (!title.trim()) return;
@@ -63,98 +66,69 @@ export default function SkillTasks({ skillId }: SkillTasksProps) {
     setEditingDescription('');
   };
 
-  const handleDelete = (task: LearningTask) => {
-    if (!window.confirm(`确定删除任务“${task.title}”吗？此操作无法恢复。`)) return;
-    if (goal?.type === 'task' && goal.id === task.id) clearCurrentGoal();
-    deleteTask(task.id);
-  };
-
   const renderTask = (task: LearningTask) => {
-    const isEditing = editingTaskId === task.id;
-    const isCurrentGoal = goal?.type === 'task' && goal.id === task.id;
-
-    return (
-      <div key={task.id} className={`rounded-md p-2 ${task.completed ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-900'}`}>
-        {isEditing ? (
-          <div className="space-y-2">
-            <input
-              autoFocus
-              value={editingTitle}
-              onChange={(event) => setEditingTitle(event.target.value)}
-              onKeyDown={(event) => event.key === 'Enter' && saveEditing()}
-              className="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-            />
-            <textarea
-              value={editingDescription}
-              rows={3}
-              onChange={(event) => setEditingDescription(event.target.value)}
-              placeholder="补充说明（可选）"
-              className="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-            />
-            <div className="flex gap-2">
-              <button type="button" onClick={saveEditing} className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700">保存</button>
-              <button type="button" onClick={cancelEditing} className="rounded bg-gray-200 px-2 py-1 text-xs text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200">取消</button>
-            </div>
+    const currentGoal = goal?.type === 'task' && goal.id === task.id;
+    return <li key={task.id} className="topic-task" data-completed={task.completed || undefined}>
+      {editingTaskId === task.id ? (
+        <form className="growth-task-form topic-task-editor" data-preserves-on-navigation onSubmit={(event) => {
+          event.preventDefault();
+          saveEditing();
+        }}>
+          <TaskFields title={editingTitle} description={editingDescription} onTitle={setEditingTitle} onDescription={setEditingDescription} />
+          <div className="code-actions">
+            <button type="submit" className="note-button" disabled={!editingTitle.trim()}>保存</button>
+            <button type="button" className="workspace-button" onClick={cancelEditing}>取消</button>
           </div>
-        ) : (
-          <div className="flex items-start gap-2">
-            <input
-              type="checkbox"
-              checked={task.completed}
-              onChange={() => handleToggle(task.id)}
-              className="mt-1 h-4 w-4 accent-blue-600"
-              aria-label={`完成任务：${task.title}`}
-            />
-            <div className="min-w-0 flex-1">
-              <p className={`text-sm ${task.completed ? 'text-green-800 line-through dark:text-green-300' : 'text-gray-800 dark:text-gray-200'}`}>{task.title}</p>
-              {task.description && <p className="mt-1 whitespace-pre-wrap text-xs text-gray-500 dark:text-gray-400">{task.description}</p>}
-            </div>
-            <div className="flex shrink-0 gap-1">
-              {!task.completed && (
-                <button
-                  type="button"
-                  onClick={() => setCurrentGoal({ type: 'task', id: task.id, label: task.title })}
-                  className={`rounded px-2 py-1 text-xs ${isCurrentGoal ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-100' : 'bg-white text-gray-600 shadow-sm dark:bg-gray-700 dark:text-gray-200'}`}
-                >
-                  {isCurrentGoal ? '当前目标' : '设为目标'}
-                </button>
-              )}
-              <button type="button" onClick={() => startEditing(task)} className="rounded px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-700">编辑</button>
-              <button type="button" onClick={() => handleDelete(task)} className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-100 dark:text-red-300 dark:hover:bg-red-900/30">删除</button>
-            </div>
+        </form>
+      ) : (
+        <>
+          <input type="checkbox" className="topic-task-check" checked={task.completed} onChange={() => handleToggle(task.id)}
+            aria-label={`完成任务：${task.title}`} />
+          <div className="topic-task-content">
+            <p className="topic-task-title">{task.title}</p>
+            {task.description && <p className="topic-task-description">{task.description}</p>}
           </div>
-        )}
-      </div>
-    );
+          <div className="topic-task-actions">
+            {!task.completed && <button type="button" className="workspace-button" data-active={currentGoal || undefined}
+              onClick={() => setCurrentGoal({ type: 'task', id: task.id, label: task.title })}>{currentGoal ? '当前目标' : '设为目标'}</button>}
+            <button type="button" className="workspace-button" onClick={() => startEditing(task)}>编辑</button>
+            <button type="button" className="workspace-button" data-danger onClick={() => setDeletingId(task.id)}>删除</button>
+          </div>
+        </>
+      )}
+    </li>;
   };
 
   return (
     <div className="growth-task-list">
       <div className="growth-heading">
         <strong>自定义任务 <small>{isLoaded && `${completedTasks.length}/${skillTasks.length} 已完成`}</small></strong>
-        {!adding && <button type="button" className="note-button secondary" onClick={() => setAdding(true)}>添加任务</button>}
+        {!adding && <button type="button" className="workspace-button" onClick={() => setAdding(true)}>添加任务</button>}
       </div>
 
-      {pendingTasks.length > 0 && (
-        <div className="mt-2 space-y-2">
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">待完成（{pendingTasks.length}）</p>
-          {pendingTasks.map(renderTask)}
-        </div>
-      )}
-
-      {completedTasks.length > 0 && (
-        <details className="mt-3">
-          <summary className="cursor-pointer text-xs font-medium text-green-700 dark:text-green-300">已完成（{completedTasks.length}）</summary>
-          <div className="mt-2 space-y-2">{completedTasks.map(renderTask)}</div>
-        </details>
-      )}
+      {pendingTasks.length > 0 && <div className="topic-task-section">
+        <p>待完成（{pendingTasks.length}）</p>
+        <ul className="topic-task-items">{pendingTasks.map(renderTask)}</ul>
+      </div>}
+      {completedTasks.length > 0 && <details className="topic-task-section">
+        <summary>已完成（{completedTasks.length}）</summary>
+        <ul className="topic-task-items">{completedTasks.map(renderTask)}</ul>
+      </details>}
 
       {adding && <form className="growth-task-form" data-preserves-on-navigation onSubmit={(event) => { event.preventDefault(); handleAdd(); }}>
-          <TaskFields title={title} description={description} onTitle={setTitle} onDescription={setDescription} />
-          {addError && <p role="alert">{addError}</p>}
-          <div className="code-actions"><button type="submit" className="note-button" disabled={!title.trim()}>保存任务</button>
-            <button type="button" className="note-button secondary" onClick={() => { setAdding(false); setAddError(''); }}>取消</button></div>
+        <TaskFields title={title} description={description} onTitle={setTitle} onDescription={setDescription} />
+        {addError && <p role="alert">{addError}</p>}
+        <div className="code-actions">
+          <button type="submit" className="note-button" disabled={!title.trim()}>保存任务</button>
+          <button type="button" className="workspace-button" onClick={() => { setAdding(false); setAddError(''); }}>取消</button>
+        </div>
       </form>}
+
+      {deleting && <WorkspaceDialog title="删除任务" action="确认删除" destructive
+        onClose={() => setDeletingId(undefined)} onSave={() => deleteTask(deleting.id)}>
+        <p>删除「{deleting.title}」？此操作无法恢复。</p>
+        {goal?.type === 'task' && goal.id === deleting.id && <p>这项任务是当前学习目标，删除时会同时清除该目标。</p>}
+      </WorkspaceDialog>}
     </div>
   );
 }

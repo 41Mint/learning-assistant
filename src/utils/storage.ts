@@ -33,6 +33,23 @@ export function setStorageItem<T>(key: string, value: T): void {
   }
 }
 
+export function writeStorageItems(pairs: [string, unknown][]): void {
+  const writes = pairs.map(([key, value]) => ({ key, next: JSON.stringify(value), before: localStorage.getItem(key) }));
+  let written = 0;
+  try {
+    for (const { key, next } of writes) {
+      localStorage.setItem(key, next);
+      written += 1;
+    }
+  } catch (error) {
+    for (const { key, before } of writes.slice(0, written).reverse()) {
+      if (before === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, before);
+    }
+    throw error;
+  }
+}
+
 // 删除数据
 export function removeStorageItem(key: string): void {
   try {

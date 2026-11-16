@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import { useKnowledgeStore } from '../../store/knowledgeStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { entryNames, normalizedName } from '../../utils/knowledge';
+import SearchableSelect from '../common/SearchableSelect';
 
 export default function KnowledgeLinks({ logId, legacyPoints = [] }: { logId: string; legacyPoints?: string[] }) {
   const store = useKnowledgeStore();
@@ -39,14 +40,12 @@ export default function KnowledgeLinks({ logId, legacyPoints = [] }: { logId: st
         <details>
           <summary>关联已有词条 / 新建词条</summary>
           <div className="knowledge-link-form">
-            <label htmlFor={`${formId}-entry`}>已有词条</label>
-            <select id={`${formId}-entry`} value={entryId} onChange={(event) => {
-              setEntryId(event.target.value);
-              setNote(store.logLinks.find((link) => link.entryId === event.target.value && link.logId === logId)?.note ?? '');
-            }}>
-              <option value="">请选择</option>
-              {store.entries.map((entry) => <option key={entry.id} value={entry.id}>{entry.title}</option>)}
-            </select>
+            <SearchableSelect label="已有词条" placeholder="按词条名、别名或分类筛选"
+              options={store.entries.map(({ id, title, aliases, category }) => ({ id, label: title, fields: [...aliases, category] }))}
+              value={entryId} onChange={(id) => {
+                setEntryId(id);
+                setNote(links.find((link) => link.entryId === id)?.note ?? '');
+              }} />
             <label htmlFor={`${formId}-note`}>关联说明（可选）</label>
             <input id={`${formId}-note`} value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如：初次接触，见 PPU 小节" />
             <button type="button" className="note-button" disabled={!entryId || !store.isLoaded} onClick={() => execute(() => store.linkLog(entryId, logId, note))}>关联选中词条 / 更新说明</button>

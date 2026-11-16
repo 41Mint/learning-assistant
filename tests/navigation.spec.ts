@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 
 async function navigate(page: Page, label: string) {
   const navigation = page.getByRole('navigation', { name: '主要功能' });
-  const menu = navigation.getByRole('button', { name: '页面菜单' });
+  const menu = navigation.getByRole('button', { name: '页面菜单', exact: true });
   const compact = await menu.isVisible();
   if (compact) await menu.click();
   const link = navigation.getByRole('link', { name: label, exact: true });
@@ -58,7 +58,7 @@ test('今日正文使用草稿，编辑期间计时可继续，取消与保存�
   const edit = page.locator('.study-log-card').getByRole('button', { name: '编辑', exact: true });
   await edit.click();
   const editor = page.getByRole('form', { name: '今日记录编辑表单' });
-  await expect(page.locator('.learning-import')).toBeHidden();
+  await expect(page.getByRole('button', { name: '导入图文学习记录' })).toBeHidden();
   await expect(page.getByTestId('timer-display')).toBeHidden();
   await page.clock.runFor(2000);
   await expect(page.locator('.session-status')).toContainText('24:58');
@@ -102,7 +102,7 @@ test('窄屏六个入口可操作，页面无横向溢出', async ({ page }, tes
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   const nav = page.getByRole('navigation', { name: '主要功能' });
-  const menu = nav.getByRole('button', { name: '页面菜单' });
+  const menu = nav.getByRole('button', { name: '页面菜单', exact: true });
   await expect(nav.getByRole('link')).toHaveCount(0);
   await expect(nav.getByRole('button', { name: '检索资料' })).toBeVisible();
   const closed = (await nav.boundingBox())!;
@@ -143,11 +143,12 @@ test('贴左图标侧栏悬停覆盖展开，子页支持刷新和历史记录',
   await page.screenshot({ path: testInfo.outputPath('desktop-rail.png') });
   await growth.hover();
   await expect(group.getByText('项目代码')).toBeVisible();
-  expect((await nav.boundingBox())?.width).toBeGreaterThan(compact.width);
+  await expect.poll(async () => (await nav.boundingBox())?.width).toBe(192);
   expect(await main.boundingBox()).toEqual(original);
   await page.screenshot({ path: testInfo.outputPath('desktop-rail-expanded.png') });
   await page.mouse.move(400, 100);
   await expect(group.getByText('项目代码')).toBeHidden();
+  await expect.poll(async () => (await nav.boundingBox())?.width).toBe(compact.width);
   expect(await main.boundingBox()).toEqual(original);
   await page.getByRole('link', { name: '游戏开发学习助手首页' }).focus();
   await page.keyboard.press('Tab');

@@ -7,9 +7,9 @@ import { useKnowledgeStore } from '../../store/knowledgeStore';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
 import { exerciseHref, growthBoardHref, GROWTH_VIEWS, practiceHref, useWorkspaceStore, workspaceResourceTarget } from '../../store/workspaceStore';
-import type { GrowthDomain, GrowthGroup, GrowthOutcome, GrowthPractice, SavedExercise } from '../../types';
+import type { GrowthBoardView, GrowthDomain, GrowthGroup, GrowthOutcome, GrowthPractice, SavedExercise } from '../../types';
 import { CHAT_GROUP_CARD_LIMIT, CHAT_GROUP_DESCRIPTION_LIMIT } from '../../types/assistantChat';
-import { growthExercises, logLabel } from '../../utils/growth';
+import { growthExercises, logLabel, orderGrowthCards } from '../../utils/growth';
 import { ADD_EXERCISE_LABEL, PRACTICE_IDEAS_LABEL, PRACTICE_RECORDS_LABEL, PRACTICE_VERIFICATION_LABEL } from '../../utils/growthLabels';
 import { codeVersionHref, codeVersionLabel, practiceCodeIds } from '../../utils/projectCode';
 import { generateId } from '../../utils/storage';
@@ -20,6 +20,8 @@ import GrowthPracticeForm from './GrowthPracticeForm';
 import GrowthExerciseForm from './GrowthExerciseForm';
 import type { GrowthExerciseDraft } from './GrowthExerciseForm';
 import GrowthCard from './GrowthCard';
+import GrowthCardGrid from './GrowthCardGrid';
+import useGrowthBoxSelection from './useGrowthBoxSelection';
 import WorkspaceDialog from '../common/WorkspaceDialog';
 import HistoryButtons from '../common/HistoryButtons';
 import GrowthGroupStack from './GrowthGroupStack';
@@ -81,15 +83,15 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
   exerciseDraft?: GrowthExerciseDraft;
   setExerciseDraft: (draft?: GrowthExerciseDraft) => void;
 }) {
-  const { outcomes, exercises, hiddenPresetIds, groups, isLoaded, error, loadGrowth, removePractice, removeExercises, restorePreset,
-    saveExercise, saveGroup, removeGroup, moveCards, arrangementHistory, applyArrangementHistory } = useGrowthStore();
+  const { outcomes, exercises, hiddenPresetIds, groups, cardOrder, boardOrder, isLoaded, error, loadGrowth, removePractice, removeExercises, restorePreset,
+    saveExercise, saveGroup, removeGroup, moveCards, reorderCard, reorderBoard, arrangementHistory, applyArrangementHistory } = useGrowthStore();
   const [domain, setDomain] = useState<GrowthDomain | ''>('');
   const activeView = useWorkspaceStore((state) => state.growthView);
   const { openGrowthRecommendations, askAboutGrowth, close: closeAssistant } = useContext(AssistantSlots);
   const [notice, setNotice] = useState<{ text: string; saved: { outcomeId: string; id: string } } | null>(null);
   const [feedback, setFeedback] = useState<{ text: string; error?: boolean }>();
   const [dialog, setDialog] = useState<{ kind: 'group' | 'move' | 'edit' | 'delete' | 'restore' | 'delete-group' | 'remove-exercise';
-    id?: string; trigger?: HTMLButtonElement; practiceId?: string; cardIds?: string[]; exercise?: SavedExercise }>();
+    id?: string; trigger?: HTMLButtonElement; practiceId?: string; cardIds?: string[]; exercise?: SavedExercise; description?: string }>();
   const [folder, setFolder] = useState<{ id: string; origin: DOMRect }>();
   const [menu, setMenu] = useState<GrowthMenu>();
   const board = useRef<HTMLElement>(null);
@@ -133,7 +135,8 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
   const sortedOutcomes = outcomes
     .map((outcome) => ({ ...outcome, practices: [...outcome.practices].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)) }))
     .sort((a, b) => b.practices[0].date.localeCompare(a.practices[0].date) || b.practices[0].id.localeCompare(a.practices[0].id));
-  const visibleOutcomes = sortedOutcomes.filter((outcome) => !selectedDomain || outcome.domains.includes(selectedDomain));
+  const orderedOutcomes = orderGrowthCards(sortedOutcomes, cardOrder);
+  const visibleOutcomes = orderedOutcomes.filter((outcome) => !selectedDomain || outcome.domains.includes(selectedDomain));
   const completedIds = new Set(outcomes.map((outcome) => outcome.id));
   const exercisesById = new Map(exercises.map((exercise) => [exercise.id, exercise]));
   const outcomeDescription = (outcome: GrowthOutcome) => outcome.description ?? exercisesById.get(outcome.id)?.action
@@ -146,7 +149,7 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
   const boardView = activeView === 'topics' ? 'recent' : activeView;
   const boardHref = growthBoardHref(boardView, group?.id);
   const cardInGroup = (id: string) => !group || group.cardIds.includes(id);
-  const allPending = growthExercises({ exercises, hiddenPresetIds }).filter(({ id }) => !completedIds.has(id));
+  const allPending = orderGrowthCards(growthExercises({ exercises, hiddenPresetIds }).filter(({ id }) => !completedIds.has(id)), cardOrder);
   const cardOwners = new Map(groups.flatMap((item) => item.cardIds.map((id) => [id, item.id] as const)));
   const showStacks = !group && !outcomeId && !exerciseId && !cardId;
   const showCard = (id: string) => cardInGroup(id) && (Boolean(group) || id === cardId || !cardOwners.has(id));
@@ -160,11 +163,17 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
       : [card.action, card.done].filter(Boolean).join('\n'),
   }]));
   const openFolder = groups.find(({ id }) => id === folder?.id);
+  const folderOutcomes = orderedOutcomes.filter(({ id }) => openFolder?.cardIds.includes(id));
+  const folderExercises = allPending.filter(({ id }) => openFolder?.cardIds.includes(id));
   const visibleSelectionCards = openFolder ? openFolder.cardIds.filter((id) => stackMembers.has(id)) : [
     ...(activeView !== 'try' && !activeOutcome ? completedCards.map(({ id }) => id) : []),
     ...(activeView !== 'recent' && !activeExerciseDetails ? pendingCards.map(({ id }) => id) : []),
   ];
   const selectionIds = selectedCards.filter((id) => visibleSelectionCards.includes(id));
+  const applyBoxSelection = (ids: string[], extend: boolean) =>
+    setSelectedCards(extend ? [...new Set([...selectionIds, ...ids])] : ids);
+  const boxSelection = useGrowthBoxSelection(active && canOpenForm && !openFolder && !activeOutcome &&
+    !activeExerciseDetails && activeView !== 'topics', applyBoxSelection);
   const stacks = showStacks ? groups.flatMap((item) => {
     const members = item.cardIds.flatMap((id) => stackMembers.get(id) ?? []).filter(({ complete, domains }) =>
       complete === (activeView === 'recent') && (!selectedDomain || domains.includes(selectedDomain)));
@@ -231,8 +240,9 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
   const reportError = (error: unknown) => setFeedback({ text: error instanceof Error ? error.message : '操作失败，请重试。', error: true });
   const groupEditor = (itemId = group?.id) => {
     setFolder(undefined);
-    setSelection(groups.find(({ id }) => id === itemId)?.name ?? '');
-    setDialog({ kind: 'group', id: itemId });
+    const item = groups.find(({ id }) => id === itemId);
+    setSelection(item?.name ?? '');
+    setDialog({ kind: 'group', id: itemId, description: item?.description });
   };
   const newOutcome = (trigger?: HTMLButtonElement) => begin({
     outcome: { id: generateId(), title: '', domains: selectedDomain ? [selectedDomain] : [] }, preset: false, groupId: group?.id,
@@ -257,7 +267,7 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
     event.stopPropagation();
     if (!canOpenForm) return;
     const transfer = useGrowthDragStore.getState().drag;
-    if (!transfer) return;
+    if (!transfer || 'groupId' in transfer) return;
     if ('cardId' in transfer) {
       if (transfer.cardId === targetCard) return;
       if (targetGroup && cardOwners.get(transfer.cardId) === targetGroup) return;
@@ -294,11 +304,36 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
       }
     } catch (error) { reportError(error); }
   };
-  const cardDrop = (id: string) => ({
-    drag: canOpenForm ? { cardId: id } : undefined,
-    onDragOver: (event: DragEvent<HTMLElement>) => { acceptDrop(event, cardOwners.get(id), id); },
-    onDrop: (event: DragEvent<HTMLElement>) => dropOn(event, cardOwners.get(id), id),
-  });
+  const cardDrop = (id: string) => {
+    const owner = cardOwners.get(id);
+    return {
+      drag: canOpenForm ? { cardId: id } : undefined,
+      onDragOver: (event: DragEvent<HTMLElement>) => {
+        const transfer = acceptDrop(event, owner, id);
+        if (transfer) event.currentTarget.dataset.dropIntent = owner ? 'move' : 'group';
+        else delete event.currentTarget.dataset.dropIntent;
+      },
+      onDrop: (event: DragEvent<HTMLElement>) => dropOn(event, owner, id),
+    };
+  };
+  const reorder = (source: string, anchor: string, side: 'before' | 'after', view?: GrowthBoardView) => {
+    try {
+      if (view && showStacks && activeView === view) {
+        const cards = view === 'recent' ? orderedOutcomes : allPending;
+        const tiles = [
+          ...groups.filter((item) => item.cardIds.some((id) => stackMembers.get(id)?.complete === (view === 'recent')))
+            .map(({ id }) => ({ id: `group:${id}` })),
+          ...cards.filter(({ id }) => !cardOwners.has(id)).map(({ id }) => ({ id: `card:${id}` })),
+        ];
+        reorderBoard(view, orderGrowthCards(tiles, boardOrder?.[view]).map(({ id }) => id), source, anchor, side);
+      } else {
+        const targetId = anchor.slice('card:'.length);
+        const cards = completedIds.has(targetId) ? orderedOutcomes : allPending;
+        reorderCard(cards.map(({ id }) => id), source.slice('card:'.length), targetId, side);
+      }
+    }
+    catch (error) { reportError(error); }
+  };
   const folderDragOutside = (event: BoardDragEvent, groupId: string) => {
     const transfer = useGrowthDragStore.getState().drag;
     if (!canOpenForm || !event.dataTransfer?.types.includes(GROWTH_DRAG_TYPE) || !transfer || !('cardId' in transfer)
@@ -336,8 +371,8 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
     <HistoryButtons available={historyAvailable} labels={{ undo: '撤销整理', redo: '重做整理' }}
       disabled={!historyEnabled} onHistory={performHistory} />
   </div>;
-  const openGroup = (id: string, trigger: HTMLElement) => {
-    setSelectedCards([]);
+  const openGroup = (id: string, trigger: HTMLElement, selected: string[] = []) => {
+    setSelectedCards(selected);
     setFolder({ id, origin: trigger.getBoundingClientRect() });
   };
   const cardSummaries = (ids: string[]) => {
@@ -383,17 +418,22 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
       onClick={askSelectedCards}>询问智能体</button>}
     <button type="button" className="knowledge-text-button" onClick={() => setSelectedCards([])}>取消选择</button>
   </div>;
-  const showGroupMenu = (event: MouseEvent<HTMLAnchorElement>, item: GrowthGroup) => {
+  const showGroupMenu = (event: MouseEvent<HTMLElement>, item: GrowthGroup) => {
     if (event.shiftKey && event.button === 2) return;
     event.preventDefault();
     event.stopPropagation();
     const trigger = event.currentTarget;
+    const cover = trigger.closest<HTMLElement>('.growth-group-stack') ?? trigger;
     const box = trigger.getBoundingClientRect();
-    setMenu({ x: event.clientX || box.left, y: event.clientY || box.bottom, title: '卡组操作', trigger, keyboard: event.button !== 2,
+    const members = item.cardIds.filter((id) => stackMembers.has(id));
+    const fromButton = event.type === 'click';
+    setMenu({ x: fromButton ? box.left : event.clientX || box.left, y: fromButton ? box.bottom + 4 : event.clientY || box.bottom,
+      title: '卡组操作', trigger, keyboard: event.button !== 2,
       actions: [
-        { label: '打开卡组', run: () => openGroup(item.id, trigger) },
+        { label: '打开卡组', run: () => openGroup(item.id, cover) },
+        ...(members.length ? [{ label: '选中组内卡片', run: () => openGroup(item.id, cover, members) }] : []),
         { label: '询问智能体', run: () => askAboutGroup(item) },
-        { label: '重命名卡组', run: () => groupEditor(item.id) },
+        { label: '编辑卡组', run: () => groupEditor(item.id) },
         { label: '删除卡组', danger: true, run: () => setDialog({ kind: 'delete-group', id: item.id }) },
       ] });
   };
@@ -427,21 +467,24 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
     for (const event of events) shell.addEventListener(event, handle);
     return () => { for (const event of events) shell.removeEventListener(event, handle); };
   }, [active]);
-  const stackTiles = stacks.map(({ group: item, members }) => <GrowthGroupStack key={item.id} group={item} cards={members}
+  const stackTiles = stacks.map(({ group: item, members }) => ({ id: `group:${item.id}`, node: <GrowthGroupStack key={item.id} group={item}
+    count={members.length} domains={GROWTH_DOMAINS.filter((domain) => members.some((member) => member.domains.includes(domain)))}
+    canDrag={canOpenForm} menuOpen={menu?.trigger?.closest<HTMLElement>('[data-growth-tile]')?.dataset.growthTile === `group:${item.id}`}
     onDragOver={(event) => { acceptDrop(event, item.id); }} onDrop={(event) => dropOn(event, item.id)}
     onOpen={(event) => {
       if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
       openGroup(item.id, event.currentTarget);
     }}
-    onContextMenu={(event) => showGroupMenu(event, item)} />);
+    onMenu={(event) => showGroupMenu(event, item)} /> }));
   const renderOutcome = (outcome: GrowthOutcome, ownerId = group?.id) => {
     const latest = outcome.practices[0];
     const preset = GROWTH_PRESETS.find((item) => item.id === outcome.id);
     const description = outcomeDescription(outcome);
     const note = latest.note.trim();
     const href = `#path/${encodeURIComponent(outcome.id)}` + (ownerId ? '?' + new URLSearchParams({ group: ownerId }) : '');
-    return <GrowthCard key={outcome.id} id={outcome.id} href={href} highlighted={active && cardId === outcome.id} {...cardDrop(outcome.id)} {...selectionProps(outcome.id)}
+    return <GrowthCard key={outcome.id} id={outcome.id} href={href} highlighted={active && cardId === outcome.id}
+      {...cardDrop(outcome.id)} {...selectionProps(outcome.id)}
       onAsk={dismissFolderForAsk}
       card={{ title: outcome.title, domains: outcome.domains, description: [description, note].filter(Boolean).join('\n') }}
       actions={[
@@ -457,7 +500,8 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
   };
   const renderExercise = (exercise: SavedExercise, ownerId = group?.id) => {
     const { id, title, domains, action, done } = exercise;
-    return <GrowthCard key={id} id={id} href={exerciseHref(id, ownerId)} highlighted={active && cardId === id} {...cardDrop(id)} {...selectionProps(id)}
+    return <GrowthCard key={id} id={id} href={exerciseHref(id, ownerId)} highlighted={active && cardId === id}
+      {...cardDrop(id)} {...selectionProps(id)}
       onAsk={dismissFolderForAsk}
       card={{ title, domains, description: done ? `${action}\n${PRACTICE_VERIFICATION_LABEL}：${done}` : action }} recordLabel="我做到了"
       actions={[{ label: '编辑卡片', run: canOpenForm ? (trigger) => editExercise(trigger, exercise) : undefined },
@@ -465,6 +509,12 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
       onRecord={canOpenForm ? (trigger) => recordExercise(exercise, trigger) : undefined}>
       <p className="growth-card-summary">{action || done}</p>
     </GrowthCard>;
+  };
+  const boardTiles = (view: GrowthBoardView) => {
+    const cards = view === 'recent'
+      ? completedCards.map((item) => ({ id: `card:${item.id}`, node: renderOutcome(item) }))
+      : pendingCards.map((item) => ({ id: `card:${item.id}`, node: renderExercise(item) }));
+    return (showStacks && activeView === view ? orderGrowthCards([...stackTiles, ...cards], boardOrder?.[view]) : cards).map(({ node }) => node);
   };
 
   return (
@@ -487,7 +537,8 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
       )}
       <section ref={board} className="growth-board" aria-label={group && activeView === 'all' ? group.name : activeView === 'try' ? PRACTICE_IDEAS_LABEL : PRACTICE_RECORDS_LABEL}
         hidden={Boolean(draft || exerciseDraft) || activeView === 'topics'}
-        onClick={(event) => { if (event.target instanceof Element && !event.target.closest('article, a, button, .growth-board-toolbar, .growth-selection')) setSelectedCards([]); }}
+        {...boxSelection.handlers}
+        onClick={(event) => { if (event.target instanceof Element && !event.target.closest('.growth-card-slot, article, a, button, .growth-board-toolbar, .growth-selection')) setSelectedCards([]); }}
         onContextMenu={(event) => onBoardMenu(event, event.currentTarget)}
         onDragOver={(event) => { if (!(event.target instanceof Element && event.target.closest('.growth-board-toolbar, article, a'))) acceptDrop(event, group?.id); }}
         onDrop={(event) => { if (!(event.target instanceof Element && event.target.closest('.growth-board-toolbar, article, a'))) dropOn(event, group?.id); }}>
@@ -588,10 +639,9 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
                   })}
                 </ol>
               </article>
-            ) : <div className="growth-card-grid">
-              {activeView === 'recent' && stackTiles}
-              {completedCards.map((item) => renderOutcome(item))}
-            </div>}
+            ) : <GrowthCardGrid canReorder={canOpenForm} onReorder={(source, anchor, side) => reorder(source, anchor, side, 'recent')}>
+              {boardTiles('recent')}
+            </GrowthCardGrid>}
           </div>
         )}
         {activeView !== 'recent' && (
@@ -614,15 +664,16 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
               {activeExerciseDetails.action && <p className="growth-note">{activeExerciseDetails.action}</p>}
               {activeExerciseDetails.done && <p className="growth-note"><strong>{PRACTICE_VERIFICATION_LABEL}</strong> {activeExerciseDetails.done}</p>}
               <PracticeSources practice={activeExerciseDetails.sources} />
-            </article> : <div className="growth-card-grid growth-pending-grid">
-              {activeView === 'try' && stackTiles}
-              {pendingCards.map((item) => renderExercise(item))}
-            </div>}
+            </article> : <GrowthCardGrid pending canReorder={canOpenForm} onReorder={(source, anchor, side) => reorder(source, anchor, side, 'try')}>
+              {boardTiles('try')}
+            </GrowthCardGrid>}
           </div>
         )}
+        {boxSelection.rectangle}
       </section>
       {active && menu && <GrowthContextMenu menu={menu} onClose={() => setMenu(undefined)} />}
-      {active && openFolder && folder && <GrowthFolder name={openFolder.name} origin={folder.origin} historyTools={historyTools}
+      {active && openFolder && folder && <GrowthFolder name={openFolder.name} description={openFolder.description} origin={folder.origin} historyTools={historyTools}
+        onSelectCards={applyBoxSelection}
         onClose={() => { setFolder(undefined); setSelectedCards([]); }} onManage={() => groupEditor(openFolder.id)}
         onDragOutside={(event) => Boolean(folderDragOutside(event, openFolder.id))}
         onDropOutside={(event) => {
@@ -633,15 +684,13 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
         }}>
         {selectionBar}
         {feedback && <p className="growth-muted" role={feedback.error ? 'alert' : 'status'}>{feedback.text}</p>}
-        {openFolder.cardIds.some((id) => completedIds.has(id)) && <>
+        {folderOutcomes.length > 0 && <>
           <h3>{PRACTICE_RECORDS_LABEL}</h3>
-          <div className="growth-card-grid">{sortedOutcomes.filter(({ id }) => openFolder.cardIds.includes(id))
-            .map((item) => renderOutcome(item, openFolder.id))}</div>
+          <GrowthCardGrid canReorder={canOpenForm} onReorder={reorder}>{folderOutcomes.map((item) => renderOutcome(item, openFolder.id))}</GrowthCardGrid>
         </>}
-        {allPending.some(({ id }) => openFolder.cardIds.includes(id)) && <>
+        {folderExercises.length > 0 && <>
           <h3>{PRACTICE_IDEAS_LABEL}</h3>
-          <div className="growth-card-grid growth-pending-grid">{allPending.filter(({ id }) => openFolder.cardIds.includes(id))
-            .map((item) => renderExercise(item, openFolder.id))}</div>
+          <GrowthCardGrid pending canReorder={canOpenForm} onReorder={reorder}>{folderExercises.map((item) => renderExercise(item, openFolder.id))}</GrowthCardGrid>
         </>}
         {!openFolder.cardIds.some((id) => stackMembers.has(id)) && <p className="growth-muted">这个卡组暂无可显示的卡片。</p>}
       </GrowthFolder>}
@@ -655,13 +704,17 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
             <option key={id} value={id}>{exercisesById.get(id)?.title ?? title}</option>)}
         </select></label>
       </WorkspaceDialog>}
-      {active && dialog?.kind === 'group' && <WorkspaceDialog title={dialog.id ? '管理卡组' : '新建卡组'} action={dialog.id ? '保存名称' : '创建卡组'}
+      {active && dialog?.kind === 'group' && <WorkspaceDialog title={dialog.id ? '管理卡组' : '新建卡组'} action={dialog.id ? '保存卡组' : '创建卡组'}
         valid={Boolean(selection.trim())} onClose={() => setDialog(undefined)} onSave={() => {
-          const id = saveGroup(selection, dialog.id, dialog.cardIds, dialog.exercise);
+          const id = saveGroup(selection, dialog.id, dialog.cardIds, dialog.exercise, dialog.description);
           if (!dialog.id) setFeedback({ text: '已创建卡组。' });
           else if (group?.id === id) window.location.assign(growthBoardHref('all', id));
         }}>
         <label className="growth-field">卡组名称<input autoFocus maxLength={60} value={selection} onChange={(event) => setSelection(event.target.value)} /></label>
+        <label className="growth-field">卡组说明（可选）
+          <textarea rows={3} maxLength={600} value={dialog.description ?? ''}
+            onChange={(event) => setDialog({ ...dialog, description: event.target.value })} />
+        </label>
         {dialog.id && <button type="button" className="knowledge-text-button danger" onClick={() => {
           setDialog({ kind: 'delete-group', id: dialog.id });
         }}>删除卡组</button>}
@@ -729,7 +782,6 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
         </WorkspaceDialog>}
 
       <section className="module-card" aria-label="参考路径与任务" hidden={Boolean(draft || exerciseDraft) || activeView !== 'topics'}>
-        <h2>参考路径</h2>
         <SkillTree />
       </section>
     </div>

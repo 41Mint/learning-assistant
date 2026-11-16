@@ -137,45 +137,18 @@ const History = ({ draft, setDraft }: LogEditingProps) => {
   };
 
   const reading = (
-    <div className="module-card history-card bg-white dark:bg-gray-800 rounded-lg shadow-md p-6" hidden={Boolean(draft)}>
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-          📅 学习历史
-        </h2>
-        <p className="text-sm text-gray-600 dark:text-gray-400">
-          查看过往的学习记录和统计
-        </p>
-      </div>
+    <div className="module-card history-card" hidden={Boolean(draft)}>
+      <h2>学习历史</h2>
 
-      <label className="history-date-picker">定位学习日期 <input aria-label="定位学习日期" type="date" value={selectedDate ?? ''} onChange={(event) => { if (event.target.value) selectDate(event.target.value); }} /></label>
+      <label className="history-date-picker">定位学习日期 <input className="workspace-input" aria-label="定位学习日期" type="date" value={selectedDate ?? ''} onChange={(event) => { if (event.target.value) selectDate(event.target.value); }} /></label>
 
-      {/* 日历导航 */}
-      <div className="flex items-center justify-between mb-4">
-        <button
-          onClick={goToPrevMonth}
-          className="px-3 py-1 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
-        >
-          ← 上月
-        </button>
-
-        <div className="flex items-center gap-3">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            {currentMonth.getFullYear()} 年 {currentMonth.getMonth() + 1} 月
-          </h3>
-          <button
-            onClick={goToToday}
-            className="px-3 py-1 text-sm bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors"
-          >
-            今天
-          </button>
+      <div className="history-calendar-nav" role="group" aria-label="切换月份">
+        <button type="button" className="workspace-button" onClick={goToPrevMonth}>← 上月</button>
+        <div className="history-calendar-month">
+          <h3>{currentMonth.getFullYear()} 年 {currentMonth.getMonth() + 1} 月</h3>
+          <button type="button" className="workspace-button" onClick={goToToday}>今天</button>
         </div>
-
-        <button
-          onClick={goToNextMonth}
-          className="px-3 py-1 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
-        >
-          下月 →
-        </button>
+        <button type="button" className="workspace-button" onClick={goToNextMonth}>下月 →</button>
       </div>
 
       {/* 星期标题 */}
@@ -206,14 +179,7 @@ const History = ({ draft, setDraft }: LogEditingProps) => {
               aria-pressed={isSelected}
               data-today={day.isToday || undefined}
               data-outside-month={!day.isCurrentMonth || undefined}
-              className={`
-                calendar-day p-2 rounded-lg text-sm transition-all relative
-                ${!day.isCurrentMonth ? 'text-gray-400 dark:text-gray-600' : ''}
-                ${day.isToday ? 'ring-2 ring-blue-500' : ''}
-                ${day.hasLog ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700' : 'cursor-not-allowed'}
-                ${isSelected ? 'bg-blue-100 dark:bg-blue-900' : ''}
-                ${!day.hasLog && day.isCurrentMonth ? 'text-gray-300 dark:text-gray-700' : ''}
-              `}
+              className="calendar-day"
             >
               <div className="font-medium">{dayNum}</div>
               {day.hasLog && (
@@ -226,17 +192,13 @@ const History = ({ draft, setDraft }: LogEditingProps) => {
 
       {/* 选中日期的详细信息 */}
       {selectedLog && (
-        <div ref={record} className="border-t border-gray-200 dark:border-gray-700 pt-6">
+        <div ref={record} className="history-record">
           <div className="mb-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            <div className="history-card-heading">
+              <h3>
                 <HighlightedText text={selectedDate} words={search?.words} />
               </h3>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                学习时长：<span className="font-semibold text-blue-600 dark:text-blue-400">
-                  {selectedLog.duration} 分钟
-                </span>
-              </div>
+              <span>学习时长 {selectedLog.duration} 分钟</span>
             </div>
 
             {/* 标签 */}

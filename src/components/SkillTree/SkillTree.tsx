@@ -39,9 +39,12 @@ export default function SkillTree() {
 
   return (
     <div className="growth-reference-path">
-      <button type="button" className="note-button secondary" onClick={() => setEditor({
-        fields: { name: '', description: '', category: selected?.category ?? '其他', prerequisites: [] },
-      })}>添加主题</button>
+      <div className="growth-reference-heading">
+        <h2>参考路径</h2>
+        <button type="button" className="note-button" onClick={() => setEditor({
+          fields: { name: '', description: '', category: selected?.category ?? '其他', prerequisites: [] },
+        })}>添加主题</button>
+      </div>
       {notice && <p role="status">{notice}</p>}
       {actionError && <p role="alert">{actionError}</p>}
       {selected ? <div className="growth-topic-layout">

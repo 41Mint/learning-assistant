@@ -87,6 +87,9 @@ export async function purgeTrashedResource(kind: 'log' | 'entry' | 'code', id: s
   const knowledgeRaw = localStorage.getItem(STORAGE_KEYS.KNOWLEDGE);
   if (knowledgeRaw !== null) useKnowledgeStore.setState(validateKnowledge(JSON.parse(knowledgeRaw)));
   const growthRaw = localStorage.getItem(STORAGE_KEYS.GROWTH);
-  if (growthRaw !== null) useGrowthStore.setState({ ...validateGrowth(JSON.parse(growthRaw)), arrangementHistory: { undo: [], redo: [] } });
+  if (growthRaw !== null) {
+    const growth = validateGrowth(JSON.parse(growthRaw));
+    useGrowthStore.setState({ ...growth, cardOrder: growth.cardOrder, boardOrder: growth.boardOrder, arrangementHistory: { undo: [], redo: [] } });
+  }
   useProjectCodeStore.setState({ data: code });
 }

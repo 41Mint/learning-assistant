@@ -138,7 +138,10 @@ export interface GrowthGroup {
   id: string;
   name: string;
   cardIds: string[];
+  description?: string;
 }
+
+export type GrowthBoardView = 'recent' | 'try';
 
 export interface GrowthData {
   version: 1;
@@ -146,6 +149,8 @@ export interface GrowthData {
   exercises: SavedExercise[];
   hiddenPresetIds: string[];
   groups: GrowthGroup[];
+  cardOrder?: string[];
+  boardOrder?: Partial<Record<GrowthBoardView, string[]>>;
 }
 
 // 设置

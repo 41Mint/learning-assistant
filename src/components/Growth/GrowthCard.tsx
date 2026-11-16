@@ -8,6 +8,7 @@ import type { ChatGrowthCard } from '../../types/assistantChat';
 import { PRACTICE_REFERENCE_LABEL } from '../../utils/growthLabels';
 import { AssistantSlots } from '../Assistant/assistantSlots';
 import WorkspaceDialog from '../common/WorkspaceDialog';
+import { startCardDragMotion } from './cardDragMotion';
 
 export interface GrowthCardAction {
   label: string;
@@ -33,6 +34,7 @@ export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, bat
 }) {
   const menu = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const stopMotion = useRef<() => void>(undefined);
   const { askAboutGrowth } = useContext(AssistantSlots);
   const goal = useCurrentGoalStore((state) => state.goal);
   const setGoal = useCurrentGoalStore((state) => state.setCurrentGoal);
@@ -40,6 +42,7 @@ export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, bat
   const [menuOpen, setMenuOpen] = useState(false);
   const [replacing, setReplacing] = useState(false);
   const current = goal?.type === 'growth-card' && goal.id === id;
+  useEffect(() => () => stopMotion.current?.(), []);
   useEffect(() => {
     if (!highlighted || !trigger.current?.getClientRects().length) return;
     trigger.current.focus({ preventScroll: true });
@@ -88,7 +91,7 @@ export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, bat
     setError('');
   };
 
-  return <article className="growth-card growth-summary" aria-label={card.title} data-card-focus={highlighted || undefined}
+  return <div className="growth-card-slot" data-growth-card={id} data-growth-tile={`card:${id}`}><article className="growth-card growth-summary" aria-label={card.title} data-card-focus={highlighted || undefined}
     tabIndex={onSelect ? 0 : undefined} data-selected={selected || undefined} aria-description={selected ? '已选中' : undefined}
     onClick={(event) => {
       if (!onSelect || event.altKey || event.ctrlKey || event.metaKey || !(event.target instanceof Element)) return;
@@ -102,6 +105,9 @@ export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, bat
       onSelect(event.shiftKey);
     }}
     draggable={Boolean(drag)} onDragOver={onDragOver} onDrop={onDrop}
+    onDragLeave={(event) => {
+      if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) delete event.currentTarget.dataset.dropIntent;
+    }}
     onDragStart={(event) => {
       if (!drag || (event.target instanceof Element && event.target.closest('button'))) {
         event.preventDefault();
@@ -110,9 +116,10 @@ export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, bat
       menu.current?.hidePopover();
       event.dataTransfer.setData(GROWTH_DRAG_TYPE, '');
       event.dataTransfer.effectAllowed = 'move';
+      stopMotion.current?.();
       useGrowthDragStore.setState({ drag });
+      stopMotion.current = startCardDragMotion(event.currentTarget, event, event.dataTransfer);
     }}
-    onDragEnd={() => useGrowthDragStore.setState({ drag: undefined })}
     onContextMenu={(event) => {
     if (event.shiftKey && event.button === 2) return;
     event.preventDefault();
@@ -156,5 +163,5 @@ export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, bat
       onClose={() => setReplacing(false)} onSave={saveReference}>
       {goal && <p>将「{card.title}」用作{PRACTICE_REFERENCE_LABEL}，并替换{goal.type === 'growth-card' ? PRACTICE_REFERENCE_LABEL : '当前学习目标'}「{goal.label}」。</p>}
     </WorkspaceDialog>}
-  </article>;
+  </article></div>;
 }

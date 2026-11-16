@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { GROWTH_PRESETS } from '../data/growthPresets';
-import type { GrowthData, GrowthGroup, GrowthOutcome, GrowthPractice, SavedExercise } from '../types';
+import type { GrowthBoardView, GrowthData, GrowthGroup, GrowthOutcome, GrowthPractice, SavedExercise } from '../types';
 import { emptyGrowth, growthExercises, validateGrowth } from '../utils/growth';
 import { PRACTICE_IDEAS_LABEL } from '../utils/growthLabels';
 import { normalizedName } from '../utils/knowledge';
@@ -8,7 +8,7 @@ import { generateId, getTodayDate, STORAGE_KEYS } from '../utils/storage';
 import type { HistoryDirection } from '../utils/workspaceHistory';
 
 type OutcomeDetails = Omit<GrowthOutcome, 'practices'>;
-type Arrangement = Pick<GrowthData, 'groups' | 'exercises' | 'hiddenPresetIds'>;
+type Arrangement = Pick<GrowthData, 'groups' | 'exercises' | 'hiddenPresetIds' | 'cardOrder' | 'boardOrder'>;
 type ArrangementHistory = Record<HistoryDirection, Arrangement[]>;
 
 interface GrowthStore extends GrowthData {
@@ -22,9 +22,11 @@ interface GrowthStore extends GrowthData {
   editExercise: (exercise: SavedExercise, groupId?: string) => void;
   removeExercises: (ids: string[]) => void;
   restorePreset: (id: string) => void;
-  saveGroup: (name: string, id?: string, cardIds?: string[], exercise?: SavedExercise) => string;
+  saveGroup: (name: string, id?: string, cardIds?: string[], exercise?: SavedExercise, description?: string) => string;
   removeGroup: (id: string) => void;
   moveCards: (cardIds: string[], groupId: string | null) => void;
+  reorderCard: (cardIds: string[], source: string, anchor: string, side: 'before' | 'after') => void;
+  reorderBoard: (view: GrowthBoardView, tileIds: string[], source: string, anchor: string, side: 'before' | 'after') => void;
   applyGrouping: (name: string, cardIds: string[]) => void;
   applyArrangementHistory: (direction: HistoryDirection) => boolean;
 }
@@ -38,18 +40,35 @@ function placeCards(groups: GrowthGroup[], cardIds: string[], groupId?: string |
   });
 }
 
+function insertedOrder(ids: string[], source: string, anchor: string, side: 'before' | 'after') {
+  if (source === anchor || !ids.includes(source) || !ids.includes(anchor)) return;
+  const order = ids.filter((id) => id !== source);
+  const index = order.indexOf(anchor) + (side === 'after' ? 1 : 0);
+  if (ids[index] === source) return;
+  order.splice(index, 0, source);
+  return order;
+}
+
 export const useGrowthStore = create<GrowthStore>((set, get) => {
   const persist = (change: Partial<GrowthData>, arrangementHistory: ArrangementHistory = { undo: [], redo: [] }) => {
-    const { isLoaded, error, outcomes, exercises, hiddenPresetIds, groups } = get();
+    const { isLoaded, error, outcomes, exercises, hiddenPresetIds, groups, cardOrder, boardOrder } = get();
     if (!isLoaded || error) throw new Error(error || '成长记录正在加载。');
-    const data = validateGrowth({ version: 1, outcomes, exercises, hiddenPresetIds, groups, ...change });
+    const data = validateGrowth({ version: 1, outcomes, exercises, hiddenPresetIds, groups, cardOrder, boardOrder, ...change });
     localStorage.setItem(STORAGE_KEYS.GROWTH, JSON.stringify(data));
-    set({ ...data, arrangementHistory });
+    set({ ...data, cardOrder: data.cardOrder, boardOrder: data.boardOrder, arrangementHistory });
   };
-  const snapshot = ({ groups, exercises, hiddenPresetIds }: Arrangement): Arrangement => ({ groups, exercises, hiddenPresetIds });
+  const snapshot = ({ groups, exercises, hiddenPresetIds, cardOrder, boardOrder }: Arrangement): Arrangement =>
+    ({ groups, exercises, hiddenPresetIds, cardOrder, boardOrder });
   const arrange = (change: Partial<Arrangement>) => {
     const current = get();
     persist(change, { undo: [...current.arrangementHistory.undo.slice(-49), snapshot(current)], redo: [] });
+  };
+  const checkCurrent = ({ version, outcomes, exercises, groups, hiddenPresetIds, cardOrder, boardOrder }: GrowthData) => {
+    const raw = localStorage.getItem(STORAGE_KEYS.GROWTH);
+    const stored = raw === null ? emptyGrowth() : validateGrowth(JSON.parse(raw));
+    if (JSON.stringify(stored) !== JSON.stringify({ version, outcomes, exercises, hiddenPresetIds, groups, cardOrder, boardOrder })) {
+      throw new Error('成长记录已经在其他页面更新，请刷新后重试。');
+    }
   };
 
   return {
@@ -137,7 +156,7 @@ export const useGrowthStore = create<GrowthStore>((set, get) => {
       const { hiddenPresetIds } = get();
       if (hiddenPresetIds.includes(id)) arrange({ hiddenPresetIds: hiddenPresetIds.filter((hiddenId) => hiddenId !== id) });
     },
-    saveGroup: (name, id, cardIds = [], exercise) => {
+    saveGroup: (name, id, cardIds = [], exercise, description) => {
       const data = get();
       const { groups } = data;
       const value = name.trim();
@@ -147,8 +166,9 @@ export const useGrowthStore = create<GrowthStore>((set, get) => {
       }
       const groupId = id ?? generateId();
       if (id && !groups.some((group) => group.id === id)) throw new Error('找不到这个卡组。');
-      const next = id ? groups.map((group) => group.id === id ? { ...group, name: value } : group)
-        : [...groups, { id: groupId, name: value, cardIds: [] }];
+      const details = description === undefined ? {} : { description: description.trim() || undefined };
+      const next = id ? groups.map((group) => group.id === id ? { ...group, name: value, ...details } : group)
+        : [...groups, { id: groupId, name: value, cardIds: [], ...details }];
       if (exercise && [...data.outcomes, ...growthExercises(data)].some((card) =>
         card.id === exercise.id || normalizedName(card.title) === normalizedName(exercise.title))) throw new Error('已有同名卡片。');
       arrange({ groups: cardIds.length ? placeCards(next, cardIds, groupId) : next,
@@ -161,15 +181,26 @@ export const useGrowthStore = create<GrowthStore>((set, get) => {
       const next = placeCards(groups, cardIds, groupId);
       if (next.some((group, index) => group !== groups[index])) arrange({ groups: next });
     },
+    reorderCard: (cardIds, source, anchor, side) => {
+      const current = get();
+      const order = insertedOrder(cardIds, source, anchor, side);
+      if (!order) return;
+      checkCurrent(current);
+      const scope = new Set(cardIds);
+      arrange({ cardOrder: [...(current.cardOrder ?? []).filter((id) => !scope.has(id)), ...order] });
+    },
+    reorderBoard: (view, tileIds, source, anchor, side) => {
+      const order = insertedOrder(tileIds, source, anchor, side);
+      if (!order) return;
+      const current = get();
+      checkCurrent(current);
+      arrange({ boardOrder: { ...current.boardOrder, [view]: order } });
+    },
     applyGrouping: (name, cardIds) => {
       const current = get();
       if (!current.isLoaded || current.error) throw new Error(current.error || '成长记录正在加载。');
-      const { version, outcomes, exercises, groups, hiddenPresetIds } = current;
-      const raw = localStorage.getItem(STORAGE_KEYS.GROWTH);
-      const stored = raw === null ? emptyGrowth() : validateGrowth(JSON.parse(raw));
-      if (JSON.stringify(stored) !== JSON.stringify({ version, outcomes, exercises, hiddenPresetIds, groups })) {
-        throw new Error('成长记录已经在其他页面更新。请刷新后重新获取分组建议。');
-      }
+      const { outcomes, groups } = current;
+      checkCurrent(current);
       const available = new Set([...outcomes, ...growthExercises(current)].map(({ id }) => id));
       if (cardIds.length < 2 || new Set(cardIds).size !== cardIds.length || cardIds.some((id) => !available.has(id))) {
         throw new Error('这组建议包含已不可用的卡片，请重新选卡。');

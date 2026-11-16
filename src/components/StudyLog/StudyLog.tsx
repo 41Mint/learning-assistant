@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import CollapsibleNote from '../common/CollapsibleNote';
 import MarkdownImport from './MarkdownImport';
 import KnowledgeLinks from '../Knowledge/KnowledgeLinks';
@@ -10,6 +10,44 @@ import type { LogEditingProps } from './LogContentEditor';
 import TrashLogButton from './TrashLogButton';
 import { getTodayDate, STORAGE_KEYS } from '../../utils/storage';
 import { createTodayLogDraft } from '../../utils/studyLogs';
+
+function LogMetadataField({ label, placeholder, items, onAdd, onRemove }: {
+  label: string;
+  placeholder: string;
+  items: string[];
+  onAdd: (value: string) => void;
+  onRemove: (value: string) => void;
+}) {
+  const id = useId();
+  const [value, setValue] = useState('');
+  const [error, setError] = useState('');
+  const modify = (action: () => void) => {
+    try {
+      action();
+      setError('');
+    } catch {
+      setError('保存失败，请重试。');
+    }
+  };
+  return <section className="log-metadata-field" aria-label={label}>
+    <label htmlFor={id}>{label}</label>
+    {items.length > 0 && <ul className="log-chips">{items.map((item) => <li className="log-chip" key={item}>
+      <span>{item}</span>
+      <button type="button" aria-label={`移除${label}「${item}」`}
+        onClick={() => modify(() => onRemove(item))}>×</button>
+    </li>)}</ul>}
+    <form className="log-metadata-form" data-preserves-on-navigation onSubmit={(event) => {
+      event.preventDefault();
+      const text = value.trim();
+      if (text) modify(() => { onAdd(text); setValue(''); });
+    }}>
+      <input id={id} className="workspace-input" type="text" value={value} placeholder={placeholder}
+        onChange={(event) => setValue(event.target.value)} />
+      <button type="submit" className="workspace-button" disabled={!value.trim()} aria-label={`添加${label}`}>添加</button>
+    </form>
+    {error && <p className="log-metadata-error" role="alert">{error}</p>}
+  </section>;
+}
 
 export default function StudyLog({ draft, setDraft }: LogEditingProps) {
   const {
@@ -23,11 +61,12 @@ export default function StudyLog({ draft, setDraft }: LogEditingProps) {
     removeKnowledgePoint,
   } = useStudyLogStore();
 
-  const [newTag, setNewTag] = useState('');
-  const [newKnowledge, setNewKnowledge] = useState('');
   const [message, setMessage] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ date: string; imageCount: number }>();
   const [newDraftId, setNewDraftId] = useState<string>();
   const editButton = useRef<HTMLButtonElement>(null);
+  const importTrigger = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     loadLogs();
@@ -40,19 +79,17 @@ export default function StudyLog({ draft, setDraft }: LogEditingProps) {
     return () => window.removeEventListener('storage', reload);
   }, [getTodayLog, loadLogs]);
 
-  const handleAddTag = () => {
-    if (newTag.trim()) {
-      addTag(newTag.trim());
-      setNewTag('');
-    }
+  const closeImport = () => {
+    setImporting(false);
+    window.requestAnimationFrame(() => importTrigger.current?.focus({ preventScroll: true }));
   };
-
-  const handleAddKnowledge = () => {
-    if (newKnowledge.trim()) {
-      addKnowledgePoint(newKnowledge.trim());
-      setNewKnowledge('');
-    }
-  };
+  const importButton = <button ref={importTrigger} type="button" className="workspace-button log-import-trigger" aria-haspopup="dialog" onClick={() => {
+    setImportResult(undefined);
+    setImporting(true);
+  }}>导入图文学习记录</button>;
+  const importNotice = importResult && <p className="knowledge-muted" role="status">
+    已保存到 {importResult.date} 的学习记录，共 {importResult.imageCount} 张图片。<a href={`#history/${importResult.date}`}>查看日志</a>
+  </p>;
 
   const reading = currentLog ? (
     <div className="module-card study-log-card bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6" hidden={Boolean(draft)}>
@@ -65,101 +102,28 @@ export default function StudyLog({ draft, setDraft }: LogEditingProps) {
         </div>
       </div>
 
-      <MarkdownImport />
+      <div className="log-reading">
+        <CollapsibleNote key={currentLog.id} content={currentLog.content} actions={
+          <>
+            {importButton}
+            <button ref={editButton} type="button" className="note-button" onClick={() => {
+              setMessage('');
+              setImportResult(undefined);
+              setDraft(currentLog);
+            }}>编辑</button>
+            <RelationLink kind="log" id={currentLog.id} />
+            <TrashLogButton log={currentLog} onMoved={() => { setMessage(''); setImportResult(undefined); }} />
+          </>
+        } />
+        {message && <p role="status">{message}</p>}
+        {importNotice}
+        <KnowledgeLinks logId={currentLog.id} legacyPoints={currentLog.knowledgePoints} />
+        <CodeLinksPanel key={currentLog.id + '-code'} target={{ kind: 'log', id: currentLog.id }} title="项目代码" />
 
-      <CollapsibleNote key={currentLog.id} content={currentLog.content} actions={
-        <>
-          <button ref={editButton} type="button" className="note-button" onClick={() => {
-            setMessage('');
-            setDraft(currentLog);
-          }}>编辑</button>
-          <RelationLink kind="log" id={currentLog.id} />
-          <TrashLogButton log={currentLog} onMoved={() => setMessage('')} />
-        </>
-      } />
-      {message && <p role="status">{message}</p>}
-
-      {/* 标签 */}
-      <KnowledgeLinks logId={currentLog.id} legacyPoints={currentLog.knowledgePoints} />
-      <CodeLinksPanel key={currentLog.id + '-code'} target={{ kind: 'log', id: currentLog.id }} title="项目代码" />
-
-      <div className="mb-6">
-        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-          标签
-        </label>
-        <div className="flex flex-wrap gap-2 mb-2">
-          {currentLog.tags.map((tag) => (
-            <span
-              key={tag}
-              className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm"
-            >
-              {tag}
-              <button
-                onClick={() => removeTag(tag)}
-                className="hover:text-blue-600 dark:hover:text-blue-300"
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={newTag}
-            onChange={(e) => setNewTag(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleAddTag()}
-            placeholder="添加标签（如：Unity, C#, 算法）"
-            className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
-          />
-          <button
-            onClick={handleAddTag}
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm"
-          >
-            添加
-          </button>
-        </div>
-      </div>
-
-      {/* 知识点 */}
-      <div>
-        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-          学到的知识点
-        </label>
-        <div className="space-y-2 mb-2">
-          {currentLog.knowledgePoints.map((point, index) => (
-            <div
-              key={index}
-              className="flex items-start gap-2 p-2 bg-green-50 dark:bg-green-900/20 rounded-lg"
-            >
-              <span className="text-green-600 dark:text-green-400 mt-1">✓</span>
-              <span className="flex-1 text-gray-800 dark:text-gray-200 text-sm">
-                {point}
-              </span>
-              <button
-                onClick={() => removeKnowledgePoint(point)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={newKnowledge}
-            onChange={(e) => setNewKnowledge(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleAddKnowledge()}
-            placeholder="添加学到的知识点"
-            className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
-          />
-          <button
-            onClick={handleAddKnowledge}
-            className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm"
-          >
-            添加
-          </button>
+        <div className="log-metadata">
+          <LogMetadataField label="标签" placeholder="例如 Unity、C#、算法" items={currentLog.tags} onAdd={addTag} onRemove={removeTag} />
+          <LogMetadataField label="学到的知识点" placeholder="添加学到的知识点" items={currentLog.knowledgePoints}
+            onAdd={addKnowledgePoint} onRemove={removeKnowledgePoint} />
         </div>
       </div>
     </div>
@@ -168,14 +132,18 @@ export default function StudyLog({ draft, setDraft }: LogEditingProps) {
       <h2>📝 今日学习记录</h2>
       {error ? <p role="alert">{error}</p> : <>
         <p>今天还没有学习日志。已删除的日志可在<a href="#data">回收站</a>恢复。</p>
-        <button ref={editButton} type="button" className="note-button" onClick={() => {
-          const log = createTodayLogDraft();
-          setMessage('');
-          setNewDraftId(log.id);
-          setDraft(log);
-        }}>写日志</button>
-        <MarkdownImport />
+        <div className="history-note-actions">
+          {importButton}
+          <button ref={editButton} type="button" className="note-button" onClick={() => {
+            const log = createTodayLogDraft();
+            setMessage('');
+            setImportResult(undefined);
+            setNewDraftId(log.id);
+            setDraft(log);
+          }}>写日志</button>
+        </div>
         {message && <p role="alert">{message}</p>}
+        {importNotice}
       </>}
     </div>
   );
@@ -189,6 +157,11 @@ export default function StudyLog({ draft, setDraft }: LogEditingProps) {
         window.requestAnimationFrame(() => editButton.current?.focus());
       }} />}
       {reading}
+      {importing && <MarkdownImport onClose={closeImport} onImported={(date, imageCount) => {
+        setMessage('');
+        setImportResult({ date, imageCount });
+        closeImport();
+      }} />}
     </div>
   );
 }

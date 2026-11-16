@@ -12,6 +12,15 @@ export function growthExercises({ exercises, hiddenPresetIds }: Pick<GrowthData,
   }))].filter(({ id }) => !hiddenPresetIds.includes(id));
 }
 
+export function orderGrowthCards<T extends { id: string }>(cards: T[], order: string[] | undefined): T[] {
+  if (!order?.length) return cards;
+  const byId = new Map(cards.map((card) => [card.id, card]));
+  const placed = order.flatMap((id) => byId.get(id) ?? []);
+  const placedIds = new Set(placed.map(({ id }) => id));
+  let next = 0;
+  return cards.map((card) => placedIds.has(card.id) ? placed[next++] : card);
+}
+
 export function logLabel(log: StudyLog) {
   const title = log.content.match(/^#{1,6}\s+(.+)$/m)?.[1];
   return title && title.trim() !== log.date ? `${log.date} · ${title}` : log.date;
@@ -55,7 +64,8 @@ function isExercise(value: unknown): value is SavedExercise {
 
 function isGroup(value: unknown): value is GrowthGroup {
   return isRecord(value) && nonempty(value.id) && typeof value.name === 'string' && !!value.name.trim()
-    && value.name.length <= 60 && uniqueStrings(value.cardIds);
+    && value.name.length <= 60 && uniqueStrings(value.cardIds)
+    && (value.description === undefined || (typeof value.description === 'string' && value.description.length <= 600));
 }
 
 export function validateGrowth(value: unknown): GrowthData {
@@ -77,5 +87,20 @@ export function validateGrowth(value: unknown): GrowthData {
   if (groupedIds.some((id) => !validIds.has(id)) || new Set(groupedIds).size !== groupedIds.length) {
     throw new Error('卡组包含重复或无效的卡片。');
   }
-  return { version: 1, outcomes: value.outcomes, exercises, hiddenPresetIds, groups };
+  if (value.cardOrder !== undefined && !uniqueStrings(value.cardOrder)) throw new Error('卡片顺序格式不正确。');
+  const cardOrder = value.cardOrder?.filter((id) => validIds.has(id));
+  const boardOrder: GrowthData['boardOrder'] = {};
+  if (value.boardOrder !== undefined) {
+    if (!isRecord(value.boardOrder)) throw new Error('看板顺序格式不正确。');
+    const tileIds = new Set([...Array.from(validIds, (id) => `card:${id}`), ...groups.map(({ id }) => `group:${id}`)]);
+    for (const view of ['recent', 'try'] as const) {
+      const order = value.boardOrder[view];
+      if (order === undefined) continue;
+      if (!uniqueStrings(order)) throw new Error('看板顺序格式不正确。');
+      const validOrder = order.filter((id) => tileIds.has(id));
+      if (validOrder.length) boardOrder[view] = validOrder;
+    }
+  }
+  return { version: 1, outcomes: value.outcomes, exercises, hiddenPresetIds, groups,
+    ...(cardOrder?.length ? { cardOrder } : {}), ...(Object.keys(boardOrder).length ? { boardOrder } : {}) };
 }
