@@ -37,15 +37,17 @@
 
 ## 快速开始
 
+本地启动推荐使用 Node.js 24。组员可按[测试工作区验收指南](./docs/TEST_WORKSPACE_ACCEPTANCE.md)使用项目自带的示例数据。
+
 ```bash
-# 安装依赖
-npm install
+# 按锁文件安装依赖
+npm ci
 
 # 启动开发服务器
 npm run dev
 
 # 使用固定端口启动（推荐，浏览器访问 http://localhost:5185）
-npm run dev -- --port 5185
+npm run dev -- --port 5185 --strictPort
 
 # 构建生产版本
 npm run build
