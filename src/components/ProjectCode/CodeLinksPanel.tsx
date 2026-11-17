@@ -1,9 +1,10 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
 import type { CodeTarget, CodeVersion } from '../../types/projectCode';
 import { codeTargetKey, codeVersionHref, codeVersionLabel, codeVersionSource } from '../../utils/projectCode';
 import { codeSearchFields } from '../../utils/resourceSearch';
 import SearchableSelect from '../common/SearchableSelect';
+import CodeFormReveal from './CodeFormReveal';
 import CodeVersionForm from './CodeVersionForm';
 
 interface CodeLinksPanelProps {
@@ -14,9 +15,7 @@ interface CodeLinksPanelProps {
 export default function CodeLinksPanel({ target, title }: CodeLinksPanelProps) {
   const { data, isLoaded, error, linkVersion, unlinkVersion } = useProjectCodeStore();
   const [selected, setSelected] = useState('');
-  const [versionForm, setVersionForm] = useState<{ id: number; open: boolean }>();
-  const formSequence = useRef(0);
-  const formPanel = useRef<HTMLDivElement>(null);
+  const [adding, setAdding] = useState(false);
   const addButton = useRef<HTMLButtonElement>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -26,23 +25,7 @@ export default function CodeLinksPanel({ target, title }: CodeLinksPanelProps) {
   const available = data.versions.filter((version) => !linkedIds.has(version.id)).reverse();
   const canLink = isLoaded && !error && available.length > 0;
   const canAdd = isLoaded && !error && target.kind === 'log';
-  const adding = versionForm?.open ?? false;
   const projectName = (version: CodeVersion) => data.projects.find((project) => project.id === version.projectId)?.name;
-
-  useLayoutEffect(() => {
-    if (!versionForm || versionForm.open) return;
-    addButton.current?.focus({ preventScroll: true });
-    let active = true;
-    const transitions = formPanel.current?.getAnimations() ?? [];
-    void Promise.allSettled(transitions.map(({ finished }) => finished)).then(() => {
-      if (active) setVersionForm(undefined);
-    });
-    return () => { active = false; };
-  }, [versionForm]);
-
-  const closeVersionForm = () => {
-    setVersionForm((current) => current?.open ? { ...current, open: false } : current);
-  };
 
   const change = async (action: () => Promise<void>, success: string) => {
     setBusy(true);
@@ -86,16 +69,16 @@ export default function CodeLinksPanel({ target, title }: CodeLinksPanelProps) {
               {canLink && <button type="button" className="note-button secondary" disabled={busy || !available.some((version) => version.id === selected)}
                 onClick={() => void change(() => linkVersion(selected, target), '已关联代码版本。')}>关联所选版本</button>}
               {canAdd && <button ref={addButton} type="button" className="note-button secondary" aria-expanded={adding} disabled={adding}
-                onClick={() => { setMessage(''); setVersionForm({ id: ++formSequence.current, open: true }); }}>添加代码版本</button>}
+                onClick={() => { setMessage(''); setAdding(true); }}>添加代码版本</button>}
             </div>
           </div>
         )}
-        {versionForm && <div ref={formPanel} className="code-form-reveal" data-open={adding || undefined} inert={!adding}><div>
-          <CodeVersionForm key={versionForm.id} target={target} onCancel={closeVersionForm} onSaved={() => {
-            closeVersionForm();
+        <CodeFormReveal open={adding} trigger={addButton}>
+          <CodeVersionForm target={target} onCancel={() => setAdding(false)} onSaved={() => {
+            setAdding(false);
             setMessage('代码版本已保存并关联到这篇日志。');
           }} />
-        </div></div>}
+        </CodeFormReveal>
         {isLoaded && !error && data.versions.length === 0 && target.kind !== 'log' && (
           <p className="code-muted">可从学习日志或<a href="#code">项目代码</a>保存一个版本，再在这里关联。</p>
         )}

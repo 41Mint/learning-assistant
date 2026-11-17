@@ -96,7 +96,7 @@ export const useProjectCodeStore = create<ProjectCodeStore>((set, get) => {
       await update((data) => {
         const inputProject = input.project;
         const project = 'id' in inputProject
-          ? data.projects.find((item) => item.id === inputProject.id)
+          ? data.projects.find((item) => item.id === inputProject.id && !item.archived)
           : makeProject(generateId(), inputProject);
         if (!project) throw new Error('这个项目已不存在，请重新选择。');
         const updatedProject = { ...project };
@@ -121,7 +121,7 @@ export const useProjectCodeStore = create<ProjectCodeStore>((set, get) => {
       return versionId;
     },
     saveProject: (id, input) => update((data) => {
-      if (!data.projects.some((project) => project.id === id)) throw new Error('这个项目已不存在。');
+      if (!data.projects.some((project) => project.id === id && !project.archived)) throw new Error('这个项目已不存在。');
       const project = makeProject(id, input);
       return { ...data, projects: data.projects.map((item) => item.id === id ? { ...item, ...project } : item) };
     }),
@@ -130,7 +130,7 @@ export const useProjectCodeStore = create<ProjectCodeStore>((set, get) => {
       let added = 0;
       await update((data) => {
         const project = 'id' in input
-          ? data.projects.find((item) => item.id === projectId)
+          ? data.projects.find((item) => item.id === projectId && !item.archived)
           : makeProject(projectId, input);
         if (!project) throw new Error('这个项目已不存在，请重新选择。');
         const paths = projectDirectoryPaths(files);
@@ -164,7 +164,7 @@ export const useProjectCodeStore = create<ProjectCodeStore>((set, get) => {
       return { projectId, added, reused: scripts.length - added };
     },
     saveDirectoryNote: (projectId, path, input) => update((data) => {
-      const project = data.projects.find((item) => item.id === projectId);
+      const project = data.projects.find((item) => item.id === projectId && !item.archived);
       const directory = project?.directory;
       if (!directory || !directory.files.some((file) => file === path || file.startsWith(path + '/'))) {
         throw new Error('这个路径已不在当前目录快照中，请重新选择。');
@@ -245,6 +245,11 @@ export const useProjectCodeStore = create<ProjectCodeStore>((set, get) => {
       });
       return {
         ...data,
+        projects: data.projects.map((project) => {
+          if (project.id !== version.projectId || !project.archived) return project;
+          const { archived: _archived, ...restored } = project;
+          return restored;
+        }),
         versions: [...data.versions, version].sort((a, b) => a.savedAt - b.savedAt),
         links: [...data.links, ...validLinks],
         trash: {
@@ -254,8 +259,12 @@ export const useProjectCodeStore = create<ProjectCodeStore>((set, get) => {
       };
     }),
     deleteProject: (id) => update((data) => {
+      const project = data.projects.find((item) => item.id === id);
+      if (!project || project.archived) throw new Error('这个项目已从列表移除。');
       if (data.versions.some((version) => version.projectId === id)) throw new Error('请先处理该项目下的代码版本。');
-      if (data.trash.versions.some((version) => version.projectId === id)) throw new Error('请先处理回收站中属于这个项目的代码版本。');
+      if (data.trash.versions.some((version) => version.projectId === id)) {
+        return { ...data, projects: data.projects.map((item) => item === project ? { ...item, archived: true } : item) };
+      }
       return { ...data, projects: data.projects.filter((project) => project.id !== id) };
     }),
   };

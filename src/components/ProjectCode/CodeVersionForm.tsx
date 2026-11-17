@@ -11,7 +11,7 @@ interface CodeVersionFormProps {
 }
 
 export default function CodeVersionForm({ target, onSaved, onCancel }: CodeVersionFormProps) {
-  const projects = useProjectCodeStore((state) => state.data.projects);
+  const projects = useProjectCodeStore((state) => state.data.projects).filter((project) => !project.archived);
   const saveVersion = useProjectCodeStore((state) => state.saveVersion);
   const [projectId, setProjectId] = useState(projects.length === 1 ? projects[0].id : '');
   const [name, setName] = useState('');

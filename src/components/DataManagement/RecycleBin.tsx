@@ -41,6 +41,7 @@ export default function RecycleBin() {
   const candidateLog = candidate?.kind === 'log' ? candidate.item : undefined;
   const candidateEntry = candidate?.kind === 'entry' ? candidate.item : undefined;
   const candidateCode = candidate?.kind === 'code' ? candidate.item : undefined;
+  const archivedProject = candidateCode && code.projects.find((project) => project.id === candidateCode.projectId && project.archived);
   const hasDateConflict = candidateLog && logs.some(({ date }) => date === candidateLog.date);
   const date = hasDateConflict ? newDate : candidateLog?.date ?? '';
   const dateTaken = Boolean(date && logs.some((log) => log.date === date));
@@ -115,6 +116,7 @@ export default function RecycleBin() {
         setResult({ kind: 'code', text: '已恢复代码版本 ', href: codeVersionHref(candidateCode.id), label: candidateCode.path });
       }}>
       <p>恢复「{candidateCode.path}」的这个版本及仍有效的关联？</p>
+      {archivedProject && <p>所属项目也会回到项目列表。</p>}
     </WorkspaceDialog>}
     {action?.type === 'delete' && candidate && <WorkspaceDialog title={`彻底删除${resourceLabels[candidate.kind]}`} action="确认彻底删除" destructive
       onClose={() => setAction(undefined)} onSave={async () => {
@@ -122,6 +124,8 @@ export default function RecycleBin() {
         setResult({ kind: candidate.kind, text: `${candidate.kind === 'log' ? '日志' : resourceLabels[candidate.kind]}已彻底删除` });
       }}>
       <p>彻底删除「{titleFor(candidate)}」及其关联。{candidate.kind !== 'code' && '其他资料共用的图片会保留。'}此操作无法从回收站恢复。</p>
+      {archivedProject && !code.trash.versions.some((version) => version.projectId === archivedProject.id && version.id !== candidateCode?.id)
+        && <p>这是「{archivedProject.name}」在回收站中的最后一个版本，项目资料{archivedProject.directory ? '和目录快照' : ''}也会一并删除。</p>}
     </WorkspaceDialog>}
   </section>;
 }

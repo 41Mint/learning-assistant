@@ -20,9 +20,14 @@ export async function purgeTrashedResource(kind: 'log' | 'entry' | 'code', id: s
   };
   const code = await updateProjectCode((data) => {
     if (kind === 'code') {
-      if (!data.trash.versions.some((version) => version.id === id)) throw new Error('这个代码版本已不在回收站。');
-      return { ...data, trash: {
-        versions: data.trash.versions.filter((version) => version.id !== id),
+      const deleted = data.trash.versions.find((version) => version.id === id);
+      if (!deleted) throw new Error('这个代码版本已不在回收站。');
+      const versions = data.trash.versions.filter((version) => version.id !== id);
+      const hasOtherVersions = versions.some((version) => version.projectId === deleted.projectId);
+      const projects = hasOtherVersions ? data.projects : data.projects.filter((project) =>
+        project.id !== deleted.projectId || !project.archived);
+      return { ...data, projects, trash: {
+        versions,
         links: data.trash.links.filter((link) => link.versionId !== id),
       } };
     }

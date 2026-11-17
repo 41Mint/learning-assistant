@@ -192,6 +192,7 @@ function isDirectory(value: unknown): value is ProjectDirectory {
 
 function isProject(value: unknown): value is CodeProject {
   return isRecord(value) && nonempty(value.id) && nonempty(value.name)
+    && (value.archived === undefined || value.archived === true)
     && typeof value.repositoryUrl === 'string' && normalizeRepositoryUrl(value.repositoryUrl) === value.repositoryUrl
     && typeof value.tutorialUrl === 'string' && normalizeTutorialUrl(value.tutorialUrl) === value.tutorialUrl
     && (value.directory === undefined || isDirectory(value.directory));
@@ -231,6 +232,7 @@ export function validateProjectCode(value: unknown): StoredProjectCodeData {
   if (!isRecord(trash) || !Array.isArray(trash.versions) || !trash.versions.every(isTrashedVersion)
     || !Array.isArray(trash.links) || !trash.links.every(isLink)) throw new Error('代码版本回收站数据格式不正确。');
   const projectIds = new Set(value.projects.map((project) => project.id));
+  const archivedProjects = new Set(value.projects.filter((project) => project.archived).map((project) => project.id));
   const versionIds = new Set(value.versions.map((version) => version.id));
   const trashedIds = new Set(trash.versions.map((version) => version.id));
   const versions = [...value.versions, ...trash.versions];
@@ -238,6 +240,7 @@ export function validateProjectCode(value: unknown): StoredProjectCodeData {
   const linkKeys = new Set(links.map((link) => JSON.stringify([link.versionId, codeTargetKey(link.target)])));
   if (projectIds.size !== value.projects.length || new Set([...versionIds, ...trashedIds]).size !== versions.length
     || linkKeys.size !== links.length || versions.some((version) => !projectIds.has(version.projectId))
+    || value.versions.some((version) => archivedProjects.has(version.projectId))
     || value.links.some((link) => !versionIds.has(link.versionId)) || trash.links.some((link) => !trashedIds.has(link.versionId))) {
     throw new Error('项目代码数据中存在重复或无效的关联。');
   }

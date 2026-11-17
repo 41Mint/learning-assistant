@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { isImportableScript, previewProjectDirectory, projectDirectoryPaths, readDirectoryScripts } from '../../utils/projectDirectory';
-import FocusEditor from '../common/FocusEditor';
 import ProjectDirectoryTree from './ProjectDirectoryTree';
 
 export default function ProjectDirectoryImport({ initialProjectId = '', onCancel, onSaved }: {
@@ -9,7 +8,7 @@ export default function ProjectDirectoryImport({ initialProjectId = '', onCancel
   onCancel: () => void;
   onSaved: (result: { projectId: string; added: number; reused: number }) => void;
 }) {
-  const projects = useProjectCodeStore((state) => state.data.projects);
+  const projects = useProjectCodeStore((state) => state.data.projects).filter((project) => !project.archived);
   const importDirectory = useProjectCodeStore((state) => state.importDirectory);
   const [projectId, setProjectId] = useState(initialProjectId);
   const [name, setName] = useState('');
@@ -18,12 +17,9 @@ export default function ProjectDirectoryImport({ initialProjectId = '', onCancel
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const files = useMemo(() => preview ? [...preview.byPath.keys()].sort() : [], [preview]);
+  const paths = useMemo(() => projectDirectoryPaths(files), [files]);
   const previous = projects.find((project) => project.id === projectId)?.directory;
-  const lostNotes = useMemo(() => {
-    if (!preview || !previous?.notes.length) return 0;
-    const paths = projectDirectoryPaths(files);
-    return previous.notes.filter(({ path }) => !paths.has(path)).length;
-  }, [preview, previous, files]);
+  const lostNotes = previous?.notes.filter(({ path }) => !paths.has(path)).length ?? 0;
 
   const choose = (selection: FileList | null) => {
     if (!selection?.length) return;
@@ -57,10 +53,13 @@ export default function ProjectDirectoryImport({ initialProjectId = '', onCancel
     setSelected(next);
   };
 
-  return <FocusEditor title="导入项目目录" formLabel="导入项目目录" saveLabel="保存目录快照" cancelLabel="取消"
-    description="选择项目根目录，预览结构，再勾选要保存正文的 .cs 脚本。"
-    saveDisabled={!preview || (!projectId && !name.trim())} busy={busy} error={error} onSave={() => void save()} onCancel={onCancel}>
+  return <form className="project-directory-import" aria-label="导入项目目录" onSubmit={(event) => {
+    event.preventDefault();
+    void save();
+  }}>
     <fieldset disabled={busy} className="project-directory-fields">
+      <legend>导入项目目录</legend>
+      <p className="code-muted">选择项目根目录，预览结构，再勾选要保存正文的 .cs 脚本。</p>
       <div className="code-form">
         <label>本地项目文件夹
           <input type="file" ref={(input) => { if (input) input.webkitdirectory = true; }} onChange={(event) => {
@@ -93,6 +92,13 @@ export default function ProjectDirectoryImport({ initialProjectId = '', onCancel
           </label>;
         }} />
       </>}
+      {error && <p role="alert">{error}</p>}
+      <div className="code-actions">
+        <button type="submit" className="note-button" disabled={!preview || (!projectId && !name.trim())}>
+          {busy ? '保存中…' : '保存目录快照'}
+        </button>
+        <button type="button" className="note-button secondary" onClick={onCancel}>取消</button>
+      </div>
     </fieldset>
-  </FocusEditor>;
+  </form>;
 }

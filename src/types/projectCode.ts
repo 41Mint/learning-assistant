@@ -12,6 +12,7 @@ export interface CodeProject {
   tutorialUrl: string;
   repositoryUrl: string;
   directory?: ProjectDirectory;
+  archived?: true;
 }
 
 export interface CodeVersion {

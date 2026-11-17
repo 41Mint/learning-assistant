@@ -323,7 +323,17 @@ test('项目目录预览、批量保存、职责说明、日志回链与备份�
     return readProjectCode();
   }) as Promise<ProjectCodeData>;
   const save = importer.getByRole('button', { name: '保存目录快照' });
-  await page.getByRole('button', { name: '导入项目目录', exact: true }).click();
+  const addVersion = page.getByRole('button', { name: '添加代码版本', exact: true });
+  const importDirectory = page.getByRole('button', { name: '导入项目目录', exact: true });
+  const versionForm = page.getByRole('form', { name: '保存代码版本' });
+  await addVersion.click();
+  await expect(addVersion).toHaveAttribute('aria-expanded', 'true');
+  await versionForm.getByRole('button', { name: '取消' }).click();
+  await expect(addVersion).toBeFocused();
+  await importDirectory.click();
+  await expect(page).toHaveURL(/\/#code$/);
+  await expect(importDirectory).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByText('还没有项目。', { exact: false })).toBeVisible();
   await chooseDirectory();
   await expect(importer.getByLabel('项目名称')).toHaveValue('打地鼠项目');
   await expect(tree.getByText('Library', { exact: true })).toHaveCount(0);
@@ -393,6 +403,7 @@ test('项目目录预览、批量保存、职责说明、日志回链与备份�
   await page.goto('/#code');
 
   await project.getByRole('button', { name: '更新目录快照' }).click();
+  await expect(project.getByRole('form', { name: '导入项目目录' })).toBeVisible();
   await chooseDirectory();
   await script.check();
   await tree.getByRole('checkbox', { name: '保存脚本 Assets/Scripts/Mole.cs' }).check();
@@ -435,6 +446,72 @@ test('项目目录预览、批量保存、职责说明、日志回链与备份�
   } finally {
     await context.close();
   }
+});
+
+test('删除没有在用版本的项目，回收站可恢复项目或彻底清理它', async ({ page }) => {
+  await seedStudyContext(page);
+  await page.goto('/#code');
+  const versionId = await page.evaluate(async ({ script, content }) => {
+    const { useProjectCodeStore } = await import('/src/store/projectCodeStore.ts');
+    const code = useProjectCodeStore.getState();
+    const { projectId } = await code.importDirectory({
+      project: { name: '归档目录项目', tutorialUrl: '', repositoryUrl: '' },
+      files: [script], scripts: [{ path: script, content }],
+    });
+    const versionId = useProjectCodeStore.getState().data.versions[0].id;
+    await code.saveDirectoryNote(projectId, script, '输入处理');
+    await code.linkVersion(versionId, { kind: 'log', id: 'code-log' });
+    return versionId;
+  }, { script: scriptPath, content: firstContent });
+
+  const project = page.getByRole('article', { name: '归档目录项目' });
+  const deleteProject = project.getByRole('button', { name: '删除项目', exact: true });
+  await expect(project).toBeVisible();
+  await expect(deleteProject).toHaveCount(0);
+  const trashVersion = async () => {
+    await page.goto('/#code/' + versionId);
+    await page.getByRole('button', { name: '删除代码版本' }).click();
+    await page.getByRole('button', { name: '移入回收站' }).click();
+    await expect(deleteProject).toBeVisible();
+  };
+  const dialog = page.getByRole('dialog', { name: '删除项目', exact: true });
+  await trashVersion();
+  await deleteProject.click();
+  await expect(dialog).toContainText('回收站中的 1 个代码版本仍可恢复');
+  await dialog.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(project).toBeVisible();
+  await deleteProject.click();
+  await dialog.getByRole('button', { name: '确认删除' }).click();
+  await expect(project).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByText('还没有项目。', { exact: false })).toBeVisible();
+
+  await page.getByRole('button', { name: '导入项目目录', exact: true }).click();
+  const importer = page.getByRole('form', { name: '导入项目目录' });
+  await expect(importer.getByLabel('保存到')).toHaveCount(0);
+  await importer.getByRole('button', { name: '取消', exact: true }).click();
+  await page.goto('/#data?trash=code');
+  const bin = page.getByRole('region', { name: '回收站' });
+  await expect(bin.getByRole('listitem')).toContainText('归档目录项目');
+  await bin.getByRole('button', { name: '恢复代码版本' }).click();
+  await page.getByRole('button', { name: '确认恢复' }).click();
+  await bin.getByRole('link', { name: scriptPath }).click();
+  await expect(page.getByRole('link', { name: /学习日志 ·/ })).toHaveAttribute('href', '#history/' + firstDate);
+  await page.goto('/#code');
+  await expect(project.getByText('目录快照（1 个文件）')).toBeVisible();
+
+  await trashVersion();
+  await deleteProject.click();
+  await dialog.getByRole('button', { name: '确认删除' }).click();
+  await page.goto('/#data?trash=code');
+  await bin.getByRole('button', { name: '彻底删除' }).click();
+  await page.getByRole('button', { name: '确认彻底删除' }).click();
+  await expect(bin.getByRole('listitem')).toHaveCount(0);
+  const backup = await downloadBackup(page);
+  expect(backup.data.projectCode.projects).toHaveLength(0);
+  expect(backup.data.projectCode.trash.versions).toHaveLength(0);
+  expect(backup.data.projectCode.trash.links).toHaveLength(0);
+  expect(backup.data.studyLogs.map(({ id }: { id: string }) => id)).toContain('code-log');
 });
 
 test('同名脚本分版本保存，日志、词条与两次实践打开对应版本', async ({ page }) => {

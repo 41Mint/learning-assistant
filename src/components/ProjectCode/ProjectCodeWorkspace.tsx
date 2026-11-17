@@ -1,25 +1,35 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { recycleBinHref, useWorkspaceStore } from '../../store/workspaceStore';
 import type { CodeProject, CodeVersion } from '../../types/projectCode';
 import { codeVersionHref, codeVersionSource } from '../../utils/projectCode';
+import WorkspaceDialog from '../common/WorkspaceDialog';
+import CodeFormReveal from './CodeFormReveal';
 import CodeVersionDetail from './CodeVersionDetail';
 import CodeVersionForm from './CodeVersionForm';
 import ProjectDirectoryImport from './ProjectDirectoryImport';
 import ProjectDirectoryView from './ProjectDirectoryView';
 
-function ProjectCard({ project, versions, trashedCount, importStatus, onImport }: {
+type DirectoryImportResult = { projectId: string; added: number; reused: number };
+
+function ProjectCard({ project, versions, trashedCount, importStatus, importing, formOpen, onImport, onCancelImport, onImported }: {
   project: CodeProject;
   versions: CodeVersion[];
   trashedCount: number;
   importStatus?: string;
+  importing: boolean;
+  formOpen: boolean;
   onImport: () => void;
+  onCancelImport: () => void;
+  onImported: (result: DirectoryImportResult) => void;
 }) {
   const { saveProject, deleteProject } = useProjectCodeStore();
   const [draft, setDraft] = useState<CodeProject | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const importButton = useRef<HTMLButtonElement>(null);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -36,18 +46,6 @@ function ProjectCard({ project, versions, trashedCount, importStatus, onImport }
     }
   };
 
-  const remove = async () => {
-    if (!window.confirm(project.directory ? '确定删除这个项目及其目录快照和职责说明？' : '确定删除这个空项目？')) return;
-    setBusy(true);
-    try {
-      await deleteProject(project.id);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '删除失败，请重试。');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <article className="module-card code-project" aria-label={project.name}>
       <h3>{project.name}</h3>
@@ -55,19 +53,29 @@ function ProjectCard({ project, versions, trashedCount, importStatus, onImport }
       <div className="code-actions">
         {project.repositoryUrl && <a href={project.repositoryUrl} target="_blank" rel="noreferrer">打开 GitHub 仓库</a>}
         {project.tutorialUrl && <a href={project.tutorialUrl} target="_blank" rel="noreferrer">打开教程来源</a>}
-        {!draft && <button type="button" className="knowledge-text-button" disabled={busy} onClick={onImport}>
+        {!draft && <button ref={importButton} type="button" className="knowledge-text-button" aria-expanded={importing}
+          disabled={busy || formOpen} onClick={onImport}>
           {project.directory ? '更新目录快照' : '导入目录'}
         </button>}
-        {!draft && <button type="button" className="knowledge-text-button" disabled={busy} onClick={() => {
+        {!draft && <button type="button" className="knowledge-text-button" disabled={busy || formOpen} onClick={() => {
           setDraft(project);
           setMessage('');
         }}>编辑项目资料</button>}
-        {versions.length === 0 && trashedCount === 0 && !draft && (
-          <button type="button" className="knowledge-text-button danger" disabled={busy} onClick={() => void remove()}>
-            {project.directory ? '删除项目' : '删除空项目'}
+        {versions.length === 0 && !draft && (
+          <button type="button" className="knowledge-text-button danger" disabled={busy || formOpen} onClick={() => setConfirmDelete(true)}>
+            删除项目
           </button>
         )}
       </div>
+      <CodeFormReveal open={importing} trigger={importButton}>
+        <ProjectDirectoryImport initialProjectId={project.id} onCancel={onCancelImport} onSaved={onImported} />
+      </CodeFormReveal>
+      {confirmDelete && <WorkspaceDialog title="删除项目" action="确认删除" destructive
+        onSave={() => deleteProject(project.id)} onClose={() => setConfirmDelete(false)}>
+        <p>确定从项目列表删除「{project.name}」？</p>
+        {trashedCount > 0 ? <p>回收站中的 {trashedCount} 个代码版本仍可恢复。恢复任一版本时，项目{project.directory ? '及目录快照' : ''}也会回到列表。</p>
+          : project.directory && <p>已保存的目录快照和职责说明也会被删除，此操作无法撤销。</p>}
+      </WorkspaceDialog>}
       {trashedCount > 0 && <p className="code-muted">此项目有 {trashedCount} 个代码版本在<a href={recycleBinHref('code')}>回收站</a>。</p>}
       {draft && (
         <form className="code-form" aria-label="编辑项目资料" onSubmit={submit}>
@@ -107,11 +115,21 @@ function ProjectCard({ project, versions, trashedCount, importStatus, onImport }
 export default function ProjectCodeWorkspace({ adding, setAdding }: { adding: boolean; setAdding: (adding: boolean) => void }) {
   const { data, isLoaded, error, load } = useProjectCodeStore();
   const versionId = useWorkspaceStore((state) => state.codeVersionId);
-  const [directoryImport, setDirectoryImport] = useState<{ projectId?: string } | null>(null);
-  const [importResult, setImportResult] = useState<{ projectId: string; added: number; reused: number } | null>(null);
+  const [directoryProjectId, setDirectoryProjectId] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<DirectoryImportResult | null>(null);
+  const addButton = useRef<HTMLButtonElement>(null);
+  const importButton = useRef<HTMLButtonElement>(null);
   const version = data.versions.find((item) => item.id === versionId);
   const archived = data.trash.versions.some((item) => item.id === versionId);
   const project = version && data.projects.find((item) => item.id === version.projectId);
+  const projects = data.projects.filter((item) => !item.archived);
+  const importing = directoryProjectId !== null;
+  const formOpen = adding || importing;
+  const cancelImport = () => setDirectoryProjectId(null);
+  const finishImport = (result: DirectoryImportResult) => {
+    setImportResult(result);
+    cancelImport();
+  };
 
   useEffect(() => { void load(); }, [load]);
 
@@ -126,32 +144,37 @@ export default function ProjectCodeWorkspace({ adding, setAdding }: { adding: bo
         <p className="code-muted">按项目回看保存的脚本版本和引用它们的学习记录。</p>
         {!isLoaded && <p>正在读取项目代码…</p>}
         {error && <p role="alert">{error}</p>}
-        {isLoaded && !error && !versionId && !adding && !directoryImport && <div className="code-actions">
-          <button type="button" className="note-button" onClick={() => setAdding(true)}>添加代码版本</button>
-          <button type="button" className="note-button secondary" onClick={() => setDirectoryImport({})}>导入项目目录</button>
-        </div>}
-        {!versionId && adding && !directoryImport && (
-          <CodeVersionForm onCancel={() => setAdding(false)} onSaved={(id) => {
-            setAdding(false);
-            window.location.hash = codeVersionHref(id);
-          }} />
-        )}
-        {!versionId && directoryImport && <ProjectDirectoryImport initialProjectId={directoryImport.projectId}
-          onCancel={() => setDirectoryImport(null)}
-          onSaved={(result) => { setImportResult(result); setDirectoryImport(null); }} />}
+        {isLoaded && !error && !versionId && <>
+          <div className="code-actions">
+            <button ref={addButton} type="button" className="note-button" aria-expanded={adding && !importing}
+              disabled={formOpen} onClick={() => setAdding(true)}>添加代码版本</button>
+            <button ref={importButton} type="button" className="note-button secondary" aria-expanded={directoryProjectId === ''}
+              disabled={formOpen} onClick={() => setDirectoryProjectId('')}>导入项目目录</button>
+          </div>
+          <CodeFormReveal open={adding && !importing} trigger={addButton}>
+            <CodeVersionForm onCancel={() => setAdding(false)} onSaved={(id) => {
+              setAdding(false);
+              window.location.hash = codeVersionHref(id);
+            }} />
+          </CodeFormReveal>
+          <CodeFormReveal open={directoryProjectId === ''} trigger={importButton}>
+            <ProjectDirectoryImport onCancel={cancelImport} onSaved={finishImport} />
+          </CodeFormReveal>
+        </>}
       </section>
       {isLoaded && !error && (
         versionId ? (
           version && project ? <CodeVersionDetail key={version.id} version={version} project={project} />
             : archived ? <p className="module-card">代码版本已移入回收站。 <a href={recycleBinHref('code')}>打开回收站</a></p>
               : <p className="module-card">未找到这个代码版本。<a href="#code">查看所有项目</a></p>
-        ) : !directoryImport && (
+        ) : (
           <>
-            {data.projects.length === 0 && <p className="module-card">还没有项目。导入目录或保存代码版本时可以创建项目。</p>}
-            {data.projects.map((project) => (
+            {projects.length === 0 && <p className="module-card">还没有项目。导入目录或保存代码版本时可以创建项目。</p>}
+            {projects.map((project) => (
               <ProjectCard key={project.id} project={project}
                 trashedCount={data.trash.versions.filter((item) => item.projectId === project.id).length}
-                onImport={() => setDirectoryImport({ projectId: project.id })}
+                importing={directoryProjectId === project.id} formOpen={formOpen}
+                onImport={() => setDirectoryProjectId(project.id)} onCancelImport={cancelImport} onImported={finishImport}
                 importStatus={importResult?.projectId === project.id ? `目录快照已保存 · 新增 ${importResult.added} 个代码版本 · 复用 ${importResult.reused} 个已有版本` : undefined}
                 versions={data.versions.filter((item) => item.projectId === project.id).reverse()} />
             ))}
