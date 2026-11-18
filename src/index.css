@@ -150,6 +150,7 @@ body {
   --app-muted: #64748b;
   --app-border: #dce3ec;
   --app-accent: #2563eb;
+  --app-focus-glow: color-mix(in srgb, var(--app-accent) 20%, transparent);
   --app-active: #eff6ff;
   --app-accent-text: #1d4ed8;
   --app-danger: #b91c1c;
@@ -177,7 +178,6 @@ body { display: block; min-width: 320px; }
 #root { max-width: none; width: 100%; margin: 0; padding: 0; }
 button, input, textarea, select { font: inherit; }
 button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; }
-:focus-visible { outline: 3px solid #60a5fa; outline-offset: 3px; }
 .app-shell { --app-rail-width: 58px; --app-header-height: 56px; }
 .app-content { max-width: 1240px; margin-inline: auto; min-width: 0; padding: 22px clamp(16px, 2.5vw, 36px) 36px; }
 .test-workspace-banner {
@@ -223,7 +223,6 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
   background: var(--app-surface); border-bottom: 1px solid var(--app-border);
 }
 .app-brand { flex: none; width: var(--app-rail-width); min-height: calc(var(--app-header-height) - 1px); display: grid; place-items: center; }
-.app-brand:focus-visible { outline-offset: -4px; }
 .app-header h1 { font-size: 16px; margin: 0; font-weight: 700; }
 .app-header .session-status { margin-inline-start: auto; }
 .app-navigation {
@@ -264,7 +263,6 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
     opacity: 1; visibility: visible; transition-delay: 0s;
   }
   .app-navigation:is(:hover:not([data-dismissed]), :has(:focus-visible)) { width: 192px; box-shadow: 8px 0 22px #0f172a40; }
-  .app-navigation :focus-visible { outline-offset: -3px; }
   .app-growth-links a { padding-inline: 5px; }
 }
 .open-resource-search { min-width: 44px; padding: 4px 10px; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-bg); color: var(--app-text); cursor: pointer; font-size: 13px; font-weight: 600; }
@@ -819,7 +817,7 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .log-focus-card, .knowledge-workspace[data-editing] > .knowledge-detail { max-width: 1120px; margin-inline: auto; }
 .focus-editor-heading { margin-bottom: 14px; }
 .focus-editor-heading h2 { margin-bottom: 4px; scroll-margin-top: 84px; }
-.focus-editor-heading h2:focus { outline: none; }
+.focus-editor-heading h2:focus { outline: none; box-shadow: none; }
 .focus-editor-heading p { margin: 0; color: var(--app-muted); font-size: 14px; }
 .growth-attachments { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--app-border); }
 .growth-attachments h3 { margin: 0; }
@@ -923,7 +921,6 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
   position: absolute; right: 0; bottom: 0; display: grid; place-items: center; width: 24px; height: 24px;
   border: 0; border-start-start-radius: 6px; background: var(--app-bg); color: var(--app-muted); cursor: nwse-resize; touch-action: none;
 }
-.assistant-resize:focus-visible { outline-offset: -3px; }
 .assistant-growth-suggestions { display: grid; gap: 10px; font-size: 14px; }
 .assistant-growth-suggestions :is(p, h3, .growth-field) { margin: 0; }
 .assistant-growth-suggestions .growth-recommend-form, .assistant-growth-cards { display: grid; gap: 10px; }
@@ -1093,7 +1090,7 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .relation-edge:hover, .relation-edge[aria-pressed="true"] { border-color: var(--app-accent); background: var(--app-active); }
 .relation-details { min-width: 0; padding: 14px; border: 1px solid var(--app-border); border-radius: 10px; scroll-margin-top: 82px; }
 .relation-details h3 { margin: 0 0 10px; }
-.relation-details h3:focus { outline: none; }
+.relation-details h3:focus { outline: none; box-shadow: none; }
 .relation-endpoints { display: grid; gap: 6px; margin-bottom: 10px; }
 .relation-endpoints > div { display: grid; gap: 2px; border-left: 3px solid var(--relation-tone); padding: 4px 8px; background: var(--app-bg); }
 .relation-endpoints strong { font-size: 13px; overflow-wrap: anywhere; }
@@ -1155,7 +1152,6 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .workspace-context-menu { z-index: 7; padding: 4px; min-width: 120px; }
 .workspace-context-menu-title { max-width: 144px; padding: 4px 9px; color: var(--app-muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .workspace-context-menu button { width: 100%; border: 0; padding: 7px 9px; border-radius: 5px; color: var(--app-text); background: transparent; text-align: left; cursor: pointer; }
-.workspace-context-menu button:focus-visible { outline: 1px solid var(--app-accent); outline-offset: -2px; }
 .network-context-menu { max-width: calc(100% - 8px); max-height: calc(100% - 8px); overflow: auto; }
 .network-context-menu button:disabled { color: var(--app-muted); opacity: 0.55; cursor: default; }
 .network-menu-check { display: inline-block; width: 1.15em; color: var(--app-accent-text); }
@@ -1175,6 +1171,7 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 }
 .app-shell[data-test-workspace] { --network-header-height: 425px; }
 .network-viewport:active { cursor: grabbing; }
+.network-sidebar .knowledge-directory summary { border-radius: 7px; }
 .network-board { position: absolute; inset: 0 auto auto 0; transform-origin: top left; }
 .network-group { position: absolute; border: 1px solid var(--app-border); border-radius: 11px; background: var(--app-bg); padding: 7px 15px; color: var(--app-muted); }
 .network-module-handle {
@@ -1261,10 +1258,15 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .growth-practices > li[data-practice-focus] {
   border-top-color: var(--app-accent); padding-inline: 8px; background: var(--app-bg);
 }
-.growth-practices > li[data-practice-focus]:focus { outline: none; }
+.growth-practices > li[data-practice-focus]:focus { outline: none; box-shadow: none; }
+
+:focus-visible {
+  outline: 1px solid var(--app-accent); outline-offset: -1px;
+  box-shadow: inset 0 0 0 2px var(--app-focus-glow);
+}
 
 /* Apply the shared focus border after component border shorthands. */
 :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="button"], [type="submit"], [type="reset"], [type="image"]), textarea, select):focus {
   outline: 2px solid transparent; outline-offset: 1px; border-color: var(--app-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-accent) 20%, transparent);
+  box-shadow: 0 0 0 2px var(--app-focus-glow);
 }

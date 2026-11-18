@@ -381,12 +381,8 @@ test('节点右键菜单可返回词条目录、打开原词条和查看关系',
   await expect(page).toHaveURL(/#knowledge\/ppu$/);
 });
 
-test('全屏保留画布操作，拖动节点可复位，空白处可新建同分类词条', async ({ page }, testInfo) => {
-  await seedNetwork(page);
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.emulateMedia({ colorScheme: 'dark' });
-  await page.goto('/#network');
-  const supportsKeyboardLock = await page.evaluate(() => {
+function watchKeyboardLock(page: Page) {
+  return page.evaluate(() => {
     const keyboard = (navigator as Navigator & {
       keyboard?: { lock: (codes: string[]) => Promise<void>; unlock: () => void };
     }).keyboard;
@@ -404,6 +400,65 @@ test('全屏保留画布操作，拖动节点可复位，空白处可新建同�
     };
     return true;
   });
+}
+
+test('全屏退出和 Shift 点画布使用细边框，键盘导航仍能辨认焦点', async ({ page }) => {
+  await seedNetwork(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/#network');
+  const fullscreen = page.getByRole('button', { name: '全屏画布', exact: true });
+  const graph = page.getByRole('group', { name: '知识网络图', exact: true });
+  const category = page.getByRole('complementary', { name: '知识网络详情' }).locator('summary').filter({ hasText: /^渲染（/ });
+  const expectFocusStyle = async (control: Locator) => {
+    await expect(control).toBeFocused();
+    await expect(control).toHaveCSS('outline-width', '1px');
+    await expect(control).toHaveCSS('outline-offset', '-1px');
+    await expect(control).toHaveCSS('box-shadow', /0px 0px 0px 2px inset/);
+  };
+  await fullscreen.focus();
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  await expectFocusStyle(fullscreen);
+  await graph.click({ position: { x: 12, y: 12 }, modifiers: ['Shift'] });
+  await expectFocusStyle(graph);
+
+  if (!(await watchKeyboardLock(page))) return;
+  const enterFullscreen = async () => {
+    await fullscreen.click();
+    await expect(page.locator('html')).toHaveAttribute('data-test-locked-keys', 'Escape');
+  };
+  const exitFullscreen = async () => {
+    await page.keyboard.press('Escape');
+    await expect(fullscreen).toBeVisible();
+    await expect(page.locator('html')).not.toHaveAttribute('data-test-locked-keys', 'Escape');
+  };
+  await enterFullscreen();
+  await exitFullscreen();
+  await expectFocusStyle(fullscreen);
+
+  await enterFullscreen();
+  await category.click();
+  await expect(category.locator('..')).toHaveJSProperty('open', true);
+  await exitFullscreen();
+  await expectFocusStyle(category);
+
+  await enterFullscreen();
+  const area = (await graph.boundingBox())!;
+  await page.mouse.move(area.x + 12, area.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(area.x + 64, area.y + 40, { steps: 6 });
+  await page.mouse.up();
+  await exitFullscreen();
+  await expectFocusStyle(graph);
+});
+
+test('全屏保留画布操作，拖动节点可复位，空白处可新建同分类词条', async ({ page }, testInfo) => {
+  await seedNetwork(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/#network');
+  const supportsKeyboardLock = await watchKeyboardLock(page);
   const graph = page.getByRole('group', { name: '知识网络图', exact: true });
   const height = await graph.evaluate((element) => element.clientHeight);
   await page.getByRole('button', { name: '全屏画布', exact: true }).click();

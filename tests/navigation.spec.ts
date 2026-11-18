@@ -112,6 +112,7 @@ test('窄屏六个入口可操作，页面无横向溢出', async ({ page }, tes
   await page.screenshot({ path: testInfo.outputPath('mobile-menu.png') });
   await nav.getByRole('link', { name: '历史回顾', exact: true }).press('Escape');
   await expect(menu).toBeFocused();
+  await expect(menu).toHaveCSS('outline-width', '1px');
   await expect(nav.getByRole('link')).toHaveCount(0);
   await menu.click();
   await nav.getByRole('button', { name: '关闭页面菜单', exact: true }).click({ position: { x: 370, y: 300 } });
@@ -154,6 +155,14 @@ test('贴左图标侧栏悬停覆盖展开，子页支持刷新和历史记录',
   await page.keyboard.press('Tab');
   await expect(group.getByText('项目代码')).toBeVisible();
   const topics = nav.getByRole('link', { name: '参考路径与任务', exact: true });
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await expect(topics).toBeFocused();
+  await expect(topics).toHaveCSS('outline-width', '1px');
+  await expect(topics).toHaveCSS('outline-offset', '-1px');
+  await expect(topics).toHaveCSS('box-shadow', /0px 0px 0px 2px inset/);
+  await page.keyboard.press('Shift+Tab');
+  await expect(growth).toBeFocused();
   await topics.click();
   await expect(page).toHaveURL(/#path\/topics$/);
   await expect(group.getByText('参考路径与任务')).toBeHidden();
