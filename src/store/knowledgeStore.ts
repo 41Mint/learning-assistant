@@ -4,6 +4,7 @@ import type { RelationAnnotation } from '../types/relations';
 import type { CodeLink } from '../types/projectCode';
 import type { LogReviewSuggestion } from '../types/logReview';
 import { emptyKnowledge, entryNames, normalizedName, otherEntryId, validateKnowledge } from '../utils/knowledge';
+import { citeGeneratedEntry } from '../utils/knowledgeLogCitation';
 import { entryCodeIds } from '../utils/projectCode';
 import { cleanRelationAnnotation } from '../utils/relationAnnotation';
 import { generateId, STORAGE_KEYS } from '../utils/storage';
@@ -230,7 +231,8 @@ export const useKnowledgeStore = create<KnowledgeStore>((set, get) => {
           entryId = generateId();
           names.set(normalizedName(title), entryId);
           const now = Date.now();
-          created.push({ id: entryId, title, category: suggestion.category.trim(), content: suggestion.content.trim(), aliases: [], createdAt: now, updatedAt: now });
+          const entryContent = citeGeneratedEntry(suggestion.content, logId, suggestion.citationAnchor, suggestion.evidence);
+          created.push({ id: entryId, title, category: suggestion.category.trim(), content: entryContent, aliases: [], createdAt: now, updatedAt: now });
         } else {
           entryId = suggestion.entryId;
           if (!entryIds.has(entryId)) throw new Error('所选关联的词条已不存在，请重新获取建议。');

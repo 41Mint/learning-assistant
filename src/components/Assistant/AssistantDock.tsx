@@ -2,14 +2,18 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { PointerEvent, ReactNode } from 'react';
 import type { GrowthDomain, SavedExercise, StudyLog } from '../../types';
 import { useGrowthStore } from '../../store/growthStore';
+import { useStudyLogStore } from '../../store/studyLogStore';
+import { useKnowledgeStore } from '../../store/knowledgeStore';
 import { getStorageItem, setStorageItem } from '../../utils/storage';
 import { STORAGE_PREFIX } from '../../utils/workspaceMode';
 import AssistantChat from './AssistantChat';
+import type { AssistantToolInput } from './AssistantChat';
 import AssistantReviewPicker from './AssistantReviewPicker';
 import AssistantSearch from './AssistantSearch';
 import AssistantPractice from './AssistantPractice';
 import AssistantCodePicker from './AssistantCodePicker';
 import GrowthSuggestions from './GrowthSuggestions';
+import LogReviewPanel from '../StudyLog/LogReviewPanel';
 import type { AssistantStart } from './AssistantGuide';
 import type { AssistantAction } from './assistantActions';
 import type { SearchScope } from '../Search/ResourceSearch';
@@ -27,10 +31,9 @@ const modes = [
   ['chat', '自由问答'], ['review', '日志整理'], ['search', '查找资料'], ['practice', '回看实践'], ['recommend', '推荐练习'],
 ] as const;
 
-export default function AssistantDock({ activePage, activeLog, onOpenReview, onStart, onRecordRecommendation, editingGrowth, children }: {
+export default function AssistantDock({ activePage, activeLog, onStart, onRecordRecommendation, editingGrowth, children }: {
   activePage: string;
   activeLog?: { kind: AssistantLogKind; log: StudyLog; editing: boolean };
-  onOpenReview: (log: StudyLog) => string | undefined;
   onStart: (page: AssistantStart) => void;
   onRecordRecommendation: (item: SavedExercise) => void;
   editingGrowth: boolean;
@@ -44,11 +47,16 @@ export default function AssistantDock({ activePage, activeLog, onOpenReview, onS
   const [mode, setMode] = useState<typeof modes[number][0]>();
   const [choosingLog, setChoosingLog] = useState(false);
   const [dateQuery, setDateQuery] = useState('');
+  const [reviewId, setReviewId] = useState<string>();
+  const [recentReviews, setRecentReviews] = useState<string[]>([]);
+  const [reviewFocus, setReviewFocus] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchScope, setSearchScope] = useState<SearchScope>('all');
   const [practiceQuery, setPracticeQuery] = useState('');
   const [practiceRequest, setPracticeRequest] = useState(0);
   const [recommendationDomain, setRecommendationDomain] = useState<GrowthDomain | ''>('');
+  const [recommendationFocus, setRecommendationFocus] = useState('');
+  const logs = useStudyLogStore((state) => state.logs);
   const growthLoaded = useGrowthStore((state) => state.isLoaded);
   const growthError = useGrowthStore((state) => state.error);
   const [codeExcerpt, setCodeExcerpt] = useState<AssistantCodeReference>();
@@ -75,7 +83,13 @@ export default function AssistantDock({ activePage, activeLog, onOpenReview, onS
 
   const editingLog = activeLog?.editing ? activeLog : undefined;
   const tab = mode ?? (editingLog ? 'review' : 'chat');
-  const showPicker = !editingLog || choosingLog;
+  const reviewTargetId = reviewId ?? editingLog?.log.id;
+  const reviewKind = (['today', 'history'] as const).find((kind) => reviewTargetId && drafts[kind]?.id === reviewTargetId);
+  const savedReview = logs.find(({ id }) => id === reviewTargetId);
+  const reviewTarget = (reviewKind && drafts[reviewKind]) || savedReview;
+  const showPicker = !reviewTarget || choosingLog;
+  const savedReviewForm = (id: string) => 'assistant-review-saved-' + encodeURIComponent(id);
+  const reviewLogs = logs.filter(({ id }) => recentReviews.includes(id) || id === savedReview?.id);
   const draft = editingLog && drafts[editingLog.kind];
   const source = activeLog && {
     id: activeLog.log.id, date: activeLog.log.date,
@@ -123,8 +137,8 @@ export default function AssistantDock({ activePage, activeLog, onOpenReview, onS
     setMinimized(false);
     setOpen(true);
   }, []);
-  const slots = useMemo(() => ({ today, history, close, setLogDraft, askAboutCode, openGrowthRecommendations, askAboutGrowth }),
-    [today, history, close, setLogDraft, askAboutCode, openGrowthRecommendations, askAboutGrowth]);
+  const slots = useMemo(() => ({ today, history, close, reviewFocus, setLogDraft, askAboutCode, openGrowthRecommendations, askAboutGrowth }),
+    [today, history, close, reviewFocus, setLogDraft, askAboutCode, openGrowthRecommendations, askAboutGrowth]);
 
   useEffect(() => {
     const resize = () => {
@@ -192,14 +206,26 @@ export default function AssistantDock({ activePage, activeLog, onOpenReview, onS
   const dragHandlers = { onPointerMove: move, onPointerUp: finish, onPointerCancel: finish, onLostPointerCapture: finish };
   const launch = () => {
     if (open) { closeButton.current?.focus(); return; }
+    if (!mode && editingLog) {
+      setMode('review');
+      setReviewId(editingLog.log.id);
+    }
     setMinimized(false);
     setOpen(true);
   };
+  const chooseTool = (next: typeof tab) => {
+    if (next === 'review' && !reviewId && editingLog) setReviewId(editingLog.log.id);
+    if (next === 'chat') setPickingCode(false);
+    setMode(next);
+  };
+  const focusToolInput = () => window.requestAnimationFrame(() => {
+    dialog.current?.querySelector<HTMLTextAreaElement>('#assistant-input')?.focus({ preventScroll: true });
+  });
   const runAction = (action: AssistantAction) => {
     if (action.kind === 'recommend') {
       openGrowthRecommendations();
     } else if (action.kind === 'review') {
-      setMode('review');
+      chooseTool('review');
       setDateQuery(action.date);
       setChoosingLog(Boolean(action.date));
     } else if (action.kind === 'findEntry') {
@@ -214,11 +240,22 @@ export default function AssistantDock({ activePage, activeLog, onOpenReview, onS
       setMode('chat');
       setPickingCode(true);
     }
-    window.requestAnimationFrame(() => {
-      const input = dialog.current?.querySelector<HTMLElement>('.assistant-body:not([hidden]) input[type="search"]');
-      (input ?? dialog.current?.querySelector<HTMLElement>('.assistant-modes button[aria-pressed="true"]'))?.focus();
-    });
+    focusToolInput();
   };
+  let toolInput: AssistantToolInput | undefined;
+  if (tab === 'review') {
+    toolInput = showPicker
+      ? { label: '按日期找日志', placeholder: '例如 11-5 或 2026-11-05', value: dateQuery, onChange: setDateQuery, maxLength: 40 }
+      : { label: '整理范围（可选）', placeholder: '例如只整理 Tilemap 相关内容', value: reviewFocus, onChange: setReviewFocus,
+        maxLength: 200, formId: reviewKind ? `assistant-review-${reviewKind}` : savedReview ? savedReviewForm(savedReview.id) : undefined };
+  } else if (tab === 'search') {
+    toolInput = { label: '检索关键词', placeholder: '例如 PPU、Tilemap、InputManager.cs', value: searchQuery, onChange: setSearchQuery };
+  } else if (tab === 'practice') {
+    toolInput = { label: '查找实践', placeholder: '例如 角色移动、InputManager.cs', value: practiceQuery, onChange: setPracticeQuery };
+  } else if (tab === 'recommend') {
+    toolInput = { label: '练习偏好（可选）', placeholder: '例如只练 C#，不用打开 Unity', value: recommendationFocus,
+      onChange: setRecommendationFocus, maxLength: 180, formId: 'assistant-recommend-form' };
+  }
   const showMenu = (trigger: HTMLElement, fromLauncher: boolean, point?: Point) => {
     const box = trigger.getBoundingClientRect();
     const origin = fromLauncher ? undefined : dialog.current?.getBoundingClientRect();
@@ -328,46 +365,57 @@ export default function AssistantDock({ activePage, activeLog, onOpenReview, onS
         </header>
         <div className="assistant-modes" role="group" aria-label="智能体功能">
           {modes.map(([value, label]) => <button key={value} type="button" aria-pressed={tab === value}
-            onClick={() => setMode(value)}>{label}</button>)}
+            onClick={() => chooseTool(value)}>{label}</button>)}
         </div>
-        <div className="assistant-chat-host" hidden={tab !== 'chat' || pickingCode}>
-          <AssistantChat source={source} active={open && tab === 'chat' && !pickingCode} onAction={runAction}
+        <div className="assistant-chat-host">
+          <AssistantChat source={source} active={open} onAction={runAction}
             growthReference={growthReference} onRemoveGrowthReference={() => setGrowthReference(undefined)}
             codeExcerpt={codeExcerpt} onRemoveCode={() => setCodeExcerpt(undefined)} onPickCode={() => setPickingCode(true)}
             page={activePage} onStart={(page) => { minimize(); onStart(page); }} onTool={(tool) => {
               if (tool === 'code') setPickingCode(true);
-              else setMode(tool);
-            }} />
-        </div>
-        {tab === 'chat' && pickingCode && <div className="assistant-body">
-          <AssistantCodePicker current={codeExcerpt} onBack={() => setPickingCode(false)} onSelect={askAboutCode}
-            onImport={() => { setPickingCode(false); minimize(); onStart('code'); }} />
+              else { chooseTool(tool); focusToolInput(); }
+            }} toolKey={tab === 'chat' ? (pickingCode ? 'code' : undefined)
+              : tab === 'review' ? (showPicker ? 'review-picker' : `review-${reviewTargetId}`) : tab}
+            toolInput={toolInput} tools={<>
+        {pickingCode && <div className="assistant-tool-panel" hidden={tab !== 'chat'}>
+          <AssistantCodePicker current={codeExcerpt} onBack={() => setPickingCode(false)} onSelect={askAboutCode} />
         </div>}
-        <div className="assistant-body" hidden={tab !== 'review'}>
-          {editingLog && <div className="assistant-context">
-            <span className="knowledge-muted">当前日志 · {editingLog.log.date}</span>
+        <div className="assistant-tool-panel" hidden={tab !== 'review'}>
+          {reviewTarget && <div className="assistant-context">
+            <span className="knowledge-muted">{reviewKind ? '当前日志' : '整理日志'} · {reviewTarget.date}</span>
             <button type="button" className="knowledge-text-button" onClick={() => setChoosingLog(!choosingLog)}>
               {choosingLog ? '继续整理当前日志' : '选择其他日期'}
             </button>
           </div>}
-          {showPicker && tab === 'review' && <AssistantReviewPicker query={dateQuery} onQuery={setDateQuery} onSelect={(log) => {
-            const error = onOpenReview(log);
-            if (!error) setChoosingLog(false);
-            return error;
+          {editingLog && editingLog.log.id !== reviewTargetId && <button type="button" className="knowledge-text-button" onClick={() => {
+            setReviewId(editingLog.log.id);
+            setChoosingLog(false);
+          }}>整理当前草稿</button>}
+          {showPicker && <AssistantReviewPicker query={dateQuery} onSelect={(log) => {
+            setReviewId(log.id);
+            setRecentReviews((current) => [...current.filter((id) => id !== log.id), log.id].slice(-4));
+            setChoosingLog(false);
+            focusToolInput();
           }} />}
-          <div ref={setToday} hidden={showPicker || editingLog?.kind !== 'today'} />
-          <div ref={setHistory} hidden={showPicker || editingLog?.kind !== 'history'} />
+          <div ref={setToday} hidden={showPicker || reviewKind !== 'today'} />
+          <div ref={setHistory} hidden={showPicker || reviewKind !== 'history'} />
+          {reviewLogs.map((log) => <div key={log.id} hidden={showPicker || Boolean(reviewKind) || log.id !== reviewTargetId}>
+            <LogReviewPanel logId={log.id} content={log.content} formId={savedReviewForm(log.id)}
+              onApply={(suggestions, original) => useKnowledgeStore.getState().saveReviewedLog(log.id, original, original, suggestions)} />
+          </div>)}
         </div>
-        {tab === 'search' && <div className="assistant-body">
-          <AssistantSearch query={searchQuery} scope={searchScope} onQuery={setSearchQuery} onScope={setSearchScope} onNavigate={minimize} />
+        {tab === 'search' && <div className="assistant-tool-panel">
+          <AssistantSearch query={searchQuery} scope={searchScope} onScope={setSearchScope} onNavigate={minimize} />
         </div>}
-        <div className="assistant-body" hidden={tab !== 'practice'}>
-          <AssistantPractice key={practiceRequest} query={practiceQuery} onQuery={setPracticeQuery} onNavigate={minimize} active={open && tab === 'practice'} />
+        <div className="assistant-tool-panel" hidden={tab !== 'practice'}>
+          <AssistantPractice key={practiceRequest} query={practiceQuery} onNavigate={minimize} active={open && tab === 'practice'} />
         </div>
-        <div className="assistant-body" hidden={tab !== 'recommend'}>
-          <GrowthSuggestions domain={recommendationDomain} onDomain={setRecommendationDomain}
+        <div className="assistant-tool-panel" hidden={tab !== 'recommend'}>
+          <GrowthSuggestions domain={recommendationDomain} focus={recommendationFocus} onDomain={setRecommendationDomain}
             onNavigate={minimize} recordDisabledReason={editingGrowth ? '请先保存或取消正在编辑的卡片或实践。' : growthError || (!growthLoaded ? '正在加载成长记录…' : undefined)}
             onRecord={(item) => { minimize(); onRecordRecommendation(item); }} />
+        </div>
+        </>} />
         </div>
       </div>
       {!viewport.compact && <button type="button" className="assistant-resize" aria-label="调整智能体窗口大小"

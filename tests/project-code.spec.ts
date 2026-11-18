@@ -78,7 +78,7 @@ test('智能体从历史实践定位关联代码，确认目标后沿用番茄�
   const question = assistant.getByRole('textbox', { name: '输入问题' });
   await question.fill('上次我怎么实现点击目标的？');
   await question.press('Enter');
-  const query = assistant.getByRole('searchbox', { name: '查找实践' });
+  const query = assistant.getByRole('textbox', { name: '查找实践' });
   await expect(query).toHaveValue('点击目标');
   await expect(assistant.getByRole('button', { name: /点击目标时增加分数/ })).toHaveCount(2);
   await query.fill('没有这项成果');

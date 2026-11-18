@@ -62,6 +62,9 @@ export async function organizeLog(logId: string, content: string, focus: string,
   const result = readReviewResult(await requestReview({ stage: 'suggest', text, focus, context }, signal));
   const candidates = new Set(context.entries.map(({ id }) => id));
   const current = useKnowledgeStore.getState();
+  const categoryKey = (category: string) => normalizedName(category).replace(/\s+/gu, '');
+  const categories = new Map(current.entries.filter(({ category }) => category)
+    .map(({ category }) => [categoryKey(category), category]));
   const byName = new Map(current.entries.flatMap((entry) => entryNames(entry).map((name) => [name, entry.id] as const)));
   const linked = new Set(current.logLinks.filter((link) => link.logId === logId).map((link) => link.entryId));
   const log = useStudyLogStore.getState().logs.find(({ id }) => id === logId);
@@ -72,7 +75,7 @@ export async function organizeLog(logId: string, content: string, focus: string,
     const existing = item.kind === 'entry' ? byName.get(normalizedName(item.title)) : undefined;
     const suggestion: LogReviewSuggestion = existing
       ? { kind: 'link', entryId: existing, evidence: item.evidence, note: '' }
-      : item;
+      : item.kind === 'entry' ? { ...item, category: categories.get(categoryKey(item.category)) ?? item.category } : item;
     if (suggestion.kind === 'link' && (linked.has(suggestion.entryId)
       || (!existing && !candidates.has(suggestion.entryId))
       || !current.entries.some(({ id }) => id === suggestion.entryId))) continue;

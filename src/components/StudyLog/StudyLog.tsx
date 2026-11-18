@@ -1,53 +1,16 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import CollapsibleNote from '../common/CollapsibleNote';
-import MarkdownImport from './MarkdownImport';
+import useMarkdownImport from './useMarkdownImport';
 import KnowledgeLinks from '../Knowledge/KnowledgeLinks';
 import CodeLinksPanel from '../ProjectCode/CodeLinksPanel';
 import RelationLink from '../Relations/RelationLink';
 import { useStudyLogStore } from '../../store/studyLogStore';
 import LogContentEditor from './LogContentEditor';
+import LogMetadataField from './LogMetadataField';
 import type { LogEditingProps } from './LogContentEditor';
 import TrashLogButton from './TrashLogButton';
 import { getTodayDate, STORAGE_KEYS } from '../../utils/storage';
 import { createTodayLogDraft } from '../../utils/studyLogs';
-
-function LogMetadataField({ label, placeholder, items, onAdd, onRemove }: {
-  label: string;
-  placeholder: string;
-  items: string[];
-  onAdd: (value: string) => void;
-  onRemove: (value: string) => void;
-}) {
-  const id = useId();
-  const [value, setValue] = useState('');
-  const [error, setError] = useState('');
-  const modify = (action: () => void) => {
-    try {
-      action();
-      setError('');
-    } catch {
-      setError('保存失败，请重试。');
-    }
-  };
-  return <section className="log-metadata-field" aria-label={label}>
-    <label htmlFor={id}>{label}</label>
-    {items.length > 0 && <ul className="log-chips">{items.map((item) => <li className="log-chip" key={item}>
-      <span>{item}</span>
-      <button type="button" aria-label={`移除${label}「${item}」`}
-        onClick={() => modify(() => onRemove(item))}>×</button>
-    </li>)}</ul>}
-    <form className="log-metadata-form" data-preserves-on-navigation onSubmit={(event) => {
-      event.preventDefault();
-      const text = value.trim();
-      if (text) modify(() => { onAdd(text); setValue(''); });
-    }}>
-      <input id={id} className="workspace-input" type="text" value={value} placeholder={placeholder}
-        onChange={(event) => setValue(event.target.value)} />
-      <button type="submit" className="workspace-button" disabled={!value.trim()} aria-label={`添加${label}`}>添加</button>
-    </form>
-    {error && <p className="log-metadata-error" role="alert">{error}</p>}
-  </section>;
-}
 
 export default function StudyLog({ draft, setDraft }: LogEditingProps) {
   const {
@@ -62,11 +25,9 @@ export default function StudyLog({ draft, setDraft }: LogEditingProps) {
   } = useStudyLogStore();
 
   const [message, setMessage] = useState('');
-  const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ date: string; imageCount: number }>();
   const [newDraftId, setNewDraftId] = useState<string>();
   const editButton = useRef<HTMLButtonElement>(null);
-  const importTrigger = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     loadLogs();
@@ -79,14 +40,13 @@ export default function StudyLog({ draft, setDraft }: LogEditingProps) {
     return () => window.removeEventListener('storage', reload);
   }, [getTodayLog, loadLogs]);
 
-  const closeImport = () => {
-    setImporting(false);
-    window.requestAnimationFrame(() => importTrigger.current?.focus({ preventScroll: true }));
-  };
-  const importButton = <button ref={importTrigger} type="button" className="workspace-button log-import-trigger" aria-haspopup="dialog" onClick={() => {
-    setImportResult(undefined);
-    setImporting(true);
-  }}>导入图文学习记录</button>;
+  const { trigger: importButton, dialog: importDialog } = useMarkdownImport({
+    onOpen: () => setImportResult(undefined),
+    onImported: (date, imageCount) => {
+      setMessage('');
+      setImportResult({ date, imageCount });
+    },
+  });
   const importNotice = importResult && <p className="knowledge-muted" role="status">
     已保存到 {importResult.date} 的学习记录，共 {importResult.imageCount} 张图片。<a href={`#history/${importResult.date}`}>查看日志</a>
   </p>;
@@ -157,11 +117,7 @@ export default function StudyLog({ draft, setDraft }: LogEditingProps) {
         window.requestAnimationFrame(() => editButton.current?.focus());
       }} />}
       {reading}
-      {importing && <MarkdownImport onClose={closeImport} onImported={(date, imageCount) => {
-        setMessage('');
-        setImportResult({ date, imageCount });
-        closeImport();
-      }} />}
+      {importDialog}
     </div>
   );
 }

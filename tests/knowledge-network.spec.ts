@@ -179,15 +179,32 @@ test('知识网络可显示原有学习来源并在窄屏缩放', async ({ page 
   await expect(script).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: '添加连线', exact: true }).click();
   const details = page.getByRole('complementary', { name: '知识网络详情' });
-  await details.getByRole('searchbox', { name: '搜索终点', exact: true }).fill('单例');
-  await expect(details.getByRole('combobox', { name: '终点', exact: true }).locator('option')).toHaveCount(2);
-  await details.getByRole('combobox', { name: '终点', exact: true }).selectOption({ label: '单例' });
+  const first = details.getByRole('combobox', { name: '起点', exact: true });
+  const second = details.getByRole('combobox', { name: '终点', exact: true });
+  const firstOptions = details.getByRole('listbox', { name: '起点', exact: true });
+  const secondOptions = details.getByRole('listbox', { name: '终点', exact: true });
+  await expect(first).toHaveValue(/^Scale\.cs/);
+  await first.click();
+  await expect(firstOptions.getByRole('option', { name: /导入精灵素材/ })).toHaveCount(1);
+  expect((await firstOptions.boundingBox())!.width).toBeCloseTo((await first.boundingBox())!.width, 0);
+  await expect(firstOptions).toHaveCSS('scrollbar-width', 'thin');
+  await first.fill('代码版本 Assets/Scripts/Scale');
+  await expect(firstOptions.getByRole('option')).toHaveCount(1);
+  await first.press('Escape');
+  await expect(first).toHaveValue(/^Scale\.cs/);
+  await second.fill('单例');
+  await expect(secondOptions.getByRole('option')).toHaveCount(1);
+  await second.press('ArrowDown');
+  await second.press('Enter');
+  await expect(first).toHaveValue(/^Scale\.cs/);
+  await expect(second).toHaveValue('单例');
+  await expect(graph.locator('.network-draft-line')).toHaveCount(1);
   await details.getByLabel('连线标签（可选）').fill('示例代码');
   await details.getByRole('button', { name: '建立关联' }).click();
   await expect(graph.locator('.network-line')).toHaveCount(16);
   await details.getByRole('button', { name: '查看与 单例 的关系（示例代码）', exact: true }).click();
-  page.once('dialog', (dialog) => dialog.accept());
   await details.getByRole('button', { name: '移除连线' }).click();
+  await page.getByRole('dialog', { name: '移除这条连线？' }).getByRole('button', { name: '确认移除' }).click();
   await expect(graph.locator('.network-line')).toHaveCount(15);
   await script.dblclick();
   await expect(page).toHaveURL(/#code\/[^/]+$/);
@@ -219,8 +236,12 @@ test('图上可以建立、标注和移除连线，双击节点打开对应资�
   await editor.getByLabel('连线标签').fill('设计练习');
   await editor.getByRole('button', { name: '保存关系' }).click();
   await expect(graph.locator('.network-edge-label')).toHaveText('设计练习');
-  page.once('dialog', (dialog) => dialog.accept());
   await details.getByRole('button', { name: '移除连线' }).click();
+  const confirmation = page.getByRole('dialog', { name: '移除这条连线？' });
+  await confirmation.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(graph.locator('.network-line')).toHaveCount(1);
+  await details.getByRole('button', { name: '移除连线' }).click();
+  await confirmation.getByRole('button', { name: '确认移除' }).click();
   await expect(details.getByRole('status')).toHaveText('连线已移除。');
   await expect(graph.locator('.network-node')).toHaveCount(1);
   await expect(graph.locator('.network-line')).toHaveCount(0);
@@ -229,7 +250,7 @@ test('图上可以建立、标注和移除连线，双击节点打开对应资�
   await searchButton(page).click();
   await page.getByRole('searchbox', { name: '节点关键词' }).fill('导入精灵素材');
   await page.locator('#network-node-search').getByRole('button', { name: /导入精灵素材/ }).click();
-  await expect(newLink.getByRole('combobox', { name: '终点', exact: true })).toHaveValue(JSON.stringify(['log', 'sprite-log']));
+  await expect(newLink.getByRole('combobox', { name: '终点', exact: true })).toHaveValue('2026-11-04 · 导入精灵素材');
   await newLink.getByRole('button', { name: '建立关联' }).click();
   await expect(details.getByRole('status')).toHaveText('连线已建立。');
   await graph.locator('.network-node[data-kind="log"]').dblclick();
@@ -334,6 +355,32 @@ test('密集演示能分层聚焦，选中连线可绕开卡片且个人数据�
   expect(await readResources()).toEqual(personalResources);
 });
 
+test('节点右键菜单可返回词条目录、打开原词条和查看关系', async ({ page }) => {
+  await seedNetwork(page);
+  await page.goto('/#network');
+  const graph = page.getByRole('group', { name: '知识网络图', exact: true });
+  const sidebar = page.getByRole('complementary', { name: '知识网络详情' });
+  const node = graph.getByRole('button', { name: '像素单位', exact: true });
+  const menu = page.getByRole('menu', { name: '画布操作' });
+  await node.click();
+  await expect(sidebar.getByRole('heading', { name: '像素单位', exact: true })).toBeVisible();
+  await node.press('Shift+F10');
+  await expect(menu.getByRole('menuitem', { name: '编辑词条' })).toBeFocused();
+  await page.keyboard.press('End');
+  await expect(menu.getByRole('menuitem', { name: '← 词条目录' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(sidebar.getByRole('heading', { name: /^词条目录/ })).toBeVisible();
+  await expect(node).toHaveAttribute('aria-pressed', 'false');
+
+  await node.click({ button: 'right' });
+  await menu.getByRole('menuitem', { name: '查看关系', exact: true }).click();
+  await expect(page).toHaveURL(/#relations\/entry\/ppu$/);
+  await page.goBack();
+  await node.click({ button: 'right' });
+  await menu.getByRole('menuitem', { name: '打开词条', exact: true }).click();
+  await expect(page).toHaveURL(/#knowledge\/ppu$/);
+});
+
 test('全屏保留画布操作，拖动节点可复位，空白处可新建同分类词条', async ({ page }, testInfo) => {
   await seedNetwork(page);
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -349,6 +396,7 @@ test('全屏保留画布操作，拖动节点可复位，空白处可新建同�
     keyboard.lock = async (codes) => {
       await lock(codes);
       document.documentElement.dataset.testLockedKeys = codes.join(' ');
+      document.documentElement.dataset.testLockCount = String(Number(document.documentElement.dataset.testLockCount ?? 0) + 1);
     };
     keyboard.unlock = () => {
       unlock();
@@ -365,7 +413,9 @@ test('全屏保留画布操作，拖动节点可复位，空白处可新建同�
   const ppu = graph.getByRole('button', { name: '像素单位', exact: true });
   if (testInfo.project.use.channel === 'msedge') expect(supportsKeyboardLock).toBe(true);
   if (supportsKeyboardLock) {
-    await expect(page.locator('html')).not.toHaveAttribute('data-test-locked-keys', 'Escape');
+    const html = page.locator('html');
+    await expect(html).toHaveAttribute('data-test-locked-keys', 'Escape');
+    await expect(html).toHaveAttribute('data-test-lock-count', '1');
     await ppu.click({ button: 'right' });
     await page.getByRole('menuitem', { name: '编辑词条' }).click();
     const editor = page.getByRole('dialog', { name: '在画布中编辑词条' });
@@ -378,10 +428,27 @@ test('全屏保留画布操作，拖动节点可复位，空白处可新建同�
     expect(await page.evaluate(() => document.fullscreenElement?.classList.contains('network-workspace'))).toBe(true);
     await page.keyboard.up('Escape');
     await expect(editor).toBeHidden();
-    await expect(page.locator('html')).not.toHaveAttribute('data-test-locked-keys', 'Escape');
+    await expect(html).toHaveAttribute('data-test-locked-keys', 'Escape');
     await expect(page.getByRole('button', { name: '退出全屏', exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.fullscreenElement?.classList.contains('network-workspace'))).toBe(true);
     await expect(ppu).toBeVisible();
+
+    await ppu.click({ modifiers: ['Shift'] });
+    await graph.getByRole('button', { name: '精灵切片', exact: true }).click({ modifiers: ['Shift'] });
+    await ppu.click({ button: 'right' });
+    const menu = page.getByRole('menu', { name: '画布操作' });
+    await menu.getByRole('menuitem', { name: '批量改分类（2 个词条）' }).click();
+    const batch = page.getByRole('dialog', { name: '批量改分类' });
+    await batch.getByRole('button', { name: '取消编辑' }).click();
+    await expect(batch).toBeHidden();
+    await expect(html).toHaveAttribute('data-test-locked-keys', 'Escape');
+    await expect(html).toHaveAttribute('data-test-lock-count', '1');
+    await ppu.click({ button: 'right' });
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    await expect(page.getByRole('button', { name: '退出全屏', exact: true })).toBeVisible();
+    await ppu.click({ button: 'right' });
+    await menu.getByRole('menuitem', { name: '清除选择' }).click();
   }
   const position = () => ppu.evaluate((element: HTMLButtonElement) => [element.offsetLeft, element.offsetTop]);
   const originalPosition = await position();
@@ -410,8 +477,10 @@ test('全屏保留画布操作，拖动节点可复位，空白处可新建同�
   await expect(dialog).toBeHidden();
   await expect(graph.getByRole('button', { name: '调色板', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(graph.locator('.network-node[data-kind="entry"]')).toHaveCount(6);
-  await page.getByRole('button', { name: '退出全屏', exact: true }).click();
+  if (supportsKeyboardLock) await page.keyboard.press('Escape');
+  else await page.getByRole('button', { name: '退出全屏', exact: true }).click();
   await expect(page.getByRole('button', { name: '全屏画布', exact: true })).toBeVisible();
+  await expect(page.locator('html')).not.toHaveAttribute('data-test-locked-keys', 'Escape');
   await page.getByRole('button', { name: '全屏画布', exact: true }).click();
   await expect(page.getByRole('button', { name: '退出全屏', exact: true })).toBeVisible();
   await graph.getByRole('button', { name: '调色板', exact: true }).dblclick();
@@ -635,6 +704,7 @@ test('空白处可平移，Ctrl 滚轮围绕指针缩放，节点可拖出原布
   const afterPan = (await board.boundingBox())!;
   expect(afterPan.x - beforePan.x).toBeCloseTo(160, 0);
   expect(afterPan.y - beforePan.y).toBeCloseTo(32, 0);
+  await expect(graph.getByRole('button', { name: '像素单位', exact: true })).toHaveAttribute('aria-pressed', 'true');
 
   await page.evaluate(() => {
     document.addEventListener('wheel', (event) => {
@@ -683,6 +753,12 @@ test('空白处可平移，Ctrl 滚轮围绕指针缩放，节点可拖出原布
   await page.getByRole('searchbox', { name: '节点关键词' }).fill('PPU');
   await page.locator('#network-node-search').getByRole('button', { name: /^像素单位/ }).click();
   await expect.poll(() => cardsFit(graph, selectedCard)).toBe(true);
+  await expect(graph.locator(selectedCard)).toHaveCount(1);
+  const beforeDeselect = await board.evaluate((element) => element.style.transform);
+  await graph.click({ position: { x: 10, y: 10 } });
+  await expect(graph.locator(selectedCard)).toHaveCount(0);
+  await expect(page.getByRole('complementary', { name: '知识网络详情' }).getByRole('heading', { name: /词条目录/ })).toBeVisible();
+  expect(await board.evaluate((element) => element.style.transform)).toBe(beforeDeselect);
 });
 
 function canvasPositions(graph: Locator) {
@@ -798,6 +874,11 @@ test('Shift 多选和框选可共同移动节点，并批量分类与撤销', as
   await page.getByRole('button', { name: '撤销画布操作' }).click();
   expect((await savedKnowledge(page)).entries.map(({ category }) => category)).toEqual(terms.map(([, , category]) => category));
   await expect(page.getByRole('button', { name: '撤销画布操作' })).toBeDisabled();
+  await expect(sidebar.getByRole('heading', { name: '已选 2 个节点' })).toBeVisible();
+  await graph.click({ position: { x: 12, y: 12 } });
+  await expect(sidebar.getByRole('heading', { name: '已选 2 个节点' })).toHaveCount(0);
+  await expect(sprite).toHaveAttribute('aria-pressed', 'false');
+  await expect(pointer).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('模块菜单可整理成员、重命名与合并分类，撤销时保留关系', async ({ page }) => {
@@ -973,19 +1054,31 @@ test('仅查看所选支持直连和一个中间节点的路径，返回保留�
   const nodes = graph.locator('.network-node');
   const lines = graph.locator('.network-line');
   const sprite = graph.getByRole('button', { name: '精灵切片', exact: true });
+  const ppu = graph.getByRole('button', { name: '像素单位', exact: true });
+  const menu = page.getByRole('menu', { name: '画布操作' });
   const middle = sidebar.getByRole('checkbox', { name: '显示中间节点（两跳）', exact: true });
   const camera = () => graph.locator('.network-board').evaluate((element: HTMLElement) => element.style.transform);
   await page.getByRole('button', { name: '缩小知识网络' }).click();
   const before = await camera();
-  await graph.getByRole('button', { name: '像素单位', exact: true }).click({ modifiers: ['Shift'] });
+  await ppu.click({ modifiers: ['Shift'] });
   await graph.getByRole('button', { name: '图集', exact: true }).click({ modifiers: ['Shift'] });
-  await sidebar.getByRole('button', { name: '仅查看所选', exact: true }).click();
+  await sprite.click({ button: 'right' });
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: '仅查看所选' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await ppu.click({ button: 'right' });
+  await menu.getByRole('menuitem', { name: '仅查看所选', exact: true }).click();
   await expect(nodes).toHaveCount(2);
   await expect(lines).toHaveCount(0);
   await expect(sidebar.getByText('所选节点之间没有直接连线。')).toBeVisible();
   await expect(middle).not.toBeChecked();
 
-  await middle.check();
+  await ppu.press('Shift+F10');
+  const twoHops = menu.getByRole('menuitemcheckbox', { name: '显示中间节点（两跳）' });
+  await expect(twoHops).not.toBeChecked();
+  await twoHops.click();
+  await expect(middle).toBeChecked();
   await expect(nodes).toHaveCount(4);
   await expect(lines).toHaveCount(4);
   await expect(graph.locator('.network-node[data-intermediate]')).toHaveCount(2);
@@ -1037,7 +1130,9 @@ test('仅查看所选支持直连和一个中间节点的路径，返回保留�
   await expect(lines).toHaveCount(2);
   await logLayer.click();
   await filterButton(page).click();
-  await sidebar.getByRole('button', { name: '返回完整视图', exact: true }).click();
+  await ppu.click({ button: 'right' });
+  await expect(twoHops).toBeChecked();
+  await menu.getByRole('menuitem', { name: '返回完整视图', exact: true }).click();
   await expect(nodes).toHaveCount(15);
   expect(await camera()).toBe(before);
   await expect(graph.locator('.network-node[aria-pressed="true"]')).toHaveCount(2);

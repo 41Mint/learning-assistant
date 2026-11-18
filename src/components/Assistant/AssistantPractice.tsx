@@ -11,9 +11,8 @@ import { codeVersionHref, codeVersionLabel, practiceCodeIds } from '../../utils/
 import { entrySearchFields, logSearchFields, matchesWords, searchWords } from '../../utils/resourceSearch';
 import { matchScriptLine } from '../../utils/searchMatches';
 
-export default function AssistantPractice({ query, onQuery, onNavigate, active }: {
+export default function AssistantPractice({ query, onNavigate, active }: {
   query: string;
-  onQuery: (query: string) => void;
   onNavigate: () => void;
   active: boolean;
 }) {
@@ -22,7 +21,7 @@ export default function AssistantPractice({ query, onQuery, onNavigate, active }
   const logs = useStudyLogStore((state) => state.logs);
   const { data: code, isLoaded: codeLoaded } = useProjectCodeStore();
   const { goal, setCurrentGoal } = useCurrentGoalStore();
-  const [selected, setSelected] = useState<string>();
+  const [selected, setSelected] = useState<{ href: string; query: string }>();
   const [proposal, setProposal] = useState<{ href: string; label: string }>();
   const [notice, setNotice] = useState<{ text: string; error?: boolean }>();
   const words = useMemo(() => searchWords(query), [query]);
@@ -44,7 +43,7 @@ export default function AssistantPractice({ query, onQuery, onNavigate, active }
     })).sort((a, b) => Number(matchesWords([b.outcome.title, b.practice.note], words))
       - Number(matchesWords([a.outcome.title, a.practice.note], words)) || b.practice.date.localeCompare(a.practice.date));
   }, [outcomes, logs, entries, code, words, active]);
-  const current = matches.find((item) => item.href === selected);
+  const current = selected?.query === query ? matches.find((item) => item.href === selected.href) : undefined;
 
   const link = (href: string, label: string, key = href) => {
     const target = workspaceResourceTarget(href);
@@ -102,15 +101,12 @@ export default function AssistantPractice({ query, onQuery, onNavigate, active }
       }}>设为当前目标</button>}
       {notice && <p role={notice.error ? 'alert' : 'status'}>{notice.text}</p>}
     </> : <>
-      <label htmlFor="assistant-practice-query">查找实践</label>
-      <input id="assistant-practice-query" className="search-input" type="search" value={query} placeholder="例如 角色移动、InputManager.cs"
-        onChange={(event) => { onQuery(event.target.value); setSelected(undefined); }} />
       {error ? <p role="alert">{error}</p> : <p className="knowledge-muted" role="status">
         {matches.length ? (words.length ? `找到 ${matches.length} 次实践` : '最近的实践')
           : words.length ? '没有找到匹配的实践。' : '还没有实践记录。'}
       </p>}
       <ul className="assistant-review-logs">{matches.slice(0, 8).map(({ outcome, practice, href }) => <li key={href}>
-        <button type="button" onClick={() => { setSelected(href); setProposal(undefined); setNotice(undefined); }}>
+        <button type="button" onClick={() => { setSelected({ href, query }); setProposal(undefined); setNotice(undefined); }}>
           {outcome.title} · {practice.date}
         </button>
       </li>)}</ul>

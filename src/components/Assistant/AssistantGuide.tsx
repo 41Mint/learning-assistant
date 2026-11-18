@@ -2,7 +2,7 @@ import { useGrowthStore } from '../../store/growthStore';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
 
-export type AssistantStart = 'today' | 'path' | 'code';
+export type AssistantStart = 'today' | 'path';
 
 export default function AssistantGuide({ page, onAction, onStart }: {
   page: string;
@@ -18,14 +18,14 @@ export default function AssistantGuide({ page, onAction, onStart }: {
     hasPractice ? { label: '找回一次实践', description: '回看做过的事、关联资料，也可以接着设目标。', action: 'practice' as const }
       : { label: '记录第一次实践', description: '在成长记录里保存一件已经做成的事。', start: 'path' as const },
     hasCode ? { label: '问一段代码', description: '选脚本版本和行号，带着片段提问。', action: 'code' as const }
-      : { label: '保存一个脚本', description: '导入本地脚本后，可以选中几行提问。', start: 'code' as const },
+      : { label: '保存一个脚本', description: '导入本地脚本后，可以选中几行提问。', action: 'code' as const },
   ];
   if (page === 'code') items.unshift(items.splice(2, 1)[0]);
   if (page === 'path') items.unshift(items.splice(1, 1)[0]);
   return <section className="assistant-guide" aria-label="开始使用学习智能体">
     <p>你想先做什么？</p>
     {items.map((item) => <button key={item.label} type="button" onClick={() => {
-      if (item.start) onStart(item.start);
+      if ('start' in item && item.start) onStart(item.start);
       else if (item.action) onAction(item.action);
     }}>
       <strong>{item.label} <span aria-hidden="true">→</span></strong><span>{item.description}</span>

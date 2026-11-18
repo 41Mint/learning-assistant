@@ -6,6 +6,7 @@ import { useStudyLogStore } from '../../store/studyLogStore';
 import { knowledgeNetworkHref, recycleBinHref, useWorkspaceStore } from '../../store/workspaceStore';
 import { logLabel } from '../../utils/growth';
 import { entryNames, normalizedName, otherEntryId } from '../../utils/knowledge';
+import { alignTrailingLogCitation, citedLogId } from '../../utils/knowledgeLogCitation';
 import { codeVersionHref, codeVersionLabel, entryCodeIds } from '../../utils/projectCode';
 import MarkdownContent from '../common/MarkdownContent';
 import WorkspaceDialog from '../common/WorkspaceDialog';
@@ -13,6 +14,7 @@ import HighlightedText from '../common/HighlightedText';
 import { useScrollToSearchMatch } from '../common/useScrollToSearchMatch';
 import KnowledgeEditor from './KnowledgeEditor';
 import KnowledgeDirectory from './KnowledgeDirectory';
+import KnowledgeLogCitation from './KnowledgeLogCitation';
 import RelationLink from '../Relations/RelationLink';
 
 export default function KnowledgeBase() {
@@ -56,6 +58,7 @@ export default function KnowledgeBase() {
     window.requestAnimationFrame(() => detailHeading.current?.focus());
   };
   const links = selected ? store.logLinks.filter((link) => link.entryId === selected.id) : [];
+  const citedLogIds = links.map(({ logId }) => logId);
   const related = selected ? store.relations.flatMap((relation) => otherEntryId(relation, selected.id) ?? []) : [];
   const trashedVersions = new Set(code.trash.versions.map(({ id }) => id));
   const codeIds = selected ? entryCodeIds(selected, code.links).filter((id) => !trashedVersions.has(id)) : [];
@@ -109,15 +112,20 @@ export default function KnowledgeBase() {
             </div>
             {selected.aliases.length > 0 && <p className="knowledge-muted">别名：<HighlightedText text={selected.aliases.join('、')} words={search?.words} /></p>}
             <div className="markdown-preview knowledge-entry-content" data-search-body>
-              <MarkdownContent content={selected.content || '尚未填写正文。可先关联学习记录，之后补充自己的理解与疑问。'} searchWords={selected.content ? search?.words : undefined} />
+              <MarkdownContent content={selected.content ? alignTrailingLogCitation(selected.content) : '尚未填写正文。可先关联学习记录，之后补充自己的理解与疑问。'}
+                searchWords={selected.content ? search?.words : undefined} renderLink={(href) => {
+                  const id = citedLogId(href);
+                  if (id !== undefined) return <KnowledgeLogCitation id={id} logIds={citedLogIds} logs={logs} />;
+                }} />
             </div>
             {!links.length && !related.length && !codeIds.length && (
               <p className="knowledge-muted">可在“编辑词条”的关联资料中添加日志、词条或代码版本。</p>
             )}
             <section className="knowledge-sources" aria-label="相关学习记录"><h3>相关学习记录（{links.length}）</h3>
-              <ul className="knowledge-source-list">{links.map((link) => {
+              <ul className="knowledge-source-list">{links.map((link, index) => {
                 const log = logs.find((item) => item.id === link.logId);
                 return <li key={link.id}>
+                  <span className="knowledge-source-number" aria-hidden="true">[{index + 1}]</span>{' '}
                   {log ? <a href={`#history/${log.date}`} onClick={(event) => { event.preventDefault(); openLog(log.date); }}>{logLabel(log)}</a> : <span>原记录暂不可用</span>}
                   {link.note && <p>{link.note}</p>}
                 </li>;

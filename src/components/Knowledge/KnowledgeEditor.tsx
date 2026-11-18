@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { KnowledgeEntry } from '../../types';
 import { useKnowledgeStore } from '../../store/knowledgeStore';
 import type { SaveKnowledgeEntry } from '../../store/knowledgeStore';
@@ -6,11 +6,14 @@ import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
 import { logLabel } from '../../utils/growth';
 import { otherEntryId } from '../../utils/knowledge';
+import { alignTrailingLogCitation, citedLogId, knowledgeLogCitation } from '../../utils/knowledgeLogCitation';
 import { codeVersionLabel, entryCodeIds } from '../../utils/projectCode';
 import { codeSearchFields, entrySearchFields, logSearchFields } from '../../utils/resourceSearch';
 import FocusEditor from '../common/FocusEditor';
 import MarkdownFields from '../common/MarkdownFields';
 import ReferenceChoices from '../common/ReferenceChoices';
+import SearchableSelect from '../common/SearchableSelect';
+import KnowledgeLogCitation from './KnowledgeLogCitation';
 
 export default function KnowledgeEditor({ entry, categories, initialCategory, saveEntry: saveOverride, onSave, onCancel }: {
   entry?: KnowledgeEntry;
@@ -26,18 +29,34 @@ export default function KnowledgeEditor({ entry, categories, initialCategory, sa
   const [title, setTitle] = useState(entry?.title ?? '');
   const [aliases, setAliases] = useState(entry?.aliases.join('，') ?? '');
   const [category, setCategory] = useState(entry?.category ?? initialCategory ?? '');
-  const [content, setContent] = useState(entry?.content ?? '');
+  const [content, setContent] = useState(() => alignTrailingLogCitation(entry?.content ?? ''));
   const [logSelection, setLogSelection] = useState<string[] | null>(null);
+  const [citationLogId, setCitationLogId] = useState('');
   const [entrySelection, setEntrySelection] = useState<string[] | null>(null);
   const [codeSelection, setCodeSelection] = useState<string[] | null>(null);
   const [error, setError] = useState('');
   const categoriesId = useId();
   const contentId = useId();
+  const editor = useRef<HTMLTextAreaElement>(null);
   const current = entries.find((item) => item.id === entry?.id);
   const previousLogs = new Map(logLinks.filter((link) => link.entryId === entry?.id).map((link) => [link.logId, link.note]));
   const logIds = logSelection ?? [...previousLogs.keys()];
   const entryIds = entrySelection ?? (entry ? relations.flatMap((relation) => otherEntryId(relation, entry.id) ?? []) : []);
   const codeIds = codeSelection ?? (current ? entryCodeIds(current, [...code.links, ...code.trash.links]) : []);
+  const sortedLogs = [...logs].sort((a, b) => b.date.localeCompare(a.date));
+
+  const insertCitation = () => {
+    const textarea = editor.current;
+    if (!textarea || !logs.some(({ id }) => id === citationLogId)) return;
+    const offset = textarea.selectionEnd;
+    const citation = knowledgeLogCitation(citationLogId);
+    setContent(content.slice(0, offset) + citation + content.slice(offset));
+    if (!logIds.includes(citationLogId)) setLogSelection([...logIds, citationLogId]);
+    window.requestAnimationFrame(() => {
+      textarea.focus({ preventScroll: true });
+      textarea.setSelectionRange(offset + citation.length, offset + citation.length);
+    });
+  };
 
   const save = () => {
     try {
@@ -67,13 +86,24 @@ export default function KnowledgeEditor({ entry, categories, initialCategory, sa
         </label>
         <datalist id={categoriesId}>{categories.filter(Boolean).map((item) => <option key={item} value={item} />)}</datalist>
       </div>
+      {sortedLogs.length > 0 && <div className="knowledge-citation-tools">
+        <SearchableSelect label="引用学习日志" placeholder="按日期、标题、标签或正文筛选"
+          options={sortedLogs.map((log) => ({ id: log.id, label: logLabel(log), fields: logSearchFields(log) }))}
+          value={citationLogId} onChange={setCitationLogId} />
+        <button type="button" className="workspace-button" disabled={!logs.some(({ id }) => id === citationLogId)}
+          onClick={insertCitation}>插入引用</button>
+      </div>}
       <MarkdownFields id={contentId} label="词条正文（Markdown）" previewLabel="词条正文实时预览" value={content}
-        onChange={setContent} placeholder="我的理解、使用例子、仍有疑问…" />
+        onChange={setContent} placeholder="我的理解、使用例子、仍有疑问…" textareaRef={editor}
+        renderLink={(href) => {
+          const id = citedLogId(href);
+          if (id !== undefined) return <KnowledgeLogCitation id={id} logIds={logIds} logs={logs} />;
+        }} />
       <section className="growth-attachments" aria-label="关联资料（可选）">
         <h3>关联资料（可选）</h3>
         <p className="knowledge-muted">展开需要的类别，所选资料会随词条一起保存。</p>
         <ReferenceChoices title="关联学习日志" selected={logIds} onChange={setLogSelection}
-          options={[...logs].sort((a, b) => b.date.localeCompare(a.date)).map((log) => {
+          options={sortedLogs.map((log) => {
             const note = previousLogs.get(log.id);
             return { id: log.id, label: note ? logLabel(log) + ' · ' + note : logLabel(log), fields: logSearchFields(log) };
           })} />

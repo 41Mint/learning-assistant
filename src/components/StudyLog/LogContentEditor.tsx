@@ -5,6 +5,7 @@ import type { StudyLog } from '../../types';
 import type { LogReviewSuggestion } from '../../types/logReview';
 import { useKnowledgeStore } from '../../store/knowledgeStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
+import { useWorkspaceStore } from '../../store/workspaceStore';
 import FocusEditor from '../common/FocusEditor';
 import MarkdownFields from '../common/MarkdownFields';
 import LogReviewPanel from './LogReviewPanel';
@@ -37,7 +38,7 @@ export default function LogContentEditor({ log, kind, creating = false, onClose 
   const today = kind === 'today';
   const emptyDraft = creating && isEmptyLogContent(content, log.date);
 
-  useEffect(() => { setLogDraft(kind, { id: log.id, text: content }); }, [kind, log.id, content, setLogDraft]);
+  useEffect(() => { setLogDraft(kind, { id: log.id, date: log.date, text: content }); }, [kind, log.id, log.date, content, setLogDraft]);
   useEffect(() => () => setLogDraft(kind), [kind, setLogDraft]);
 
   const pasteImages = async (event: ClipboardEvent<HTMLTextAreaElement>) => {
@@ -111,7 +112,11 @@ export default function LogContentEditor({ log, kind, creating = false, onClose 
           {review.sourceText === content ? `已选 ${review.selected.length} 项整理建议，将随日志保存。` : '正文已修改，请在智能体中更新或取消所选建议。'}
         </p>}
       </FocusEditor>
-      {slot && createPortal(<LogReviewPanel logId={log.id} content={content} onSelection={(selected, sourceText) => {
+      {slot && createPortal(<LogReviewPanel logId={log.id} content={content} formId={`assistant-review-${kind}`} onReturn={() => {
+        slots.close();
+        if (today) window.location.hash = 'today';
+        else useWorkspaceStore.getState().openLog(log.date);
+      }} onSelection={(selected, sourceText) => {
           setReview({ selected, sourceText });
           setError('');
       }} />, slot)}

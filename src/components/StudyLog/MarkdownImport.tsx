@@ -6,12 +6,13 @@ import type { PreparedImport } from '../../utils/markdownImport';
 import { saveWithImages } from '../../utils/imageStorage';
 import MarkdownContent from '../common/MarkdownContent';
 
-export default function MarkdownImport({ onClose, onImported }: {
+export default function MarkdownImport({ initialDate, onClose, onImported }: {
+  initialDate?: string;
   onClose: () => void;
   onImported: (date: string, imageCount: number) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [date, setDate] = useState(getTodayDate);
+  const [date, setDate] = useState(() => initialDate ?? getTodayDate());
   const [document, setDocument] = useState<File | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [prepared, setPrepared] = useState<PreparedImport | null>(null);

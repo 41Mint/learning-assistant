@@ -435,7 +435,7 @@ test('窄屏成长视图独立切换，智能推荐换一批并预填实际引�
   await expect(assistant.getByRole('button', { name: '推荐练习', exact: true })).toHaveAttribute('aria-pressed', 'true');
   const suggestions = assistant.getByRole('region', { name: '练习推荐' });
   await expect(suggestions.getByLabel('练习领域')).toHaveValue('C#');
-  await suggestions.getByLabel('练习偏好（可选）').fill('只使用控制台');
+  await assistant.getByRole('textbox', { name: '练习偏好（可选）' }).fill('只使用控制台');
   expect(requests).toHaveLength(0);
   await suggestions.getByRole('button', { name: '生成练习建议' }).click();
   await expect(suggestions.getByRole('article', { name: '记录方向键的状态' })).toContainText('松开后状态变为 false。');
@@ -1171,8 +1171,7 @@ test('智能体工具栏和问答可打开同一练习推荐面板并保留偏�
   await page.getByRole('button', { name: '打开学习智能体' }).click();
   await assistant.getByRole('button', { name: '推荐练习', exact: true }).click();
   await expect(page).toHaveURL(/#history$/);
-  const panel = assistant.getByRole('region', { name: '练习推荐' });
-  const preference = panel.getByLabel('练习偏好（可选）');
+  const preference = assistant.getByRole('textbox', { name: '练习偏好（可选）' });
   await preference.fill('复习输入事件');
   await assistant.getByRole('button', { name: '最小化学习智能体' }).click();
   await page.getByRole('button', { name: '恢复学习智能体' }).click();

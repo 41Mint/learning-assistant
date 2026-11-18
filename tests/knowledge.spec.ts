@@ -26,9 +26,29 @@ async function seedLogs(page: Page) {
 }
 
 test('名称即可创建；别名检索、分类、Markdown 编辑及草稿在切换后保留', async ({ page }, testInfo) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('/#knowledge');
+  const accent = await page.evaluate(() => {
+    const swatch = document.createElement('span');
+    swatch.style.color = 'var(--app-accent)';
+    document.body.append(swatch);
+    const color = getComputedStyle(swatch).color;
+    swatch.remove();
+    return color;
+  });
+  const expectAccentOnFocus = async (label: string) => {
+    const input = page.getByLabel(label, { exact: true });
+    await input.focus();
+    await expect(input).toHaveCSS('border-top-color', accent);
+  };
+  await expectAccentOnFocus('搜索名称或别名');
+  await expectAccentOnFocus('词条分类');
   await createEntry(page, 'PPU');
   await page.getByRole('button', { name: '编辑词条', exact: true }).click();
+  await expectAccentOnFocus('词条名称（必填）');
+  await expectAccentOnFocus('别名（用逗号分隔）');
+  await expectAccentOnFocus('分类（可选）');
+  await expectAccentOnFocus('词条正文（Markdown）');
   await page.getByLabel('别名（用逗号分隔）').fill('Pixels Per Unit，像素单位');
   await page.getByLabel('分类（可选）').fill('2D 素材');
   await page.getByLabel('词条正文（Markdown）').fill('## 我的理解\n\n16 像素 / 16 PPU = **1 个世界单位**。');
@@ -48,12 +68,79 @@ test('名称即可创建；别名检索、分类、Markdown 编辑及草稿在�
   await page.locator('.knowledge-entry-list button').click();
   await page.reload();
   await expect(page.getByRole('region', { name: '词条详情' }).getByRole('heading', { name: 'PPU', exact: true })).toBeVisible();
-  await page.emulateMedia({ colorScheme: 'dark' });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({ path: testInfo.outputPath('knowledge-desktop-dark.png') });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('knowledge-mobile-dark.png'), fullPage: true });
+});
+
+test('词条可在正文光标处引用多条日志，解除一条关联后其余引用仍能打开原日志', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/#knowledge');
+  await seedLogs(page);
+  await page.evaluate(async () => {
+    const { useStudyLogStore } = await import('/src/store/studyLogStore.ts');
+    const { appendToDate } = useStudyLogStore.getState();
+    for (let day = 1; day <= 12; day++) {
+      appendToDate('2026-09-' + String(day).padStart(2, '0'), '# 素材练习');
+    }
+  });
+  await createEntry(page, '像素与世界单位');
+  await page.getByRole('button', { name: '编辑词条', exact: true }).click();
+  const source = page.getByRole('combobox', { name: '引用学习日志', exact: true });
+  const list = page.getByRole('listbox', { name: '引用学习日志', exact: true });
+  const content = page.getByLabel('词条正文（Markdown）');
+  const insert = page.getByRole('button', { name: '插入引用', exact: true });
+  const checkAlignment = async () => {
+    const field = await source.boundingBox();
+    const button = await insert.boundingBox();
+    expect(field?.y).toBeCloseTo(button!.y, 0);
+    expect(field?.height).toBeCloseTo(button!.height, 0);
+  };
+  await checkAlignment();
+  await content.fill('先处理素材。\n\n再验证尺寸。');
+  await content.press('Control+Home');
+  await content.press('End');
+  await source.click();
+  await expect(list.getByRole('option', { name: '2026-10-02 · Day1 素材处理', exact: true })).toBeVisible();
+  expect(await list.evaluate((element) => ({
+    scrolls: element.scrollHeight > element.clientHeight,
+    width: getComputedStyle(element).scrollbarWidth,
+    color: getComputedStyle(element).scrollbarColor,
+  }))).toEqual({ scrolls: true, width: 'thin', color: await page.locator('html').evaluate((root) => getComputedStyle(root).scrollbarColor) });
+  await source.fill('没有这条日志');
+  await expect(list.getByRole('status')).toHaveText('没有匹配的资料。');
+  await source.fill('2026-10-02 世界大小');
+  await expect(list.getByRole('option')).toHaveCount(1);
+  await source.press('ArrowDown');
+  await source.press('Enter');
+  await expect(source).toHaveValue('2026-10-02 · Day1 素材处理');
+  await insert.click();
+  await expect(content).toBeFocused();
+  await expect(content).toHaveValue(/^先处理素材。\[日志引用\].+\n\n再验证尺寸。$/);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await checkAlignment();
+  await content.press('Control+End');
+  await source.fill('尺寸例子');
+  await list.getByRole('option', { name: '2026-11-04 · Day2 新的尺寸例子', exact: true }).click();
+  await insert.click();
+  await page.getByRole('button', { name: '保存词条', exact: true }).click();
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.reload();
+  await expect(page.getByRole('link', { name: '日志引用 1', exact: true })).toHaveAttribute('href', '#history/2026-10-02');
+  const second = page.getByRole('link', { name: '日志引用 2', exact: true });
+  await second.hover();
+  await expect(page.getByRole('tooltip')).toHaveText('2026-11-04 · Day2 新的尺寸例子');
+
+  await page.getByRole('button', { name: '编辑词条', exact: true }).click();
+  await page.getByText('关联学习日志（2）', { exact: true }).click();
+  await page.getByRole('checkbox', { name: /Day1 素材处理/ }).uncheck();
+  await page.getByRole('button', { name: '保存词条', exact: true }).click();
+  await expect(page.getByTitle('引用日志暂不可用')).toBeVisible();
+  await page.getByRole('link', { name: '日志引用 1', exact: true }).click();
+  await expect(page).toHaveURL(/#history\/2026-11-04$/);
+  await expect(page.getByRole('heading', { name: 'Day2 新的尺寸例子', exact: true })).toBeVisible();
 });
 
 test('旧知识点手动建词条；日志多对多关联、改名、跨月回链和刷新保持正确', async ({ page }) => {

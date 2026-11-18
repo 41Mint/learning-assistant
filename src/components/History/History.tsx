@@ -11,6 +11,8 @@ import { useWorkspaceStore } from '../../store/workspaceStore';
 import LogContentEditor from '../StudyLog/LogContentEditor';
 import type { LogEditingProps } from '../StudyLog/LogContentEditor';
 import TrashLogButton from '../StudyLog/TrashLogButton';
+import LogMetadataField from '../StudyLog/LogMetadataField';
+import useMarkdownImport from '../StudyLog/useMarkdownImport';
 
 interface CalendarDay {
   date: string; // YYYY-MM-DD
@@ -28,7 +30,7 @@ const formatDateStr = (date: Date): string => {
 };
 
 const History = ({ draft, setDraft }: LogEditingProps) => {
-  const { logs, loadLogs, getLogByDate } = useStudyLogStore();
+  const { logs, loadLogs, getLogByDate, changeTag } = useStudyLogStore();
   const { historyDate: selectedDate, openLog, search: searchLocation } = useWorkspaceStore();
   const [calendarView, setCalendarView] = useState(() => ({ date: selectedDate, month: new Date(`${selectedDate}T12:00:00`) }));
   const currentMonth = useMemo(() => calendarView.date === selectedDate ? calendarView.month : new Date(`${selectedDate}T12:00:00`), [calendarView, selectedDate]);
@@ -45,6 +47,15 @@ const History = ({ draft, setDraft }: LogEditingProps) => {
     openLog(date);
     setCalendarView({ date, month: new Date(`${date}T12:00:00`) });
   };
+
+  const { trigger: importButton, dialog: importDialog } = useMarkdownImport({
+    initialDate: selectedDate,
+    onOpen: () => setMessage(''),
+    onImported: (date, imageCount) => {
+      if (date !== selectedDate) selectDate(date);
+      setMessage(`已保存到 ${date} 的学习记录，共 ${imageCount} 张图片。`);
+    },
+  });
 
   useEffect(() => {
     loadLogs();
@@ -201,36 +212,16 @@ const History = ({ draft, setDraft }: LogEditingProps) => {
               <span>学习时长 {selectedLog.duration} 分钟</span>
             </div>
 
-            {/* 标签 */}
-            {selectedLog.tags.length > 0 && (
-              <div className="mb-3">
-                <div className="flex flex-wrap gap-2">
-                  {selectedLog.tags.map(tag => (
-                    <span
-                      key={tag}
-                      className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full"
-                    >
-                      #<HighlightedText text={tag} words={search?.words} />
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
+            <LogMetadataField key={'tags-' + selectedLog.id} label="标签" sectionLabel="编辑标签" placeholder="例如 Unity、C#、算法"
+              items={selectedLog.tags} searchWords={search?.words}
+              onAdd={(tag) => changeTag(selectedLog.id, tag, true)} onRemove={(tag) => changeTag(selectedLog.id, tag, false)} />
 
-            {/* 知识点 */}
             {selectedLog.knowledgePoints.length > 0 && (
-              <div className="mb-3">
-                <div className="flex flex-wrap gap-2">
-                  {selectedLog.knowledgePoints.map(point => (
-                    <span
-                      key={point}
-                      className="px-2 py-1 text-xs bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-full"
-                    >
-                      💡 <HighlightedText text={point} words={search?.words} />
-                    </span>
-                  ))}
-                </div>
-              </div>
+              <ul className="log-chips history-log-chips" aria-label="学到的知识点">
+                {selectedLog.knowledgePoints.map(point => <li className="log-chip" key={point}>
+                  <HighlightedText text={point} words={search?.words} />
+                </li>)}
+              </ul>
             )}
 
             <KnowledgeLinks key={selectedLog.id} logId={selectedLog.id} legacyPoints={selectedLog.knowledgePoints} />
@@ -242,6 +233,7 @@ const History = ({ draft, setDraft }: LogEditingProps) => {
                 content={selectedLog.content}
                 search={search}
                 actions={<>
+                  {importButton}
                   <button ref={editButton} type="button" className="note-button" onClick={() => {
                     setMessage('');
                     setDraft(selectedLog);
@@ -262,9 +254,14 @@ const History = ({ draft, setDraft }: LogEditingProps) => {
           点击有绿点的日期查看当天的学习记录
         </div>
       )}
-      {selectedDate && !selectedLog && (selectedDate === deletedDate
-        ? <p role="status">日志已移入<a href="#data">回收站</a>。</p>
-        : <p className="text-sm text-gray-500 dark:text-gray-400">该日期暂无学习记录。</p>)}
+      {selectedDate && !selectedLog && (
+        <div className="history-record">
+          {selectedDate === deletedDate
+            ? <p role="status">日志已移入<a href="#data">回收站</a>。</p>
+            : <p className="text-sm text-gray-500 dark:text-gray-400">该日期暂无学习记录。</p>}
+          <div className="history-note-actions">{importButton}</div>
+        </div>
+      )}
     </div>
   );
 
@@ -279,6 +276,7 @@ const History = ({ draft, setDraft }: LogEditingProps) => {
         window.requestAnimationFrame(() => editButton.current?.focus());
       }} />}
       {reading}
+      {importDialog}
     </div>
   );
 };

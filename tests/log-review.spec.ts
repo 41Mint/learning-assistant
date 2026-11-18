@@ -52,35 +52,43 @@ test('日志整理查询别名和关联，仅保存勾选并核对过的建议',
       { kind: 'link', entryId: 'scene', note: '模型生成的说明', evidence: '素材导入比例' },
       { kind: 'link', entryId: 'unknown', note: '', evidence: '素材导入比例' },
       { kind: 'entry', title: 'PPU', category: '2D 素材', content: '像素与单位比例。', evidence: '我用 PPU 调整了素材导入比例。' },
-      { kind: 'entry', title: 'Tilemap', category: 'Unity', content: '用瓦片拼出地面。', evidence: '用 Tilemap 拼出地面。' },
+      { kind: 'entry', title: 'Tilemap', category: '2Ｄ素材', content: '日志示例中用瓦片拼出地面。', citationAnchor: '日志示例', evidence: '用 Tilemap 拼出地面。' },
     ] } });
   });
   const { editor, assistant, launcher, close } = await openReview(page);
   await assistant.getByRole('button', { name: '生成整理建议', exact: true }).click();
-  await expect(assistant.getByRole('checkbox')).toHaveCount(4);
-  await expect(assistant.getByText('我用 PPU 调整了素材导入比例。', { exact: true })).toHaveCount(0);
+  await expect(assistant.getByRole('checkbox')).toHaveCount(5);
+  await expect(assistant.getByRole('checkbox', { checked: true })).toHaveCount(0);
+  const selectAll = assistant.getByRole('checkbox', { name: '全选建议', exact: true });
+  await selectAll.check();
+  await expect(assistant.getByText('已选 4 项，随日志保存')).toBeVisible();
+  await selectAll.uncheck();
   await expect(assistant.getByRole('checkbox', { checked: true })).toHaveCount(0);
   await assistant.getByRole('checkbox', { name: '添加标签 · Unity', exact: true }).check();
-  await assistant.getByRole('button', { name: '详情 · 添加标签 · Unity', exact: true }).click();
-  await expect(assistant.getByRole('checkbox')).toHaveCount(0);
+  await expect(selectAll).toHaveJSProperty('indeterminate', true);
+  await assistant.getByRole('button', { name: '展开 · 添加标签 · Unity', exact: true }).click();
+  await expect(assistant.getByRole('checkbox')).toHaveCount(5);
   await assistant.getByRole('textbox', { name: '标签', exact: true }).fill('Unity 实践');
-  await assistant.getByRole('button', { name: '← 返回建议', exact: true }).click();
+  await assistant.getByRole('button', { name: '收起 · 添加标签 · Unity 实践', exact: true }).click();
+  await expect(assistant.getByRole('textbox', { name: '标签', exact: true })).toHaveCount(0);
   await assistant.getByRole('checkbox', { name: '关联词条 · 像素单位', exact: true }).check();
-  await assistant.getByRole('button', { name: '详情 · 关联词条 · 像素单位', exact: true }).click();
+  await assistant.getByRole('button', { name: '展开 · 关联词条 · 像素单位', exact: true }).click();
   await expect(assistant.getByText('我用 PPU 调整了素材导入比例。', { exact: true })).toBeVisible();
   await assistant.getByRole('textbox', { name: '关联说明', exact: true }).fill('在导入素材时验证。');
-  await assistant.getByRole('button', { name: '← 返回建议', exact: true }).click();
+  await assistant.getByRole('button', { name: '收起 · 关联词条 · 像素单位', exact: true }).click();
   await assistant.getByRole('checkbox', { name: '新建词条 · Tilemap', exact: true }).check();
-  await assistant.getByRole('button', { name: '详情 · 新建词条 · Tilemap', exact: true }).click();
-  await assistant.getByRole('textbox', { name: '词条分类', exact: true }).fill('2D 素材');
+  await assistant.getByRole('button', { name: '展开 · 新建词条 · Tilemap', exact: true }).click();
+  const category = assistant.getByRole('combobox', { name: '词条分类', exact: true });
+  await expect(category).toHaveValue('2D 素材');
+  await category.fill('瓦片地图');
   await close.click();
   await page.getByRole('navigation', { name: '主要功能' }).getByRole('link', { name: '成长记录', exact: true }).click();
   await launcher.click();
-  await expect(assistant.getByRole('textbox', { name: '词条分类', exact: true })).toHaveCount(0);
+  await expect(category).toHaveValue('瓦片地图');
   await close.click();
   await page.getByRole('navigation', { name: '主要功能' }).getByRole('link', { name: '历史回顾', exact: true }).click();
   await launcher.click();
-  await expect(assistant.getByRole('textbox', { name: '词条分类', exact: true })).toHaveValue('2D 素材');
+  await expect(category).toHaveValue('瓦片地图');
   await assistant.getByRole('button', { name: '返回日志', exact: true }).click();
   await expect(editor.getByText('已选 3 项整理建议，将随日志保存。')).toBeVisible();
   await expect(page.evaluate(() => JSON.parse(localStorage.getItem('learning-assistant:knowledge')!).entries.length)).resolves.toBe(2);
@@ -106,12 +114,23 @@ test('日志整理查询别名和关联，仅保存勾选并核对过的建议',
   }));
   expect(data.log).toMatchObject({ content: text, duration: 25, tags: ['原有标签', 'Unity 实践'] });
   const created = data.knowledge.entries.find((item: { title: string }) => item.title === 'Tilemap');
-  expect(created).toMatchObject({ category: '2D 素材', content: '用瓦片拼出地面。' });
+  expect(created).toMatchObject({ category: '瓦片地图', content: '日志示例[日志引用](<#log-ref/review-log>)中用瓦片拼出地面。' });
   expect(data.knowledge.logLinks).toEqual(expect.arrayContaining([
     expect.objectContaining({ entryId: 'scene', note: '原有情境' }),
     expect.objectContaining({ entryId: 'pixel-unit', note: '在导入素材时验证。' }),
     expect.objectContaining({ entryId: created.id, logId: 'review-log' }),
   ]));
+  await page.goto('/#history/' + date);
+  const tags = page.getByRole('region', { name: '编辑标签', exact: true });
+  await expect(tags.getByRole('button', { name: '移除标签「Unity 实践」' })).toBeVisible();
+  await tags.getByRole('textbox', { name: '标签', exact: true }).fill('瓦片地图');
+  await tags.getByRole('button', { name: '添加标签' }).click();
+  await tags.getByRole('button', { name: '移除标签「原有标签」' }).click();
+  await page.reload();
+  await expect(tags.getByRole('button', { name: '移除标签「瓦片地图」' })).toBeVisible();
+  await expect(tags.getByRole('button', { name: '移除标签「原有标签」' })).toHaveCount(0);
+  await page.goto('/#knowledge/' + created.id);
+  await expect(page.getByRole('link', { name: '日志引用 1', exact: true })).toHaveAttribute('href', '#history/' + date);
 });
 
 test('改变整理范围会重新查询，正文变化后需要重新生成或取消勾选', async ({ page }) => {
@@ -140,7 +159,7 @@ test('改变整理范围会重新查询，正文变化后需要重新生成或�
   await editor.getByRole('button', { name: '保存补充', exact: true }).click();
   await expect(editor.getByRole('alert')).toContainText('正文已修改');
   await launcher.click();
-  await choice.uncheck();
+  await assistant.getByRole('checkbox', { name: '取消全部选择', exact: true }).click();
   await close.click();
   await editor.getByRole('button', { name: '保存补充', exact: true }).click();
   await expect(editor).toHaveCount(0);
@@ -335,7 +354,7 @@ test('自由问答保留追问，只有显式勾选时才引用当前日志草�
   await expect(assistant.getByText('已取消的回复', { exact: true })).toHaveCount(0);
 });
 
-test('从其他页面按日期找到日志，选择后整理，保护已有的另一篇草稿', async ({ page }) => {
+test('问答输入框可按日期找日志、整理和保存，返回工具时保留各日志的结果', async ({ page }) => {
   await seedReview(page, text, true);
   const requests: LogReviewRequest[] = [];
   let chatCalls = 0;
@@ -343,38 +362,55 @@ test('从其他页面按日期找到日志，选择后整理，保护已有的�
   await page.route('**/api/log-review', async (route) => {
     const input: LogReviewRequest = route.request().postDataJSON();
     requests.push(input);
-    await route.fulfill({ json: input.stage === 'plan' ? { queries: ['Tilemap'] } : { summary: '找到 Tilemap。', suggestions: [] } });
+    await route.fulfill({ json: input.stage === 'plan' ? { queries: ['Tilemap'] } : { summary: '找到 Tilemap。', suggestions: [
+      { kind: 'tag', tag: '瓦片地图', evidence: '用 Tilemap 拼出地面。' },
+    ] } });
   });
   await page.goto('/#path');
   await page.getByRole('button', { name: '打开学习智能体' }).click();
   const assistant = page.getByRole('dialog', { name: '学习智能体' });
   await assistant.getByRole('button', { name: '日志整理', exact: true }).click();
-  await expect(assistant.getByRole('searchbox', { name: '按日期找日志' })).toBeVisible();
+  await expect(assistant.getByRole('textbox', { name: '按日期找日志' })).toBeVisible();
   await assistant.getByRole('button', { name: '自由问答', exact: true }).click();
   const question = assistant.getByRole('textbox', { name: '输入问题' });
   await question.fill('帮我整理11-5的日志');
   await question.press('Enter');
-  const dateInput = assistant.getByRole('searchbox', { name: '按日期找日志' });
+  const dateInput = assistant.getByRole('textbox', { name: '按日期找日志' });
+  await expect(dateInput).toHaveAttribute('id', 'assistant-input');
   await expect(dateInput).toHaveValue('11-5');
   await expect(assistant.getByRole('button', { name: '2025-11-05 · 旧年学习记录' })).toBeVisible();
   expect(requests).toHaveLength(0);
   await dateInput.fill('2026-11-05');
   await expect(assistant.getByRole('button', { name: '2025-11-05 · 旧年学习记录' })).toHaveCount(0);
   await assistant.getByRole('button', { name: '2026-11-05 · Unity 素材实践' }).click();
-  await expect(page).toHaveURL(/#history\/2026-11-05$/);
-  await expect(assistant.getByText('当前日志 · ' + date, { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/#path$/);
+  await expect(assistant.getByText('整理日志 · ' + date, { exact: true })).toBeVisible();
   expect(requests).toHaveLength(0);
-  await assistant.getByRole('button', { name: '生成整理建议' }).click();
+  const focus = assistant.getByRole('textbox', { name: '整理范围（可选）' });
+  await focus.fill('只整理 Tilemap');
+  await focus.press('Enter');
   await expect(assistant.getByText('找到 Tilemap。', { exact: true })).toBeVisible();
   expect(requests.map((input) => input.text)).toEqual([text, text]);
+  expect(requests.map((input) => input.focus)).toEqual(['只整理 Tilemap', '只整理 Tilemap']);
+  await assistant.getByRole('checkbox', { name: '添加标签 · 瓦片地图' }).check();
+  await assistant.getByRole('button', { name: '保存所选建议' }).click();
+  await expect(assistant.getByText('已保存所选整理建议。')).toBeVisible();
+  await assistant.getByRole('button', { name: '查找资料', exact: true }).click();
+  await assistant.getByRole('textbox', { name: '检索关键词' }).fill('PPU');
+  await assistant.getByRole('button', { name: '日志整理', exact: true }).click();
+  await expect(focus).toHaveValue('只整理 Tilemap');
+  await expect(assistant.getByText('找到 Tilemap。', { exact: true })).toBeVisible();
   await assistant.getByRole('button', { name: '选择其他日期' }).click();
   await dateInput.fill('11-5');
   await assistant.getByRole('button', { name: '2025-11-05 · 旧年学习记录' }).click();
-  await expect(assistant.getByRole('alert')).toContainText('2026-11-05 的草稿');
+  await expect(assistant.getByText('整理日志 · 2025-11-05', { exact: true })).toBeVisible();
+  await assistant.getByRole('button', { name: '选择其他日期' }).click();
   await dateInput.fill('01-01');
   await expect(assistant.getByRole('status')).toHaveText('没有找到这一天的日志。');
-  await assistant.getByRole('button', { name: '继续整理当前日志' }).click();
+  await dateInput.fill(date);
+  await assistant.getByRole('button', { name: '2026-11-05 · Unity 素材实践' }).click();
   await expect(assistant.getByText('找到 Tilemap。', { exact: true })).toBeVisible();
+  await expect(assistant.getByRole('log').getByText('帮我整理11-5的日志')).toBeVisible();
   expect(chatCalls).toBe(0);
 });
 
@@ -397,7 +433,7 @@ test('窄屏最小化后可阅读页面并恢复输入，从问答按别名查�
   await expect(question).toHaveValue('帮我打开 PPU 词条');
   await question.press('Enter');
   await expect(assistant.getByRole('button', { name: '查找资料', pressed: true })).toBeVisible();
-  await expect(assistant.getByRole('searchbox', { name: '检索关键词' })).toHaveValue('ppu');
+  await expect(assistant.getByRole('textbox', { name: '检索关键词' })).toHaveValue('ppu');
   await assistant.getByRole('link', { name: '像素单位', exact: true }).click();
   await expect(page).toHaveURL(/#knowledge\/pixel-unit\?find=ppu$/);
   await expect(assistant).toBeHidden();
@@ -433,7 +469,8 @@ test('空工作区提供可操作的入门引导，能力问题在本地回答',
   await question.press('Enter');
   await expect(guide.getByRole('button', { name: /保存一个脚本/ })).toBeVisible();
   await guide.getByRole('button', { name: /保存一个脚本/ }).click();
-  await expect(page).toHaveURL(/#code$/);
-  await expect(page.getByRole('form', { name: '保存代码版本' })).toBeVisible();
+  await expect(page).toHaveURL(/#path$/);
+  await assistant.getByRole('button', { name: '保存脚本', exact: true }).click();
+  await expect(assistant.getByRole('form', { name: '保存代码版本' })).toBeVisible();
   expect(requests).toBe(0);
 });

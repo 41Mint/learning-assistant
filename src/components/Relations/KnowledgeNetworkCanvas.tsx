@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { FocusEvent, KeyboardEvent, MouseEvent, PointerEvent, ReactNode, Ref } from 'react';
 import { applyNetworkLayout, emptyNetworkLayout, layoutKnowledgeNetwork, NETWORK_NODE_HEIGHT, NETWORK_NODE_WIDTH,
   networkLine, networkModuleKey, selectedNetworkLine, translateNetworkLayout } from '../../utils/knowledgeNetwork';
@@ -8,6 +8,7 @@ import type { RelationConnection, RelationNode } from '../../utils/relations';
 import { NetworkToolButton } from './NetworkToolbar';
 
 export interface KnowledgeNetworkCanvasHandle { fit: () => void; fitSelection: () => void; interacting: () => boolean }
+export interface NetworkMenuAction { label: string; run: () => void; disabled?: boolean; checked?: boolean }
 
 interface Props {
   ref: Ref<KnowledgeNetworkCanvasHandle>;
@@ -27,7 +28,7 @@ interface Props {
   onConnection: (connection: RelationConnection) => void;
   onBlankClick: () => void;
   onNewEntry: () => void;
-  onEditEntry: (id: string) => void;
+  nodeMenuActions: (node: RelationNode) => NetworkMenuAction[];
   onRenameModule: (category: string) => void;
   onEditMembers: (category: string) => void;
   onHideModule: (category: string) => void;
@@ -48,7 +49,7 @@ interface LayoutDrag {
 }
 
 type ModuleTarget = { kind: 'module'; category: string } | { kind: 'layer'; layer: keyof NetworkLayers };
-type MenuTarget = { kind: 'blank' } | { kind: 'entry'; id: string } | ModuleTarget;
+type MenuTarget = { kind: 'blank' } | { kind: 'node'; key: string } | ModuleTarget;
 interface NetworkView extends Position { zoom: number }
 interface ViewportSize { width: number; height: number }
 const MAX_ZOOM = 1.8;
@@ -73,7 +74,7 @@ function fitNetworkView(bounds: NetworkBounds, { width, height }: ViewportSize):
 
 export default function KnowledgeNetworkCanvas({
   ref, nodes, connections, selectedNode, selectedConnection, selectedKeys, selectionOnly, edits, focusRequest, matches, connecting, toolbar,
-  onNode, onOpenNode, onConnection, onBlankClick, onNewEntry, onEditEntry, onRenameModule, onEditMembers, onHideModule, onOnlyModule, onHideLayer,
+  onNode, onOpenNode, onConnection, onBlankClick, onNewEntry, nodeMenuActions, onRenameModule, onEditMembers, onHideModule, onOnlyModule, onHideLayer,
   onToggleSelection, onBoxSelection, onLayoutEdit,
 }: Props) {
   const frame = useRef<HTMLDivElement>(null);
@@ -143,9 +144,16 @@ export default function KnowledgeNetworkCanvas({
     interacting: () => Boolean(pan.current || drag.current),
   }), []);
 
+  useLayoutEffect(() => {
+    const element = contextMenu.current;
+    const bounds = frame.current;
+    if (!menu || !element || !bounds) return;
+    element.style.left = `${Math.max(4, Math.min(menu.x, bounds.clientWidth - element.offsetWidth - 4))}px`;
+    element.style.top = `${Math.max(4, Math.min(menu.y, bounds.clientHeight - element.offsetHeight - 4))}px`;
+    element.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true });
+  }, [menu]);
   useEffect(() => {
     if (!menu) return;
-    contextMenu.current?.querySelector('button')?.focus({ preventScroll: true });
     const dismiss = (event: globalThis.PointerEvent) => {
       if (event.target instanceof Node && !contextMenu.current?.contains(event.target)) setMenu(null);
     };
@@ -319,10 +327,11 @@ export default function KnowledgeNetworkCanvas({
     }
   };
   const openMenu = (target: MenuTarget, x: number, y: number) => {
-    const bounds = frame.current?.getBoundingClientRect();
-    if (!bounds) return;
-    setMenu({ target, x: Math.max(4, Math.min(x - bounds.left, bounds.width - 154)),
-      y: Math.max(4, Math.min(y - bounds.top, bounds.height - (target.kind === 'module' ? 178 : target.kind === 'layer' ? 80 : 48))) });
+    const element = frame.current;
+    if (!element) return;
+    const bounds = element.getBoundingClientRect();
+    window.clearTimeout(clickTimer.current);
+    setMenu({ target, x: x - bounds.left - element.clientLeft, y: y - bounds.top - element.clientTop });
   };
   const closeMenu = () => {
     setMenu(null);
@@ -330,11 +339,11 @@ export default function KnowledgeNetworkCanvas({
   };
   const showContextMenu = (event: MouseEvent<HTMLDivElement>) => {
     if (connecting || !(event.target instanceof Element) || event.target.closest('[data-network-line]')) return;
-    const entry = event.target.closest<HTMLElement>('[data-network-entry]')?.dataset.networkEntry;
+    const node = event.target.closest<HTMLElement>('[data-network-node]')?.dataset.networkNode;
     const group = event.target.closest<HTMLElement>('[data-network-module], [data-network-layer]')?.dataset;
     const category = group?.networkModule;
     const layer = group?.networkLayer;
-    const target: MenuTarget = entry !== undefined ? { kind: 'entry', id: entry }
+    const target: MenuTarget = node !== undefined ? { kind: 'node', key: node }
       : category !== undefined ? { kind: 'module', category }
       : layer === 'log' || layer === 'code' ? { kind: 'layer', layer } : { kind: 'blank' };
     if (target.kind === 'blank' && event.target.closest('button')) return;
@@ -342,7 +351,8 @@ export default function KnowledgeNetworkCanvas({
     openMenu(target, event.clientX, event.clientY);
   };
   const moveTarget = preview?.target;
-  const menuEntry = menu?.target.kind === 'entry' ? menu.target.id : undefined;
+  const menuNodeKey = menu?.target.kind === 'node' ? menu.target.key : undefined;
+  const menuNode = menuNodeKey ? nodes.find((item) => relationNodeKey(item) === menuNodeKey) : undefined;
   const menuCategory = menu?.target.kind === 'module' ? menu.target.category : undefined;
   const menuLayer = menu?.target.kind === 'layer' ? menu.target.layer : undefined;
 
@@ -362,7 +372,7 @@ export default function KnowledgeNetworkCanvas({
         </div>
       </div>
       <div ref={viewport} className="network-viewport" role="group" aria-label="知识网络图" tabIndex={0}
-        aria-description="单击空白处退出连线详情或多选中的节点详情。拖动空白处平移，Ctrl 加滚轮缩放。Shift 加单击多选，按住 Shift 从空白处拖动框选。"
+        aria-description="单击空白处退出详情或清除节点选择。拖动空白处平移，Ctrl 加滚轮缩放。Shift 加单击多选，按住 Shift 从空白处拖动框选。"
         style={{ backgroundPosition: `${origin.x}px ${origin.y}px` }}
         onPointerDown={startPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onLostPointerCapture={endPan}
         onKeyDown={panWithKeys} onFocusCapture={revealFocusedButton} onContextMenu={showContextMenu}>
@@ -415,11 +425,11 @@ export default function KnowledgeNetworkCanvas({
               : moveTarget?.keys.includes(key);
             return <button type="button" key={key} className="relation-node network-node" data-kind={node.kind}
               data-active={endpoint || activeNodes.has(node) || undefined} data-match={matches?.has(key) || undefined} data-dragging={moving || undefined}
-              data-network-entry={node.kind === 'entry' ? node.id : undefined} data-intermediate={intermediate || undefined}
+              data-network-node={key} data-network-entry={node.kind === 'entry' ? node.id : undefined} data-intermediate={intermediate || undefined}
               title={[node.title, node.detail, connecting ? '选择端点' : '双击打开 · Shift 单击多选 · 拖动移动'].filter(Boolean).join(' · ')}
               aria-pressed={connecting ? endpoint : batchSelected || !selectionOnly && node === selectedNode}
               aria-description={intermediate ? '中间节点' : undefined}
-              aria-keyshortcuts={connecting ? undefined : node.kind === 'entry' ? 'Enter Shift+F10' : 'Enter'}
+              aria-haspopup={connecting ? undefined : 'menu'} aria-keyshortcuts={connecting ? undefined : 'Enter Shift+F10'}
               style={{ left: position.x, top: position.y, width: NETWORK_NODE_WIDTH, height: NETWORK_NODE_HEIGHT }}
               onPointerDown={(event) => startDrag(event, { kind: 'nodes', keys: batchSelected ? [...selectedKeys] : [key] })} onPointerMove={moveDrag}
               onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}
@@ -436,10 +446,10 @@ export default function KnowledgeNetworkCanvas({
               onKeyDown={(event) => {
                 if (connecting) return;
                 if (event.key === 'Enter') { event.preventDefault(); onOpenNode(node); }
-                if (node.kind === 'entry' && (event.key === 'ContextMenu' || event.shiftKey && event.key === 'F10')) {
+                if (event.key === 'ContextMenu' || event.shiftKey && event.key === 'F10') {
                   event.preventDefault();
                   const rect = event.currentTarget.getBoundingClientRect();
-                  openMenu({ kind: 'entry', id: node.id }, rect.left, rect.bottom);
+                  openMenu({ kind: 'node', key }, rect.left, rect.bottom);
                 }
               }}>
               <strong>{node.title}</strong>
@@ -451,15 +461,27 @@ export default function KnowledgeNetworkCanvas({
           style={{ left: selectionBox.left, top: selectionBox.top, width: selectionBox.right - selectionBox.left,
             height: selectionBox.bottom - selectionBox.top }} />}
       </div>
-      {menu && <div ref={contextMenu} className="workspace-context-menu" role="menu" aria-label="画布操作" style={{ left: menu.x, top: menu.y }}
+      {menu && <div ref={contextMenu} className="workspace-context-menu network-context-menu" role="menu" aria-label="画布操作"
         onKeyDown={(event) => {
-          if (event.key !== 'Escape') return;
-          event.preventDefault();
-          event.stopPropagation();
-          closeMenu();
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            closeMenu();
+          } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
+            event.preventDefault();
+            const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
+            const current = items.indexOf(document.activeElement as HTMLButtonElement);
+            const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+              : (current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+            items[next]?.focus();
+          }
         }}>
         {menu.target.kind === 'blank' && <button type="button" role="menuitem" onClick={() => { closeMenu(); onNewEntry(); }}>新建词条</button>}
-        {menuEntry !== undefined && <button type="button" role="menuitem" onClick={() => { closeMenu(); onEditEntry(menuEntry); }}>编辑词条</button>}
+        {menuNode && nodeMenuActions(menuNode).map(({ label, run, disabled, checked }) => <button key={label} type="button"
+          role={checked === undefined ? 'menuitem' : 'menuitemcheckbox'} aria-checked={checked} disabled={disabled}
+          onClick={() => { closeMenu(); run(); }}>
+          {checked !== undefined && <span className="network-menu-check" aria-hidden="true">{checked && '✓'}</span>}{label}
+        </button>)}
         {menuCategory !== undefined && <>
           <div className="workspace-context-menu-title">{menuCategory || '未分类'}</div>
           <button type="button" role="menuitem" onClick={() => { closeMenu(); onRenameModule(menuCategory); }}>重命名分类</button>

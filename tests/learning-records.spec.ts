@@ -231,9 +231,20 @@ test('图片刷新后可读；历史补充及追加不覆盖旧正文和时长�
     const store = useStudyLogStore.getState();
     const log = store.getLogByDate('2026-11-04');
     store.saveLog({ ...log, duration: 50 });
-    store.appendToDate('2026-11-04', '第二次学习内容');
     store.addDuration(25, '目标：今日任务');
   });
+  const history = page.locator('#study-history');
+  const trigger = history.getByRole('button', { name: '导入图文学习记录', exact: true });
+  const dialog = page.getByRole('dialog', { name: '导入图文学习记录' });
+  await trigger.click();
+  await expect(dialog.getByLabel('导入学习日期')).toHaveValue(day);
+  await dialog.getByLabel('Markdown 文件', { exact: true }).setInputFiles({
+    name: '补充.md', mimeType: 'text/markdown', buffer: Buffer.from('第二次学习内容'),
+  });
+  await dialog.getByRole('button', { name: '检查并预览' }).click();
+  await dialog.getByRole('button', { name: '确认追加到该日期' }).click();
+  await expect(history.getByRole('status')).toHaveText(`已保存到 ${day} 的学习记录，共 0 张图片。`);
+  await expect(trigger).toBeFocused();
   const logs = await page.evaluate(() => JSON.parse(localStorage.getItem('learning-assistant:study-logs') ?? '[]'));
   const historical = logs.find((log: { date: string }) => log.date === day);
   expect(historical.duration).toBe(50);
@@ -243,6 +254,41 @@ test('图片刷新后可读；历史补充及追加不覆盖旧正文和时长�
   await page.reload();
   await page.getByLabel('定位学习日期').fill(day);
   await expect(page.locator('#study-history')).toContainText('第二次学习内容');
+});
+
+test('今日和历史的导入按钮与正文左对齐，历史可在空白日期创建图文日志', async ({ page }) => {
+  await page.goto('/#today');
+  const today = page.getByRole('region', { name: '今日学习', exact: true });
+  const buttonName = '导入图文学习记录';
+  const todayTrigger = today.getByRole('button', { name: buttonName, exact: true });
+  await expect(todayTrigger).toBeVisible();
+  expect((await todayTrigger.boundingBox())?.x).toBe((await today.locator('.history-content').boundingBox())?.x);
+
+  await page.goto(`/#history/${day}`);
+  const history = page.locator('#study-history');
+  const historyTrigger = history.getByRole('button', { name: buttonName, exact: true });
+  await expect(history.getByText('该日期暂无学习记录。')).toBeVisible();
+  await historyTrigger.click();
+  const dialog = page.getByRole('dialog', { name: buttonName });
+  await expect(dialog.getByLabel('导入学习日期')).toHaveValue(day);
+  await dialog.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(historyTrigger).toBeFocused();
+
+  const otherDate = '2026-11-03';
+  await historyTrigger.click();
+  await dialog.getByLabel('导入学习日期').fill(otherDate);
+  await dialog.getByLabel('Markdown 文件', { exact: true }).setInputFiles({
+    name: '学习整理.md', mimeType: 'text/markdown', buffer: Buffer.from(markdown),
+  });
+  await dialog.getByLabel('配套图片', { exact: true }).setInputFiles({ name: 'step.png', mimeType: 'image/png', buffer: png });
+  await dialog.getByRole('button', { name: '检查并预览' }).click();
+  await dialog.getByRole('button', { name: '保存到该日期' }).click();
+  await expect(page).toHaveURL(new RegExp(`#history/${otherDate}$`));
+  await expect(history.getByLabel('定位学习日期')).toHaveValue(otherDate);
+  await expect(historyTrigger).toBeFocused();
+  const body = history.locator('.history-content');
+  await expect(body.getByRole('img', { name: '示意截图' })).toBeVisible();
+  expect((await historyTrigger.boundingBox())?.x).toBe((await body.boundingBox())?.x);
 });
 
 test('新版备份包含真实图片；取消无写入；确认恢复后图文一致', async ({ page }) => {

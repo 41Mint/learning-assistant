@@ -124,25 +124,9 @@ function App() {
     log: activeLog,
     editing: activePage === 'today' ? Boolean(todayDraft) : Boolean(historyDraft),
   } : undefined;
-  const openReview = (log: Log): string | undefined => {
-    const saved = useStudyLogStore.getState().logs.find((item) => item.id === log.id);
-    if (!saved) return '这篇日志已不存在，请重新选择。';
-    if (todayDraft?.id === saved.id || (todayLog?.id === saved.id && historyDraft?.id !== saved.id)) {
-      if (todayDraft && todayDraft.id !== saved.id) return '今日学习还有未保存的草稿，请先保存或取消。';
-      setTodayDraft((draft) => draft ?? saved);
-      window.location.hash = 'today';
-      enterPage('today');
-    } else {
-      if (historyDraft && historyDraft.id !== saved.id) return `历史回顾还有 ${historyDraft.date} 的草稿，请先保存或取消。`;
-      setHistoryDraft((draft) => draft ?? saved);
-      useWorkspaceStore.getState().openLog(saved.date);
-      enterPage('history');
-    }
-  };
   const startFromAssistant = (page: AssistantStart) => {
     if (page === 'today' && todayLog) setTodayDraft((draft) => draft ?? todayLog);
     if (page === 'path' && !exerciseDraft) setGrowthDraft((draft) => draft ?? { outcome: { id: generateId(), title: '', domains: [] }, preset: false });
-    if (page === 'code') setAddingCode(true);
     window.location.hash = page;
     enterPage(page);
   };
@@ -165,7 +149,7 @@ function App() {
     : PAGES.find((item) => item.id === activePage)?.label;
 
   return (
-    <AssistantDock activePage={activePage} activeLog={assistantLog} onOpenReview={openReview} onStart={startFromAssistant}
+    <AssistantDock activePage={activePage} activeLog={assistantLog} onStart={startFromAssistant}
       onRecordRecommendation={recordRecommendation} editingGrowth={Boolean(growthDraft || exerciseDraft)}>
     <div className="app-shell" data-test-workspace={IS_TEST_WORKSPACE || undefined}>
       <header className="app-header">

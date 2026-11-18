@@ -4,7 +4,7 @@ import type { EntryCategoryChange, SaveKnowledgeEntry } from '../../store/knowle
 import { canConnectNetworkNodes, connectNetworkNodes, removeNetworkConnection } from '../../store/networkRelations';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
-import { useWorkspaceStore, workspaceResourceTarget } from '../../store/workspaceStore';
+import { relationHref, useWorkspaceStore, workspaceResourceTarget } from '../../store/workspaceStore';
 import type { RelationAnnotation } from '../../types/relations';
 import { compareKnowledgeModules, emptyNetworkLayout, filterKnowledgeSelection, focusKnowledgeNetwork,
   renameModuleOffset, visibleKnowledgeNetwork } from '../../utils/knowledgeNetwork';
@@ -16,7 +16,7 @@ import { matchesWords, searchWords } from '../../utils/resourceSearch';
 import KnowledgeDirectory from '../Knowledge/KnowledgeDirectory';
 import KnowledgeEditor from '../Knowledge/KnowledgeEditor';
 import KnowledgeNetworkCanvas from './KnowledgeNetworkCanvas';
-import type { KnowledgeNetworkCanvasHandle } from './KnowledgeNetworkCanvas';
+import type { KnowledgeNetworkCanvasHandle, NetworkMenuAction } from './KnowledgeNetworkCanvas';
 import ModuleComparisonDetails from './ModuleComparisonDetails';
 import NetworkCategoryEditor from './NetworkCategoryEditor';
 import type { CategoryEditorTarget } from './NetworkCategoryEditor';
@@ -25,6 +25,7 @@ import NetworkToolbar from './NetworkToolbar';
 import RelationDetails from './RelationDetails';
 import RelationLink from './RelationLink';
 import { useNetworkHistory } from './useNetworkHistory';
+import WorkspaceDialog from '../common/WorkspaceDialog';
 import { historyShortcut } from '../../utils/workspaceHistory';
 import type { HistoryDirection } from '../../utils/workspaceHistory';
 
@@ -60,6 +61,7 @@ export default function KnowledgeNetwork({ active }: { active: boolean }) {
   const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [editorTarget, setEditorTarget] = useState<EditorTarget | null>(null);
+  const [removalTarget, setRemovalTarget] = useState<RelationConnection | null>(null);
   const { available: historyAvailable, record, run: runHistory } = useNetworkHistory();
   const workspace = useRef<HTMLElement>(null);
   const canvas = useRef<KnowledgeNetworkCanvasHandle>(null);
@@ -79,33 +81,42 @@ export default function KnowledgeNetwork({ active }: { active: boolean }) {
     }
   }, [active]);
   useEffect(() => {
-    const dialog = editor.current;
-    if (!active || !fullscreen || !editorTarget || !dialog?.open) return;
+    if (!removalTarget) return;
+    const closeConfirmation = () => setRemovalTarget(null);
+    window.addEventListener('hashchange', closeConfirmation);
+    return () => window.removeEventListener('hashchange', closeConfirmation);
+  }, [removalTarget]);
+  useEffect(() => {
+    const section = workspace.current;
+    if (!active || !fullscreen || !section) return;
     const keyboard = (navigator as Navigator & { keyboard?: KeyboardLock }).keyboard;
     if (typeof keyboard?.lock !== 'function' || typeof keyboard.unlock !== 'function') return;
-    let escapePressed = false;
+    let locked = false;
+    let escapeTarget: HTMLElement | null = null;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.isComposing || event.defaultPrevented) return;
-      escapePressed = true;
-      event.preventDefault();
+      if (!locked || event.key !== 'Escape' || event.isComposing || event.defaultPrevented) return;
+      if (!event.repeat) escapeTarget = section.querySelector<HTMLDialogElement>('dialog:modal') ?? section;
+      if (escapeTarget) event.preventDefault();
     };
     const handleKeyUp = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || !escapePressed) return;
-      escapePressed = false;
-      if (event.isComposing || event.defaultPrevented) return;
-      // Keep the lock until the browser has dispatched the release of the same key.
+      if (event.key !== 'Escape' || !escapeTarget) return;
+      const target = escapeTarget;
+      escapeTarget = null;
+      if (event.isComposing || event.defaultPrevented || document.fullscreenElement !== section) return;
       event.preventDefault();
-      dialog.close();
+      if (target instanceof HTMLDialogElement && target.open) target.requestClose();
+      if (target === section) void document.exitFullscreen().catch(() => undefined);
     };
-    dialog.addEventListener('keydown', handleKeyDown);
-    dialog.addEventListener('keyup', handleKeyUp);
-    void keyboard.lock(['Escape']).catch(() => undefined);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    // Changing the keyboard lock while fullscreen is active redisplays the browser's exit hint.
+    void keyboard.lock(['Escape']).then(() => { locked = true; }).catch(() => undefined);
     return () => {
-      dialog.removeEventListener('keydown', handleKeyDown);
-      dialog.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
       keyboard.unlock();
     };
-  }, [active, fullscreen, editorTarget]);
+  }, [active, fullscreen]);
   const performHistory = useCallback((direction: HistoryDirection) => {
     if (!active || pending || draft || canvas.current?.interacting() || document.querySelector('dialog[open]')) return false;
     try {
@@ -276,9 +287,13 @@ export default function KnowledgeNetwork({ active }: { active: boolean }) {
     revealSidebar();
   };
   const dismissDetails = () => {
-    if (draft || pending || (!connection && !batch?.detailKey)) return;
-    setConnectionKey(null);
-    if (batch?.detailKey) setBatch({ ...batch, detailKey: undefined });
+    if (draft || pending) return;
+    if (connection || batch?.detailKey) {
+      setConnectionKey(null);
+      if (batch?.detailKey) setBatch({ ...batch, detailKey: undefined });
+    } else if (batch || nodeKey) {
+      clearSelection();
+    } else return;
     setNotice(null);
   };
   const openNode = (item: RelationNode) => {
@@ -319,15 +334,12 @@ export default function KnowledgeNetwork({ active }: { active: boolean }) {
     } finally { setPending(false); }
   };
   const removeLink = async (item: RelationConnection) => {
-    if (pending || !window.confirm(`移除「${item.first.title}」与「${item.second.title}」的连线？`)) return;
     setPending(true);
     setNotice(null);
     try {
       await removeNetworkConnection(item.origin);
       setConnectionKey(null);
       setNotice({ text: '连线已移除。' });
-    } catch (failure) {
-      setNotice({ text: failure instanceof Error ? failure.message : '移除连线失败。', error: true });
     } finally { setPending(false); }
   };
   const toggleFullscreen = async () => {
@@ -426,9 +438,40 @@ export default function KnowledgeNetwork({ active }: { active: boolean }) {
   const editorLabel = editorTarget?.kind === 'entry' ? (editorTarget.id ? '在画布中编辑词条' : '在画布中新建词条')
     : editorTarget ? CATEGORY_EDITOR_TITLES[editorTarget.kind] : undefined;
 
+  const backLabel = connection && detailNode ? '节点详情' : selectionOnly ? '所选节点' : comparison ? '跨模块关联' : '词条目录';
+  const backFromDetail = () => {
+    if (connection && (detailNode || selectionOnly)) setConnectionKey(null);
+    else if (batch && selectionOnly) setBatch({ ...batch, detailKey: undefined });
+    else clearSelection();
+  };
+  const batchScopeLabel = selectionOnly ? '返回完整视图' : '仅查看所选';
+  const batchCategoryLabel = `批量改分类（${batchEntryIds.length} 个词条）`;
+  const batchScopeDisabled = !selectionOnly && !batchNodes.length;
+  const toggleBatchScope = () => changeBatchScope(selectionOnly ? 'all' : 'direct');
+  const editBatchCategory = () => openEditor({ kind: 'batch', ids: batchEntryIds });
+  const intermediateLabel = '显示中间节点（两跳）';
+  const showIntermediate = batchScope === 'intermediate';
+  const toggleIntermediate = () => changeBatchScope(showIntermediate ? 'direct' : 'intermediate');
+  const nodeMenuActions = (item: RelationNode): NetworkMenuAction[] => {
+    const actions: NetworkMenuAction[] = [];
+    if (item.kind === 'entry') actions.push({ label: '编辑词条', run: () => openEditor({ kind: 'entry', id: item.id }) });
+    actions.push({ label: item.kind === 'entry' ? '打开词条' : '打开原资料', run: () => openNode(item) },
+      { label: '查看关系', run: () => { window.location.hash = relationHref(item); } });
+    if (detailNode === item) actions.push({ label: `← ${backLabel}`, run: backFromDetail });
+    if (batchVisibleKeys.has(relationNodeKey(item))) {
+      if (selectionOnly) actions.push({ label: intermediateLabel, run: toggleIntermediate, checked: showIntermediate, disabled: batchNodes.length < 2 });
+      actions.push({ label: batchScopeLabel, run: toggleBatchScope, disabled: batchScopeDisabled },
+        { label: batchCategoryLabel, run: editBatchCategory, disabled: !batchEntryIds.length }, { label: '清除选择', run: clearSelection });
+    }
+    return actions;
+  };
+
   return (
     <section ref={workspace} className="module-card network-workspace" onKeyDown={(event) => {
-      if (event.key === 'Escape' && !event.nativeEvent.isComposing && draft && !pending && !editor.current?.open) cancelLink();
+      if (event.key === 'Escape' && !event.defaultPrevented && !event.nativeEvent.isComposing && draft && !pending && !editor.current?.open) {
+        event.preventDefault();
+        cancelLink();
+      }
     }}>
       <header className="relation-heading">
         <div>
@@ -452,7 +495,7 @@ export default function KnowledgeNetwork({ active }: { active: boolean }) {
             selectedNode={detailNode} selectedKeys={batchVisibleKeys} selectionOnly={selectionOnly} edits={layoutEdits} onLayoutEdit={commitLayout}
             selectedConnection={connection} focusRequest={focusRequest} matches={matches} connecting={draft ? { first, second } : undefined}
             onNode={selectNode} onOpenNode={openNode} onConnection={selectConnection} onBlankClick={dismissDetails} onNewEntry={newEntry}
-            onEditEntry={(id) => openEditor({ kind: 'entry', id })}
+            nodeMenuActions={nodeMenuActions}
             onRenameModule={(category) => openEditor({ kind: 'rename', category })}
             onEditMembers={(category) => openEditor({ kind: 'members', category })}
             onToggleSelection={(item) => changeBatch([relationNodeKey(item)], true)}
@@ -471,11 +514,7 @@ export default function KnowledgeNetwork({ active }: { active: boolean }) {
               fullscreen={fullscreen} onFullscreen={() => void toggleFullscreen()} />} />
           <aside ref={sidebar} className="relation-details network-sidebar" aria-label="知识网络详情">
             {notice && <p className="relation-muted" role={notice.error ? 'alert' : 'status'}>{notice.text}</p>}
-            {!draft && (detailNode || connection) && <button type="button" className="network-directory-back" onClick={() => {
-              if (connection && (detailNode || selectionOnly)) setConnectionKey(null);
-              else if (batch && selectionOnly) setBatch({ ...batch, detailKey: undefined });
-              else clearSelection();
-            }}>{connection && detailNode ? '← 节点详情' : selectionOnly ? '← 所选节点' : comparison ? '← 跨模块关联' : '← 词条目录'}</button>}
+            {!draft && (detailNode || connection) && <button type="button" className="network-directory-back" onClick={backFromDetail}>← {backLabel}</button>}
             {draft ? <NetworkLinkEditor first={draft.first} second={draft.second} choices={allNodes} targets={secondChoices} pending={pending}
                 onFirst={(key) => {
                   setDraft({ first: key, second: '' });
@@ -485,7 +524,7 @@ export default function KnowledgeNetwork({ active }: { active: boolean }) {
                   setNotice(null);
                 }} onSave={(input) => void createLink(input)} onCancel={cancelLink} />
               : connection ? <RelationDetails key={connection.key} center={connection.first} edge={{ ...connection, node: connection.second }}
-              removing={pending} onRemove={() => void removeLink(connection)} />
+              removing={pending} onRemove={() => setRemovalTarget(connection)} />
               : detailNode ? <>
                 <h3>{detailNode.title}</h3>
                 {detailNode.detail && <p className="relation-muted">{detailNode.detail}</p>}
@@ -512,9 +551,8 @@ export default function KnowledgeNetwork({ active }: { active: boolean }) {
                 </ul> : <p className="relation-muted">当前范围内没有可见的所选节点。</p>}
                 {selectionOnly && <div className="network-selection-options">
                   <label className="network-filter-option" title="显示没有直连的所选节点之间经过一个中间节点的路径">
-                    <input type="checkbox" checked={batchScope === 'intermediate'} disabled={batchNodes.length < 2}
-                      onChange={(event) => changeBatchScope(event.target.checked ? 'intermediate' : 'direct')} />
-                    显示中间节点（两跳）
+                    <input type="checkbox" checked={showIntermediate} disabled={batchNodes.length < 2} onChange={toggleIntermediate} />
+                    {intermediateLabel}
                   </label>
                   {batchScope === 'intermediate' && <p className="relation-muted">中间节点 {visible.nodes.length - batchNodes.length} 个</p>}
                   {batchNodes.length >= 2 && !visible.connections.length && <p className="relation-muted">
@@ -522,10 +560,8 @@ export default function KnowledgeNetwork({ active }: { active: boolean }) {
                   </p>}
                 </div>}
                 <div className="network-actions">
-                  <button type="button" className="note-button" disabled={!selectionOnly && !batchNodes.length}
-                    onClick={() => changeBatchScope(selectionOnly ? 'all' : 'direct')}>{selectionOnly ? '返回完整视图' : '仅查看所选'}</button>
-                  <button type="button" className="note-button secondary" disabled={!batchEntryIds.length}
-                    onClick={() => openEditor({ kind: 'batch', ids: batchEntryIds })}>批量改分类（{batchEntryIds.length} 个词条）</button>
+                  <button type="button" className="note-button" disabled={batchScopeDisabled} onClick={toggleBatchScope}>{batchScopeLabel}</button>
+                  <button type="button" className="note-button secondary" disabled={!batchEntryIds.length} onClick={editBatchCategory}>{batchCategoryLabel}</button>
                   <button type="button" className="note-button secondary" onClick={clearSelection}>清除选择</button>
                 </div>
               </> : comparison && visibleModules.length >= 2 ? <ModuleComparisonDetails comparison={comparison} onConnection={selectConnection} onNode={locateNode} />
@@ -549,6 +585,10 @@ export default function KnowledgeNetwork({ active }: { active: boolean }) {
             : entries.filter((entry) => entry.category === editorTarget.category)}
           onSave={(ids, category) => saveCategories(editorTarget, ids, category)} onCancel={closeEditor} />}
       </dialog>
+      {active && removalTarget && <WorkspaceDialog title="移除这条连线？" action="确认移除" destructive
+        onSave={() => removeLink(removalTarget)} onClose={() => setRemovalTarget(null)}>
+        <p>将解除「{removalTarget.first.title}」与「{removalTarget.second.title}」的关联。</p>
+      </WorkspaceDialog>}
     </section>
   );
 }

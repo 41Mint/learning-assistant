@@ -5,7 +5,7 @@ export const LOG_REVIEW_MAX_SUGGESTIONS = 12;
 export type LogReviewSuggestion =
   | { kind: 'tag'; tag: string; evidence: string }
   | { kind: 'link'; entryId: string; note: string; evidence: string }
-  | { kind: 'entry'; title: string; category: string; content: string; evidence: string };
+  | { kind: 'entry'; title: string; category: string; content: string; evidence: string; citationAnchor?: string };
 
 export interface LogReviewContext {
   entries: { id: string; title: string; aliases: string[]; category: string }[];
@@ -53,7 +53,8 @@ export function readReviewResult(value: unknown): LogReviewResult {
     if (item.kind === 'entry') {
       const title = reviewText(item.title, 100);
       const content = reviewText(item.content, 1200);
-      return title && content ? [{ kind: 'entry', title, category: reviewText(item.category, 80), content, evidence }] : [];
+      const citationAnchor = reviewText(item.citationAnchor, 80) || undefined;
+      return title && content ? [{ kind: 'entry', title, category: reviewText(item.category, 80), content, evidence, citationAnchor }] : [];
     }
     return [];
   });

@@ -11,14 +11,14 @@ import GrowthCard from '../Growth/GrowthCard';
 
 const sourceLabels = { log: '日志', entry: '词条', code: '代码' };
 
-export default function GrowthSuggestions({ domain, onDomain, onRecord, onNavigate, recordDisabledReason }: {
+export default function GrowthSuggestions({ domain, focus, onDomain, onRecord, onNavigate, recordDisabledReason }: {
   domain: GrowthDomain | '';
+  focus: string;
   onDomain: (domain: GrowthDomain | '') => void;
   onRecord: (item: SavedExercise) => void;
   onNavigate: () => void;
   recordDisabledReason?: string;
 }) {
-  const [focus, setFocus] = useState('');
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<Awaited<ReturnType<typeof suggestGrowth>>>();
   const [resultDomain, setResultDomain] = useState<GrowthDomain | ''>('');
@@ -48,15 +48,12 @@ export default function GrowthSuggestions({ domain, onDomain, onRecord, onNaviga
   };
 
   return <section className="assistant-growth-suggestions" aria-label="练习推荐">
-    <form className="growth-recommend-form" data-preserves-on-navigation onSubmit={(event) => { event.preventDefault(); void generate(); }}>
+    <form id="assistant-recommend-form" className="growth-recommend-form" data-preserves-on-navigation onSubmit={(event) => { event.preventDefault(); void generate(); }}>
       <label className="growth-field">练习领域
         <select value={domain} disabled={running} onChange={(event) => { onDomain(event.target.value as GrowthDomain | ''); setError(''); }}>
           <option value="">全部领域</option>
           {GROWTH_DOMAINS.map((item) => <option key={item}>{item}</option>)}
         </select>
-      </label>
-      <label className="growth-field">练习偏好（可选）
-        <input maxLength={180} value={focus} disabled={running} onChange={(event) => setFocus(event.target.value)} placeholder="例如：只练 C#，不用打开 Unity" />
       </label>
       <div className="code-actions">
         <button type="submit" className="note-button" disabled={running}>{currentResult?.suggestions.length ? '换一批' : '生成练习建议'}</button>

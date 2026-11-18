@@ -72,6 +72,7 @@ interface StudyLogStore {
 
   // 添加标签
   addTag: (tag: string) => void;
+  changeTag: (logId: string, tag: string, add: boolean) => void;
 
   // 删除标签
   removeTag: (tag: string) => void;
@@ -185,24 +186,23 @@ export const useStudyLogStore = create<StudyLogStore>((set, get) => ({
     }
   },
 
-  addTag: (tag: string) => {
-    const currentLog = get().currentLog;
-    if (currentLog && !currentLog.tags.includes(tag)) {
-      get().saveLog({
-        ...currentLog,
-        tags: [...currentLog.tags, tag],
-      });
-    }
+  changeTag: (logId, tag, add) => {
+    const log = readStoredLogs().find((candidate) => candidate.id === logId && !isTrashedLog(candidate));
+    if (!log) throw new Error('这条记录不存在，请刷新后重试。');
+    const label = add ? tag.trim() : tag;
+    if ((add && !label) || log.tags.includes(label) === add) return;
+    const tags = add ? [...log.tags, label] : log.tags.filter((item) => item !== label);
+    get().saveLog({ ...log, tags });
   },
 
-  removeTag: (tag: string) => {
+  addTag: (tag) => {
     const currentLog = get().currentLog;
-    if (currentLog) {
-      get().saveLog({
-        ...currentLog,
-        tags: currentLog.tags.filter(t => t !== tag),
-      });
-    }
+    if (currentLog) get().changeTag(currentLog.id, tag, true);
+  },
+
+  removeTag: (tag) => {
+    const currentLog = get().currentLog;
+    if (currentLog) get().changeTag(currentLog.id, tag, false);
   },
 
   addKnowledgePoint: (point: string) => {
