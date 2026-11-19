@@ -203,7 +203,9 @@ test('解释选中的代码只在发送时附带片段和行号，移除后恢�
   const preview = page.getByRole('group', { name: '代码预览' });
   await preview.press('Shift+F10');
   await expect(askLine).toBeFocused();
-  await expect(askLine).toHaveCSS('outline-offset', '-2px');
+  await expect(askLine).toHaveCSS('outline-width', '1px');
+  await expect(askLine).toHaveCSS('outline-offset', '-1px');
+  await expect(askLine).toHaveCSS('box-shadow', /0px 0px 0px 2px inset/);
   await page.keyboard.press('Escape');
   await expect(askMenu).toBeHidden();
   await expect(preview).toBeFocused();
@@ -512,6 +514,199 @@ test('删除没有在用版本的项目，回收站可恢复项目或彻底清�
   expect(backup.data.projectCode.trash.versions).toHaveLength(0);
   expect(backup.data.projectCode.trash.links).toHaveLength(0);
   expect(backup.data.studyLogs.map(({ id }: { id: string }) => id)).toContain('code-log');
+});
+
+test('编辑项目资料原位展开，取消与保存都平滑收起并归还焦点', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/#code');
+  await page.getByRole('button', { name: '添加代码版本', exact: true }).click();
+  const version = page.getByRole('form', { name: '保存代码版本' });
+  await version.getByLabel('项目名称').fill('Unity 学习演示');
+  await version.getByLabel('本地 .cs 文件').setInputFiles({ name: 'InputManager.cs', mimeType: 'text/plain', buffer: Buffer.from(firstContent) });
+  await version.getByRole('button', { name: '保存版本', exact: true }).click();
+  await page.getByRole('link', { name: '所有项目', exact: true }).click();
+
+  const project = page.getByRole('article', { name: 'Unity 学习演示', exact: true });
+  const edit = project.getByRole('button', { name: '编辑项目资料', exact: true });
+  const form = project.getByRole('form', { name: '编辑项目资料' });
+  const panel = project.locator('.code-form-reveal').filter({ has: page.locator('form[aria-label="编辑项目资料"]') });
+  await page.addStyleTag({ content: '@media (prefers-reduced-motion: no-preference) { .code-project { --app-motion-duration: 800ms; } }' });
+  const isAnimating = () => panel.evaluate((element) => element.getAnimations().some(
+    (animation) => animation instanceof CSSTransition && animation.transitionProperty === 'grid-template-rows',
+  ));
+
+  await edit.click();
+  await expect(edit).toHaveAttribute('aria-expanded', 'true');
+  await expect.poll(isAnimating).toBe(true);
+  const name = form.getByLabel('项目名称');
+  await name.fill('不会保存的草稿');
+  await form.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(edit).toHaveAttribute('aria-expanded', 'false');
+  await expect(edit).toBeFocused();
+  await expect(panel).toHaveAttribute('inert', '');
+  await expect.poll(isAnimating).toBe(true);
+  await expect(panel).toHaveCount(0);
+
+  await edit.press('Enter');
+  await expect(name).toHaveValue('Unity 学习演示');
+  await form.getByLabel('GitHub 仓库地址（可选）').fill(repository);
+  await form.getByRole('button', { name: '保存项目资料' }).click();
+  await expect(edit).toBeFocused();
+  await expect.poll(isAnimating).toBe(true);
+  await expect(panel).toHaveCount(0);
+  await expect(project.getByRole('link', { name: '打开 GitHub 仓库' })).toHaveAttribute('href', repository);
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await edit.click();
+  await expect(panel).toHaveCSS('transition-duration', '0s');
+  await form.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(panel).toHaveCount(0);
+  await expect(edit).toBeFocused();
+});
+
+test('只读目录跳过 Unity 缓存，保存前不读脚本正文，版本资料原位编辑', async ({ page }) => {
+  await page.addInitScript(() => {
+    const audit: string[] = [];
+    Object.defineProperty(window, 'directoryAudit', { value: audit });
+    const folder = (name: string, children: object[]) => ({ name, kind: 'directory', async *values() {
+      audit.push('list:' + name);
+      yield* children;
+    } });
+    const file = (name: string) => ({ name, kind: 'file', async getFile() {
+      audit.push('read:' + name);
+      return new File(['class Player {}'], name, { type: 'text/plain' });
+    } });
+    Object.defineProperty(window, 'showDirectoryPicker', { value: async ({ mode }: { mode: string }) => {
+      audit.push(mode);
+      return folder('Unity 场景', [folder('Library', [file('Skipped.cs')]),
+        folder('Assets', [file('Player.cs'), file('Player.cs.meta'), file('Scene.unity')])]);
+    } });
+  });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/#code');
+  await page.getByRole('button', { name: '导入项目目录', exact: true }).click();
+  const importer = page.getByRole('form', { name: '导入项目目录' });
+  await importer.getByRole('button', { name: '选择项目文件夹（只读）' }).click();
+  await importer.getByRole('button', { name: '展开 Assets' }).click();
+  const audit = () => page.evaluate(() => (window as Window & { directoryAudit?: string[] }).directoryAudit);
+  expect(await audit()).toEqual(['read', 'list:Unity 场景', 'list:Assets']);
+  const saveScript = importer.getByRole('checkbox', { name: '保存脚本 Assets/Player.cs' });
+  await saveScript.check();
+  await importer.getByRole('button', { name: '折叠 Assets' }).click();
+  await expect(saveScript).toBeHidden();
+  await importer.getByRole('button', { name: '展开 Assets' }).click();
+  await expect(saveScript).toBeChecked();
+  await expect(importer.getByText('Library', { exact: true })).toHaveCount(0);
+  await importer.getByRole('button', { name: '保存目录快照' }).click();
+  const project = page.getByRole('article', { name: 'Unity 场景' });
+  await project.getByRole('link', { name: 'Assets/Player.cs', exact: true }).click();
+  expect(await audit()).toEqual(['read', 'list:Unity 场景', 'list:Assets', 'read:Player.cs']);
+  const snapshot = page.getByRole('region', { name: '脚本快照' });
+  const trigger = page.getByRole('button', { name: '编辑版本资料', exact: true });
+  const currentUrl = page.url();
+  await trigger.click();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  const detail = page.getByRole('form', { name: '编辑代码版本资料' });
+  await expect(snapshot).toBeVisible();
+  await detail.getByLabel('版本说明（可选）').fill('原位修改成功');
+  await detail.getByRole('button', { name: '保存版本资料' }).click();
+  await expect(detail).toBeHidden();
+  await expect(trigger).toBeFocused();
+  await expect(page).toHaveURL(currentUrl);
+  await expect(page.getByText('原位修改成功', { exact: true })).toBeVisible();
+});
+
+test('日志引用固定代码版本，可预览行号、跳到整段并在新版保存后仍读旧版', async ({ page, browser }) => {
+  await seedStudyContext(page);
+  await page.goto('/#history/' + firstDate);
+  const { panel, form } = await openLogCodeForm(page);
+  await form.getByLabel('项目名称').fill('输入练习');
+  await form.getByLabel('本地 .cs 文件').setInputFiles({ name: 'InputManager.cs', mimeType: 'text/plain', buffer: Buffer.from(firstContent) });
+  await form.getByLabel('版本说明（可选）').fill('Day 03 · 读取输入');
+  await form.getByRole('button', { name: '保存版本', exact: true }).click();
+  const source = panel.getByRole('link', { name: 'InputManager.cs', exact: true });
+  const href = await source.getAttribute('href');
+  await page.getByRole('button', { name: '编辑 / 补充记录', exact: true }).click();
+  const editor = page.getByRole('form', { name: '历史记录编辑表单' });
+  const body = editor.getByLabel('历史学习内容', { exact: true });
+  await body.fill('看看输入设置。 ');
+  await body.press('End');
+  await editor.getByText('插入代码引用', { exact: true }).click();
+  await editor.getByRole('combobox', { name: '引用代码版本' }).fill('Day 03');
+  await editor.getByRole('option', { name: /Day 03/ }).click();
+  await editor.getByLabel('链接文字（可选）').fill('Update()');
+  await editor.getByLabel('起始行（可选）').fill('2');
+  const end = editor.getByLabel('结束行（可选）');
+  await end.fill('999');
+  await expect(editor.getByRole('button', { name: '插入到正文' })).toBeDisabled();
+  await end.fill('3');
+  await editor.getByRole('button', { name: '插入到正文' }).click();
+  await expect(body).toHaveValue('看看输入设置。 [Update()](<' + href + '?cite=1&lines=2-3>)');
+  await editor.getByRole('button', { name: '保存补充' }).click();
+  await page.reload();
+
+  const reference = page.getByRole('link', { name: 'Update()', exact: true });
+  await reference.hover();
+  const preview = page.getByRole('tooltip');
+  await expect(preview).toContainText('Day 03 · 读取输入');
+  await expect(preview.locator('[data-code-line]')).toHaveCount(2);
+  await expect(preview.locator('[data-code-line="2"]')).toContainText('hits = 1');
+  await expect(preview.locator('code')).toHaveCSS('font-family', /Fira Code/);
+  await expect.poll(() => page.evaluate(async () => {
+    const faces = await document.fonts.load('13px "Fira Code"', 'Update');
+    return faces.length > 0 && faces.every((face) => face.status === 'loaded');
+  })).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(preview).toHaveCount(0);
+  await page.mouse.move(0, 0);
+  await reference.focus();
+  await expect(preview).toBeVisible();
+  await reference.press('Enter');
+  await expect(page.getByRole('region', { name: '脚本快照' }).locator('[data-code-cited="true"]')).toHaveCount(2);
+  await expect(page.locator('[data-code-line="2"]')).toContainText('hits = 1');
+  await page.evaluate(() => {
+    Object.defineProperty(navigator.clipboard, 'writeText', { configurable: true, value: async (value: string) => {
+      sessionStorage.setItem('copied-code-reference', value);
+    } });
+  });
+  await page.locator('[data-code-line="2"]').click({ button: 'right' });
+  await page.getByRole('button', { name: '复制日志引用' }).click();
+  expect(await page.evaluate(() => sessionStorage.getItem('copied-code-reference'))).toBe('[InputManager.cs · L2](<' + href + '?cite=1&lines=2-2>)');
+  await page.goto('/#code');
+  await page.getByRole('button', { name: '添加代码版本', exact: true }).click();
+  const newer = page.getByRole('form', { name: '保存代码版本' });
+  await newer.getByLabel('本地 .cs 文件').setInputFiles({ name: 'InputManager.cs', mimeType: 'text/plain', buffer: Buffer.from(secondContent) });
+  await newer.getByRole('button', { name: '保存版本', exact: true }).click();
+  await expect(page.getByRole('region', { name: '脚本快照' }).locator('code')).toContainText('hits = 2');
+  await page.goto('/#history/' + firstDate);
+  await reference.click();
+  await expect(page.locator('[data-code-line="2"][data-code-cited]')).toContainText('hits = 1');
+  await expect(page.getByRole('region', { name: '引用记录' }).getByRole('link', { name: /学习日志/ })).toHaveCount(1);
+  await page.getByRole('button', { name: '删除代码版本' }).click();
+  await page.getByRole('dialog', { name: '删除代码版本' }).getByRole('button', { name: '移入回收站' }).click();
+  await page.goto('/#history/' + firstDate);
+  await reference.hover();
+  await expect(preview).toContainText('代码版本已移入回收站');
+  await expect(preview.locator('code')).toHaveCount(0);
+  await reference.click();
+  await expect(page.getByText('代码版本已移入回收站。')).toBeVisible();
+  await page.getByRole('link', { name: '打开回收站' }).click();
+  await page.getByRole('button', { name: '恢复代码版本', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: '确认恢复' }).click();
+  await expect(page.getByText('已恢复代码版本', { exact: false })).toBeVisible();
+  await page.goto('/#history/' + firstDate);
+  await reference.hover();
+  await expect(preview.locator('[data-code-line="2"]')).toContainText('hits = 1');
+  const backup = await downloadBackup(page);
+  const restored = await browser.newPage({ baseURL: new URL(page.url()).origin });
+  try {
+    await restored.goto('/#data');
+    await restored.getByLabel('选择备份文件').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+    await Promise.all([restored.waitForEvent('load'), restored.getByRole('button', { name: '确认恢复并刷新' }).click()]);
+    await restored.goto('/#history/' + firstDate);
+    await restored.getByRole('link', { name: 'Update()', exact: true }).click();
+    await expect(restored.locator('[data-code-line="2"][data-code-cited]')).toContainText('hits = 1');
+  } finally { await restored.close(); }
 });
 
 test('同名脚本分版本保存，日志、词条与两次实践打开对应版本', async ({ page }) => {

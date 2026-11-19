@@ -18,7 +18,7 @@ function splitLines(children: Element['children']): Element['children'][] {
   return lines;
 }
 
-export function rehypeCodeLines() {
+export function rehypeCodeLines(firstLine = 1) {
   return (root: Root) => {
     for (const child of root.children) {
       if (child.type !== 'element' || child.tagName !== 'pre') continue;
@@ -27,7 +27,7 @@ export function rehypeCodeLines() {
       const lines = splitLines(code.children);
       if (lines.length > 1 && lines.at(-1)?.length === 0) lines.pop();
       code.children = lines.flatMap((children, index): Element['children'] => [{
-        type: 'element', tagName: 'span', properties: { className: ['script-line'], dataCodeLine: index + 1 }, children,
+        type: 'element', tagName: 'span', properties: { className: ['script-line'], dataCodeLine: index + firstLine }, children,
       }, ...(index < lines.length - 1 ? [{ type: 'text' as const, value: '\n' }] : [])]);
     }
   };

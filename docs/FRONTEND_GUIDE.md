@@ -21,3 +21,7 @@
 - 复用 `searchWords` 和 `matchesWords`。空格分隔的词须全部匹配，可分布在不同搜索字段。日志可按日期、标题、标签、知识点或正文筛选。测试时覆盖空输入、无匹配、键盘确认以及选择后执行操作。
 
 [单选组件](../src/components/common/SearchableSelect.tsx) · [多选组件](../src/components/common/ReferenceChoices.tsx) · [检索规则](../src/utils/resourceSearch.ts)
+
+## 代码显示
+
+代码块、项目快照与正文引用预览统一使用基于 [One Monokai](https://github.com/azemoh/vscode-one-monokai) 的 Highlight.js 颜色和本地打包的 [Fira Code](https://github.com/tonsky/FiraCode) 网页字体。代码区域保持同一套配色，不改变应用明暗主题。代码引用可用鼠标或 Tab 预览，也可直接激活链接跳转。

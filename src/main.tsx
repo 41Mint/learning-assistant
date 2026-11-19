@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import '@fontsource/fira-code/latin-400.css'
 import './index.css'
 import App from './App.tsx'
 import { IS_TEST_WORKSPACE } from './utils/workspaceMode'

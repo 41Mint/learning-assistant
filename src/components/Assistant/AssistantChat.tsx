@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { ASSISTANT_CHAT_ENDPOINT, ASSISTANT_REQUEST_BYTES, CHAT_ANSWER_LIMIT, CHAT_HISTORY_LIMIT, CHAT_QUESTION_LIMIT, CHAT_TOPIC_TASK_LIMIT, readGrowthGrouping, readTaskSuggestions } from '../../types/assistantChat';
+import { ASSISTANT_CHAT_ENDPOINT, ASSISTANT_REQUEST_BYTES, CHAT_ANSWER_LIMIT, CHAT_HISTORY_LIMIT, CHAT_QUESTION_LIMIT, CHAT_TOPIC_TASK_LIMIT, readConversationAction, readConversationOptions, readGrowthGrouping, readTaskSuggestions } from '../../types/assistantChat';
 import type { ChatRequest, ChatTaskSuggestion, ChatTopic } from '../../types/assistantChat';
 import { LOG_REVIEW_MAX_TEXT, reviewRecord, reviewText } from '../../types/logReview';
 import { assistantAction, isAssistantGuideQuestion } from './assistantActions';
 import type { AssistantAction } from './assistantActions';
 import { isScriptReference } from './assistantSlots';
 import type { AssistantCodeExcerpt, AssistantCodeReference, AssistantGrowthReference } from './assistantSlots';
+import type { ReviewConversation } from './assistantSlots';
 import AssistantGuide from './AssistantGuide';
 import type { AssistantStart } from './AssistantGuide';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
@@ -27,6 +28,7 @@ interface Turn {
   action?: AssistantAction;
   groups?: ProposedGrowthGroup[];
   taskPlan?: { topicId: string; suggestions: ChatTaskSuggestion[] };
+  options?: string[];
 }
 const excerptLabel = (excerpt: AssistantCodeExcerpt) => `${excerpt.path} · ${lineLabel(excerpt)}`;
 
@@ -46,20 +48,13 @@ async function askAssistant(input: ChatRequest, signal: AbortSignal) {
   }
   const result = reviewRecord(value) ? value : {};
   return { answer, groups: readGrowthGrouping(result.groups, input.growthSelection?.cards.length ?? 0),
-    tasks: input.topic ? readTaskSuggestions(result.tasks) : [] };
-}
-
-export interface AssistantToolInput {
-  label: string;
-  placeholder: string;
-  value: string;
-  onChange: (value: string) => void;
-  maxLength?: number;
-  formId?: string;
+    tasks: input.topic ? readTaskSuggestions(result.tasks) : [],
+    options: readConversationOptions(result.options).filter((option) => Boolean(assistantAction(option))),
+    action: readConversationAction(result.action) };
 }
 
 export default function AssistantChat({ source, active, onAction, codeExcerpt, onRemoveCode, onPickCode, growthReference, onRemoveGrowthReference, page, onTool, onStart,
-  toolInput, tools, toolKey }: {
+  onContextMessage, tools, toolKey, onReturnToChat, review }: {
   source?: AssistantChatSource;
   active: boolean;
   onAction: (action: AssistantAction) => void;
@@ -71,9 +66,11 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
   page: string;
   onTool: (tool: 'review' | 'search' | 'practice' | 'code') => void;
   onStart: (page: AssistantStart) => void;
-  toolInput?: AssistantToolInput;
+  onContextMessage?: (message: string) => string | undefined;
   tools: ReactNode;
   toolKey?: string;
+  onReturnToChat: () => void;
+  review?: { id: string; date: string; respond: ReviewConversation['respond'] };
 }) {
   const toolActive = Boolean(toolKey);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -136,45 +133,50 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
     }
   }, [active, toolKey]);
 
-  const send = async (event: FormEvent) => {
-    event.preventDefault();
-    if (toolActive) {
-      const form = toolInput?.formId && document.getElementById(toolInput.formId);
-      if (form instanceof HTMLFormElement) form.requestSubmit();
-      return;
-    }
-    if (controller.current || !question.trim()) return;
-    const text = question.trim();
+  const sendText = async (input: string, shortcut = false) => {
+    if (controller.current || !input.trim()) return;
+    const text = input.trim();
     if (isAssistantGuideQuestion(text)) {
+      onReturnToChat();
       setTurns((previous) => [...previous, { question: text, answer: '', guide: true }]);
       setQuestion('');
       setError('');
       return;
     }
-    const action = assistantAction(text);
-    if (action && ((!codeExcerpt && !growthReference) || (action.kind === 'recommend' && !topicId))) {
-      setTurns((previous) => [...previous, { question: text, answer: '', action }]);
+    const action = (!review || shortcut) ? assistantAction(text) : undefined;
+    if (action && (shortcut || toolActive || (!codeExcerpt && !growthReference) || (action.kind === 'recommend' && !topicId))) {
+      setTurns((previous) => [...previous, { question: text, answer: action.kind === 'review'
+        ? '我来整理日志。若不确定是哪篇，可以告诉我日期。' : '', action }]);
       setError('');
       setQuestion('');
-      onAction(action);
+      onAction(action.kind === 'review' ? { ...action, generate: !shortcut || Boolean(action.date || action.focus) }
+        : action.kind === 'recommend' && !shortcut ? { ...action, generate: true } : action);
       return;
     }
-    if (wholeScript && !script) {
+    const contextualAnswer = !shortcut && onContextMessage?.(text);
+    if (contextualAnswer) {
+      setTurns((previous) => [...previous, { question: text, answer: contextualAnswer }]);
+      setQuestion('');
+      setError('');
+      return;
+    }
+    if (!review && wholeScript && !script) {
       setError('脚本快照已不可用，请重新选择。');
       return;
     }
-    if (topicId && !topic) {
+    if (!review && topicId && !topic) {
       setError('原主题已不可用，请重新选择或移除引用。');
       return;
     }
     const current = new AbortController();
     controller.current = current;
     setError('');
-    const sourceInfo = codeExcerpt && codeLabel ? { id: 'code:' + codeExcerpt.id, label: codeLabel }
+    const sourceInfo = review ? { id: 'review:' + review.id, label: review.date }
+      : codeExcerpt && codeLabel ? { id: 'code:' + codeExcerpt.id, label: codeLabel }
       : growthReference && growthLabel ? { id: `growth:${growthReference.kind}:${growthReference.id}`, label: growthLabel }
       : attached ? { id: 'log:' + attached.id, label: attached.date + (attached.draft ? ' · 草稿' : '') } : undefined;
     setPending({ question: text, source: sourceInfo });
-    const history = turns.filter((turn) => !turn.guide && !turn.action && turn.source?.id === sourceInfo?.id)
+    const history = turns.filter((turn) => !turn.guide && !turn.action && turn.answer && turn.source?.id === sourceInfo?.id)
       .slice(-(CHAT_HISTORY_LIMIT / 2))
       .flatMap(({ question, answer }) => [
         { role: 'user' as const, content: question },
@@ -183,6 +185,14 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
     const log = attached && { date: attached.date, text: attached.text.slice(0, LOG_REVIEW_MAX_TEXT) };
     const code = fragment && { path: fragment.path, text: fragment.text, startLine: fragment.startLine, endLine: fragment.endLine, context: includedContext };
     try {
+      if (review) {
+        const reply = await review.respond(text, history, current.signal);
+        if (current.signal.aborted) return;
+        setTurns((previous) => [...previous, { question: text, answer: reply.answer, source: sourceInfo }]);
+        setQuestion('');
+        if (reply.action) onAction(reply.action);
+        return;
+      }
       const reply = await askAssistant({ question: text, history, log, code, script, growthCard, growthGroup, growthSelection, topic }, current.signal);
       if (current.signal.aborted) return;
       const groups = growthReference?.kind === 'selection' && growthReference.cardIds.length === growthReference.selection.cards.length
@@ -191,8 +201,9 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
         })) })) : undefined;
       const taskPlan = growthReference?.kind === 'topic' && reply.tasks.length > 0
         ? { topicId: growthReference.id, suggestions: reply.tasks } : undefined;
-      setTurns((previous) => [...previous, { question: text, answer: reply.answer, source: sourceInfo, groups, taskPlan }]);
+      setTurns((previous) => [...previous, { question: text, answer: reply.answer, source: sourceInfo, groups, taskPlan, options: reply.options }]);
       setQuestion('');
+      if (reply.action && !codeExcerpt && !growthReference) onAction(reply.action);
     } catch (error) {
       if (!current.signal.aborted) setError(error instanceof Error ? error.message : '暂时无法获取回复，请重试。');
     } finally {
@@ -201,6 +212,14 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
         setPending(undefined);
       }
     }
+  };
+  const send = (event: FormEvent) => {
+    event.preventDefault();
+    void sendText(question);
+  };
+  const chooseGuide = (tool: 'review' | 'search' | 'practice' | 'code') => {
+    if (tool === 'code') { onTool(tool); return; }
+    void sendText({ review: '整理学习日志', search: '查找资料', practice: '回看实践' }[tool], true);
   };
   const cancel = () => {
     controller.current?.abort();
@@ -214,22 +233,45 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
   </div>;
   return <section className="assistant-chat" aria-label="自由问答">
     <div ref={transcript} className="assistant-transcript" role="log" aria-label="问答记录">
-      {!toolActive && !turns.length && !pending && !codeExcerpt && !growthReference && <AssistantGuide page={page} onAction={onTool} onStart={onStart} />}
+      {!toolActive && !turns.length && !pending && !codeExcerpt && !growthReference && <div className="assistant-answer">
+        <p>想回顾什么，或想让我帮你做什么？</p>
+        <details className="assistant-question-suggestions">
+          <summary>看看可以做什么</summary>
+          <AssistantGuide page={page} onAction={chooseGuide} onStart={onStart} />
+        </details>
+      </div>}
       {turns.map((turn, index) => <div key={index} className="assistant-turn">
         {renderQuestion(turn)}
-        {turn.action ? <button type="button" className="knowledge-text-button" onClick={() => onAction(turn.action!)}>再次打开工具</button>
-          : turn.guide && !toolActive ? <AssistantGuide page={page} onAction={onTool} onStart={onStart} />
-          : !turn.guide && <div className="assistant-answer markdown-preview">
+        {turn.guide && !toolActive ? <AssistantGuide page={page} onAction={chooseGuide} onStart={onStart} />
+          : !turn.guide && turn.answer && <div className="assistant-answer markdown-preview">
           <ReactMarkdown skipHtml disallowedElements={['img', 'a']} unwrapDisallowed>{turn.answer}</ReactMarkdown>
         </div>}
         {turn.groups && turn.groups.length > 0 && <GrowthGroupingPlan suggestions={turn.groups} />}
         {turn.taskPlan && <TopicTaskPlan {...turn.taskPlan} />}
+        {Boolean(turn.options?.length) && <div className="assistant-prompts" role="group" aria-label="可选的下一步">
+          {turn.options?.map((option) => <button type="button" className="assistant-prompt" key={option} disabled={Boolean(pending)}
+            onClick={() => void sendText(option, true)}>{option}</button>)}
+        </div>}
       </div>)}
       {pending && <div className="assistant-turn">{renderQuestion(pending)}<p role="status">正在生成回复…</p></div>}
       <div aria-live="off">{tools}</div>
     </div>
-    <form className="assistant-composer" aria-label={toolActive ? '使用智能体工具' : '发送问题'} hidden={toolActive && !toolInput}
+    <form className="assistant-composer" aria-label="发送问题"
       onSubmit={(event) => void send(event)}>
+      <div className="assistant-conversation-actions">
+        <details className="assistant-question-suggestions">
+          <summary>试试这样问</summary>
+          <div className="assistant-prompts">
+            {toolActive && <button type="button" className="assistant-prompt" onClick={onReturnToChat}>退出当前资料</button>}
+            {['整理学习日志', '查找资料', '回看实践', '推荐练习'].map((prompt) => <button key={prompt} type="button" className="assistant-prompt"
+              onClick={(event) => {
+                const details = event.currentTarget.closest('details');
+                if (details) details.open = false;
+                void sendText(prompt, true);
+              }}>{prompt}</button>)}
+          </div>
+        </details>
+      </div>
       {!toolActive && codeExcerpt && <div className="assistant-code-context">
         <p>引用 {codeLabel}</p>
         <button type="button" className="knowledge-text-button" disabled={Boolean(pending)} onClick={onRemoveCode}>{wholeScript ? '移除脚本' : '移除代码片段'}</button>
@@ -268,20 +310,18 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
           composer.current?.focus();
         }}>{prompt}</button>
       ))}</div>}
-      <textarea id="assistant-input" ref={composer} aria-label={toolInput?.label ?? '输入问题'} rows={3}
-        maxLength={toolInput?.maxLength ?? CHAT_QUESTION_LIMIT} placeholder={toolInput?.placeholder ?? '输入问题…'}
-        value={toolInput?.value ?? question} readOnly={!toolActive && Boolean(pending)} onChange={(event) => {
-          if (toolInput) toolInput.onChange(event.target.value);
-          else { setQuestion(event.target.value); setError(''); }
-        }}
+      <textarea id="assistant-input" ref={composer} aria-label="输入问题" rows={3}
+        maxLength={CHAT_QUESTION_LIMIT} placeholder="随时提问，或说想做什么…"
+        value={question} readOnly={Boolean(pending)} onChange={(event) => { setQuestion(event.target.value); setError(''); }}
         onKeyDown={(event) => {
           if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing || event.keyCode === 229) return;
           event.preventDefault();
           event.currentTarget.form?.requestSubmit();
         }} />
-      {!toolActive && error && <p role="alert">{error}</p>}
-      {toolActive ? toolInput?.formId && <div className="assistant-composer-actions">
-        <button type="submit" className="note-button">发送</button>
+      {error && <p role="alert">{error}</p>}
+      {toolActive ? <div className="assistant-composer-actions">
+        {pending ? <button type="button" className="note-button secondary" onClick={cancel}>停止</button>
+          : <button type="submit" className="note-button" disabled={!question.trim()}>发送</button>}
       </div> : <div className="assistant-composer-actions">
         <button type="button" className="assistant-code-button" title={codeExcerpt ? '更换代码片段' : '引用代码'}
           aria-label={codeExcerpt ? '更换代码片段' : '引用代码'} disabled={Boolean(pending)} onClick={onPickCode}>

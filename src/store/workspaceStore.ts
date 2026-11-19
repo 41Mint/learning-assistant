@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import type { RelationNodeRef } from '../types/relations';
 import { searchWords } from '../utils/resourceSearch';
 import { getTodayDate } from '../utils/storage';
+import { readCodeCitation } from '../utils/codeCitation';
+import type { CodeLineRange } from '../utils/codeCitation';
 import { PRACTICE_IDEAS_LABEL, PRACTICE_RECORDS_LABEL } from '../utils/growthLabels';
 
 export interface SearchLocation {
@@ -97,6 +99,7 @@ interface WorkspaceStore {
   historyDate: string;
   entryId: string | null;
   codeVersionId: string | null;
+  codeCitationRange: CodeLineRange | undefined;
   practiceTarget: { outcomeId: string; practiceId: string } | null;
   growthOutcomeId: string | null;
   growthGroupId: string | null;
@@ -115,6 +118,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   historyDate: initial.page === 'history' && isDate(initial.id) ? initial.id : getTodayDate(),
   entryId: initial.page === 'knowledge' && initial.id ? initial.id : null,
   codeVersionId: initial.page === 'code' && initial.id ? initial.id : null,
+  codeCitationRange: readCodeCitation(window.location.hash)?.range,
   practiceTarget: initial.practiceTarget,
   growthOutcomeId: initial.page === 'path' && initial.growthView === 'recent' ? initial.id || null : null,
   growthGroupId: initial.groupId,
@@ -127,7 +131,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   networkEntryRequest: initial.page === 'network' && initial.id ? { id: initial.id } : null,
   syncHash: () => {
     const { page, id, search, relation, growthView, groupId, cardId, exerciseId, practiceTarget, recycleCategory } = readWorkspaceHash();
-    const selection: Partial<WorkspaceStore> = { search, relationTarget: relation };
+    const selection: Partial<WorkspaceStore> = { search, relationTarget: relation, codeCitationRange: readCodeCitation(window.location.hash)?.range };
     if (page === 'network' && id && window.history.state?.knowledgeNetworkEntry !== id) {
       // Back and Forward revisit an existing entry, while a new link requests focus.
       window.history.replaceState({ ...window.history.state, knowledgeNetworkEntry: id }, '');

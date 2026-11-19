@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import type { LogReviewRequest } from '../src/types/logReview';
 import type { ChatRequest } from '../src/types/assistantChat';
+import type { ReviewConversationRequest, ReviewOperation } from '../src/types/reviewConversation';
 
 const date = '2026-11-05';
 const text = '## Unity 素材实践\n\n我用 PPU 调整了素材导入比例。\n用 Tilemap 拼出地面。';
@@ -25,7 +26,7 @@ async function seedReview(page: Page, content = text, includeOlder = false) {
   }, { date, content, includeOlder });
 }
 
-async function openReview(page: Page, content = text) {
+async function openReview(page: Page, content = text, manual = true) {
   await seedReview(page, content);
   await page.goto('/#history/' + date);
   await page.getByRole('button', { name: '编辑 / 补充记录', exact: true }).click();
@@ -34,8 +35,183 @@ async function openReview(page: Page, content = text) {
   await launcher.click();
   const assistant = page.getByRole('dialog', { name: '学习智能体' });
   await expect(assistant.getByText('当前日志 · ' + date, { exact: true })).toBeVisible();
+  if (manual) await assistant.getByRole('region', { name: '日志整理建议' }).getByText('手动操作', { exact: true }).click();
   return { editor, assistant, launcher, close: assistant.getByRole('button', { name: '关闭学习智能体' }) };
 }
+
+test('只用聊天提炼、询问、按字段编辑、撤销并保存，不需要勾选', async ({ page }) => {
+  const longName = '输入方向与 Rigidbody 2D 实际运动速度的差异';
+  const body = '输入方向来自 Move，刚体速度表示实际运动。读取输入不等于驱动刚体。';
+  const evidence = '用 Tilemap 拼出地面。';
+  const requests: ReviewConversationRequest[] = [];
+  let wrongField = false;
+  let unexpectedEditOnQuestion = false;
+  await page.route('**/api/log-review', async (route) => {
+    const input = route.request().postDataJSON() as LogReviewRequest | ReviewConversationRequest;
+    if (input.stage === 'plan') return route.fulfill({ json: { queries: [] } });
+    if (input.stage === 'suggest') return route.fulfill({ json: { summary: '已提炼出两个词条。', suggestions: [
+      { kind: 'entry', title: longName, category: 'Input System', content: body, evidence },
+      { kind: 'entry', title: '另一个词条', category: '2D', content: '第二条原正文。', evidence },
+    ] } });
+    if (input.stage !== 'conversation') throw new Error('unexpected legacy request');
+    requests.push(input);
+    const reply = (answer: string, operation?: ReviewOperation) => route.fulfill({ json: { answer, operation } });
+    if (input.question === '找找这篇里有什么值得记下来的') return reply('准备整理。', { kind: 'generate', focus: '提炼可复用知识' });
+    if (input.question.startsWith('词条名称为什么')) return reply('这个名称把两个概念和区别写在了一起。',
+      unexpectedEditOnQuestion ? { kind: 'edit', edits: [{ id: 1, fields: { title: '不该修改' } }] } : undefined);
+    if (input.question.includes('正文别动')) return reply('准备修改。', { kind: 'edit', edits: [
+      { id: 1, fields: wrongField ? { content: '错误地改了正文。' } : { title: '输入与刚体速度' } },
+    ] });
+    if (input.question === '放到「输入」分类吧') return reply('准备分类。', { kind: 'edit', edits: [{ id: 1, fields: { category: '输入' } }] });
+    if (input.question === '分类还是恢复成刚才的') return reply('准备撤销。', { kind: 'undo' });
+    if (input.question === '刚才改的那条留下吧') return reply('准备保存。', { kind: 'save', ids: [1] });
+    throw new Error('unexpected question: ' + input.question);
+  });
+  const { assistant } = await openReview(page, text, false);
+  const input = assistant.getByRole('textbox', { name: '输入问题' });
+  const type = async (message: string) => { await input.fill(message); await input.press('Enter'); };
+  const transcript = assistant.getByRole('log');
+  await expect(assistant.getByRole('button', { name: '生成整理建议', exact: true })).toBeHidden();
+  await type('找找这篇里有什么值得记下来的');
+  await expect(transcript.getByText(/整理出 2 项草稿/)).toBeVisible();
+  await expect(assistant.getByRole('checkbox')).toHaveCount(0);
+  await type('词条名称为什么这么长');
+  await expect(transcript.getByText('这个名称把两个概念和区别写在了一起。')).toBeVisible();
+  const originalCard = assistant.getByRole('button', { name: '展开 · 新建词条 · ' + longName, exact: true });
+  await expect(originalCard).toBeVisible();
+  unexpectedEditOnQuestion = true;
+  await type('词条名称为什么还那么长');
+  await expect(transcript.getByText('这是在问原因，我没有修改草稿。')).toBeVisible();
+  await expect(originalCard).toBeVisible();
+
+  wrongField = true;
+  await type('把第一条的名称改短，正文别动');
+  await expect(assistant.getByRole('alert')).toContainText('草稿没有改变');
+  await expect(originalCard).toBeVisible();
+  wrongField = false;
+  await type('把第一条的名称改短，正文别动');
+  await expect(assistant.getByRole('button', { name: '展开 · 新建词条 · 输入与刚体速度' })).toBeVisible();
+  expect(requests.at(-1)?.items.every(({ selected }) => !selected)).toBe(true);
+  await type('放到「输入」分类吧');
+  await expect(transcript.getByText(/已修改分类/)).toBeVisible();
+  expect(requests.at(-1)?.history.map(({ content }) => content)).toContain('把第一条的名称改短，正文别动');
+  expect(requests.at(-1)?.lastEdited).toEqual([1]);
+  await type('分类还是恢复成刚才的');
+  await expect(transcript.getByText(/已撤销 1 项草稿/)).toBeVisible();
+  const entries = () => page.evaluate(() => JSON.parse(localStorage.getItem('learning-assistant:knowledge')!).entries);
+  expect((await entries()).map((item: { title: string }) => item.title)).not.toContain('输入与刚体速度');
+  await type('刚才改的那条留下吧');
+  await expect(transcript.getByText(/要保存第 1 项.*还没有写入/)).toBeVisible();
+  expect((await entries()).map((item: { title: string }) => item.title)).not.toContain('输入与刚体速度');
+  await type('确认');
+  await expect(transcript.getByText('已保存：「输入与刚体速度」。')).toBeVisible();
+  expect(await entries()).toContainEqual(expect.objectContaining({ title: '输入与刚体速度', category: 'Input System', content: expect.stringContaining(body) }));
+  expect((await entries()).map((item: { title: string }) => item.title)).not.toContain('另一个词条');
+  await expect(input).toHaveValue('');
+});
+
+test('自然语言可从普通问答发起整理，正文精简达不到要求不覆盖草稿', async ({ page }) => {
+  await seedReview(page);
+  const original = '这一篇记录里先解释输入向量的来源，然后解释实际刚体速度的含义，最后强调两者不能互相替代。';
+  await page.route('**/api/assistant-chat', async (route) => {
+    const input = route.request().postDataJSON() as ChatRequest;
+    expect(input.log).toBeUndefined();
+    await route.fulfill({ json: { answer: '我来打开那篇学习记录。', action: { kind: 'review', date, focus: '优先总结关键区别' } } });
+  });
+  await page.route('**/api/log-review', async (route) => {
+    const input = route.request().postDataJSON() as LogReviewRequest | ReviewConversationRequest;
+    if (input.stage === 'plan') {
+      expect(input.focus).toBe('优先总结关键区别');
+      return route.fulfill({ json: { queries: [] } });
+    }
+    if (input.stage === 'suggest') return route.fulfill({ json: { suggestions: [
+      { kind: 'entry', title: '输入与速度', category: '输入', content: original, evidence: '用 Tilemap 拼出地面。' },
+    ] } });
+    return route.fulfill({ json: { answer: '准备修订。', operation: { kind: 'edit', edits: [
+      { id: 1, fields: { content: original.replace('先解释', '首先解释') } },
+    ] } } });
+  });
+  await page.goto('/#path');
+  await page.getByRole('button', { name: '打开学习智能体' }).click();
+  const assistant = page.getByRole('dialog', { name: '学习智能体' });
+  const input = assistant.getByRole('textbox', { name: '输入问题' });
+  await input.fill('十一月五号我记了什么？挑出值得长期记住的要点');
+  await input.press('Enter');
+  const card = assistant.getByRole('button', { name: '展开 · 新建词条 · 输入与速度' });
+  await card.click();
+  await expect(assistant.getByText(original, { exact: true })).toBeVisible();
+  await input.fill('这条正文有点冗长，再精简一下');
+  await input.press('Enter');
+  await expect(assistant.getByRole('alert')).toContainText('正文没有达到缩短要求');
+  await expect(assistant.getByText(original, { exact: true })).toBeVisible();
+});
+
+test('文本保存词条不会顺带提交编辑中的日志正文', async ({ page }) => {
+  const title = '日志中的 Tilemap';
+  await page.route('**/api/log-review', async (route) => {
+    const input = route.request().postDataJSON() as LogReviewRequest | ReviewConversationRequest;
+    if (input.stage === 'plan') return route.fulfill({ json: { queries: [] } });
+    if (input.stage === 'suggest') return route.fulfill({ json: { suggestions: [
+      { kind: 'entry', title, category: '', content: 'Tilemap 用于布置瓦片。', evidence: '用 Tilemap 拼出地面。' },
+    ] } });
+    const operation = input.question.startsWith('帮我') ? { kind: 'generate', focus: '' } : { kind: 'save', ids: [1] };
+    return route.fulfill({ json: { answer: '明白。', operation } });
+  });
+  const { editor, assistant, close, launcher } = await openReview(page, text, false);
+  const dirty = text + '\n\n还没保存的一句。';
+  await close.click();
+  await editor.getByRole('textbox', { name: '历史学习内容', exact: true }).fill(dirty);
+  await launcher.click();
+  const input = assistant.getByRole('textbox', { name: '输入问题' });
+  const send = async (message: string) => { await input.fill(message); await input.press('Enter'); };
+  await send('帮我整理这篇笔记');
+  await expect(assistant.getByRole('button', { name: '展开 · 新建词条 · ' + title })).toBeVisible();
+  await send('保存第 1 项词条');
+  await expect(assistant.getByRole('alert')).toContainText('还有未保存的正文');
+  const getSaved = () => page.evaluate(() => ({
+    body: JSON.parse(localStorage.getItem('learning-assistant:study-logs')!)[0].content,
+    titles: JSON.parse(localStorage.getItem('learning-assistant:knowledge')!).entries.map((entry: { title: string }) => entry.title),
+  }));
+  expect((await getSaved()).body).toBe(text);
+  expect((await getSaved()).titles).not.toContain(title);
+  await send('把正文和第 1 项一起保存');
+  await expect(assistant.getByText('已保存：「' + title + '」。')).toBeVisible();
+  expect((await getSaved()).body).toBe(dirty);
+  expect((await getSaved()).titles).toContain(title);
+});
+
+test('模型建议的下一步只有用户选择后才作为消息发送', async ({ page }) => {
+  await seedReview(page);
+  let requests = 0;
+  await page.route('**/api/assistant-chat', async (route) => {
+    requests += 1;
+    await route.fulfill({ json: { answer: '可以先从学习笔记提炼概念，再复习一两个关键点。', options: [
+      '帮我总结 2026-11-05 的学习日志，优先提炼关键概念', '删除所有日志',
+    ] } });
+  });
+  let organizing = 0;
+  await page.route('**/api/log-review', async (route) => {
+    organizing += 1;
+    const input = route.request().postDataJSON() as LogReviewRequest;
+    await route.fulfill({ json: input.stage === 'plan' ? { queries: [] } : { summary: '已查看日志。', suggestions: [] } });
+  });
+  await page.goto('/#path');
+  await page.getByRole('button', { name: '打开学习智能体' }).click();
+  const assistant = page.getByRole('dialog', { name: '学习智能体' });
+  const question = assistant.getByRole('textbox', { name: '输入问题' });
+  await question.fill('怎样复习今天学到的知识点？');
+  await question.press('Enter');
+  const options = assistant.getByRole('group', { name: '可选的下一步' });
+  await expect(options.getByRole('button')).toHaveCount(1);
+  const option = '帮我总结 2026-11-05 的学习日志，优先提炼关键概念';
+  await expect(assistant.getByText('整理日志 · ' + date, { exact: true })).toHaveCount(0);
+  expect(organizing).toBe(0);
+  await options.getByRole('button', { name: option }).click();
+  await expect(assistant.getByRole('log').getByText(option, { exact: true }).last()).toBeVisible();
+  await expect(assistant.getByText('整理日志 · ' + date, { exact: true })).toBeVisible();
+  await expect.poll(() => organizing).toBe(2);
+  expect(requests).toBe(1);
+});
 
 test('日志整理查询别名和关联，仅保存勾选并核对过的建议', async ({ page }) => {
   await page.route('**/api/log-review', async (route) => {
@@ -136,7 +312,8 @@ test('日志整理查询别名和关联，仅保存勾选并核对过的建议',
 test('改变整理范围会重新查询，正文变化后需要重新生成或取消勾选', async ({ page }) => {
   const requests: LogReviewRequest[] = [];
   await page.route('**/api/log-review', async (route) => {
-    const input: LogReviewRequest = route.request().postDataJSON();
+    const input = route.request().postDataJSON() as LogReviewRequest | ReviewConversationRequest;
+    if (input.stage === 'conversation') return route.fulfill({ json: { answer: '我重新聚焦于 Tilemap。', operation: { kind: 'generate', focus: input.question } } });
     requests.push(input);
     const focused = Boolean(input.focus);
     if (input.stage === 'plan') { await route.fulfill({ json: { queries: [focused ? 'Tilemap' : 'PPU'] } }); return; }
@@ -147,8 +324,8 @@ test('改变整理范围会重新查询，正文变化后需要重新生成或�
   const { editor, assistant, launcher, close } = await openReview(page);
   await assistant.getByRole('button', { name: '生成整理建议', exact: true }).click();
   await assistant.getByRole('checkbox', { name: '添加标签 · PPU', exact: true }).check();
-  await assistant.getByLabel('整理范围（可选）').fill('只整理 Tilemap');
-  await assistant.getByRole('button', { name: '重新生成建议', exact: true }).click();
+  await assistant.getByRole('textbox', { name: '输入问题' }).fill('只整理 Tilemap');
+  await assistant.getByRole('textbox', { name: '输入问题' }).press('Enter');
   const choice = assistant.getByRole('checkbox', { name: '添加标签 · Tilemap', exact: true });
   await expect(choice).toBeVisible();
   expect(requests.slice(2).map(({ focus }) => focus)).toEqual(['只整理 Tilemap', '只整理 Tilemap']);
@@ -175,7 +352,7 @@ test('资料不足和接口失败都有反馈，正文仍可保存', async ({ pa
   });
   const { editor, assistant, close } = await openReview(page, '今天简单看了教程。');
   await assistant.getByRole('button', { name: '生成整理建议', exact: true }).click();
-  await expect(assistant.getByText('这篇日志缺少可整理的具体内容。')).toBeVisible();
+  await expect(assistant.getByText('这篇日志缺少可整理的具体内容。').first()).toBeVisible();
   await expect(assistant.getByRole('checkbox')).toHaveCount(0);
   failed = true;
   await assistant.getByRole('button', { name: '重新生成建议', exact: true }).click();
@@ -281,7 +458,8 @@ test('自由问答保留追问，只有显式勾选时才引用当前日志草�
     else await route.fulfill({ json: { answer: `**回复 ${calls.length}**\n\nPPU 是每单位像素数。` } });
   });
   const { editor, assistant, launcher, close } = await openReview(page);
-  await assistant.getByRole('button', { name: '自由问答' }).click();
+  await assistant.getByText('试试这样问', { exact: true }).click();
+  await assistant.getByRole('button', { name: '退出当前资料' }).click();
   const input = assistant.getByRole('textbox', { name: '输入问题' });
   const reference = assistant.getByRole('checkbox', { name: '引用当前日志 · ' + date + '（草稿）', exact: true });
   await expect(reference).not.toBeChecked();
@@ -354,13 +532,22 @@ test('自由问答保留追问，只有显式勾选时才引用当前日志草�
   await expect(assistant.getByText('已取消的回复', { exact: true })).toHaveCount(0);
 });
 
-test('问答输入框可按日期找日志、整理和保存，返回工具时保留各日志的结果', async ({ page }) => {
+test('用对话或快捷问题按日期整理，切换任务后保留各日志的结果', async ({ page }) => {
   await seedReview(page, text, true);
   const requests: LogReviewRequest[] = [];
   let chatCalls = 0;
-  await page.route('**/api/assistant-chat', async (route) => { chatCalls += 1; await route.abort(); });
+  await page.route('**/api/assistant-chat', async (route) => {
+    chatCalls += 1;
+    await route.fulfill({ json: { answer: '接着看上次整理结果。', action: { kind: 'review', date, generate: false } } });
+  });
   await page.route('**/api/log-review', async (route) => {
-    const input: LogReviewRequest = route.request().postDataJSON();
+    const input = route.request().postDataJSON() as LogReviewRequest | ReviewConversationRequest;
+    if (input.stage === 'conversation') {
+      const operation = input.question.startsWith('只整理') ? { kind: 'generate', focus: input.question }
+        : input.question === '查找 PPU 的相关资料' ? { kind: 'navigate', action: { kind: 'findResources', query: 'PPU' } }
+          : { kind: 'save', ids: [1] };
+      return route.fulfill({ json: { answer: '明白。', operation } });
+    }
     requests.push(input);
     await route.fulfill({ json: input.stage === 'plan' ? { queries: ['Tilemap'] } : { summary: '找到 Tilemap。', suggestions: [
       { kind: 'tag', tag: '瓦片地图', evidence: '用 Tilemap 拼出地面。' },
@@ -369,37 +556,46 @@ test('问答输入框可按日期找日志、整理和保存，返回工具时�
   await page.goto('/#path');
   await page.getByRole('button', { name: '打开学习智能体' }).click();
   const assistant = page.getByRole('dialog', { name: '学习智能体' });
-  await assistant.getByRole('button', { name: '日志整理', exact: true }).click();
+  await assistant.getByText('试试这样问', { exact: true }).click();
+  await assistant.getByRole('button', { name: '整理学习日志', exact: true }).click();
+  await expect(assistant.getByRole('log').getByText('整理学习日志', { exact: true })).toBeVisible();
   await expect(assistant.getByRole('textbox', { name: '按日期找日志' })).toBeVisible();
-  await assistant.getByRole('button', { name: '自由问答', exact: true }).click();
+  await assistant.getByText('试试这样问', { exact: true }).click();
+  await assistant.getByRole('button', { name: '退出当前资料', exact: true }).click();
   const question = assistant.getByRole('textbox', { name: '输入问题' });
   await question.fill('帮我整理11-5的日志');
   await question.press('Enter');
   const dateInput = assistant.getByRole('textbox', { name: '按日期找日志' });
-  await expect(dateInput).toHaveAttribute('id', 'assistant-input');
+  await expect(question).toHaveAttribute('id', 'assistant-input');
   await expect(dateInput).toHaveValue('11-5');
   await expect(assistant.getByRole('button', { name: '2025-11-05 · 旧年学习记录' })).toBeVisible();
   expect(requests).toHaveLength(0);
-  await dateInput.fill('2026-11-05');
+  await question.fill('是 2026-11-05');
+  await question.press('Enter');
   await expect(assistant.getByRole('button', { name: '2025-11-05 · 旧年学习记录' })).toHaveCount(0);
-  await assistant.getByRole('button', { name: '2026-11-05 · Unity 素材实践' }).click();
   await expect(page).toHaveURL(/#path$/);
   await expect(assistant.getByText('整理日志 · ' + date, { exact: true })).toBeVisible();
-  expect(requests).toHaveLength(0);
-  const focus = assistant.getByRole('textbox', { name: '整理范围（可选）' });
+  await expect(assistant.getByText('找到 Tilemap。', { exact: true })).toBeVisible();
+  expect(requests).toHaveLength(2);
+  const focus = assistant.getByRole('textbox', { name: '输入问题' });
   await focus.fill('只整理 Tilemap');
   await focus.press('Enter');
+  await expect.poll(() => requests.length).toBe(4);
+  await expect(focus).toHaveValue('');
+  expect(requests.map((input) => input.text)).toEqual([text, text, text, text]);
+  expect(requests.slice(2).map((input) => input.focus)).toEqual(['只整理 Tilemap', '只整理 Tilemap']);
+  await focus.fill('保存第 1 项');
+  await focus.press('Enter');
+  await expect(assistant.getByText('已保存：「瓦片地图」。')).toBeVisible();
+  await focus.fill('查找 PPU 的相关资料');
+  await focus.press('Enter');
+  await expect(assistant.getByRole('textbox', { name: '检索关键词' })).toHaveValue('PPU');
+  await focus.fill('继续看上次那篇的整理结果');
+  await focus.press('Enter');
+  await expect(assistant.getByText('整理日志 · ' + date, { exact: true })).toBeVisible();
+  await expect(focus).toHaveValue('');
   await expect(assistant.getByText('找到 Tilemap。', { exact: true })).toBeVisible();
-  expect(requests.map((input) => input.text)).toEqual([text, text]);
-  expect(requests.map((input) => input.focus)).toEqual(['只整理 Tilemap', '只整理 Tilemap']);
-  await assistant.getByRole('checkbox', { name: '添加标签 · 瓦片地图' }).check();
-  await assistant.getByRole('button', { name: '保存所选建议' }).click();
-  await expect(assistant.getByText('已保存所选整理建议。')).toBeVisible();
-  await assistant.getByRole('button', { name: '查找资料', exact: true }).click();
-  await assistant.getByRole('textbox', { name: '检索关键词' }).fill('PPU');
-  await assistant.getByRole('button', { name: '日志整理', exact: true }).click();
-  await expect(focus).toHaveValue('只整理 Tilemap');
-  await expect(assistant.getByText('找到 Tilemap。', { exact: true })).toBeVisible();
+  expect(requests).toHaveLength(4);
   await assistant.getByRole('button', { name: '选择其他日期' }).click();
   await dateInput.fill('11-5');
   await assistant.getByRole('button', { name: '2025-11-05 · 旧年学习记录' }).click();
@@ -411,7 +607,7 @@ test('问答输入框可按日期找日志、整理和保存，返回工具时�
   await assistant.getByRole('button', { name: '2026-11-05 · Unity 素材实践' }).click();
   await expect(assistant.getByText('找到 Tilemap。', { exact: true })).toBeVisible();
   await expect(assistant.getByRole('log').getByText('帮我整理11-5的日志')).toBeVisible();
-  expect(chatCalls).toBe(0);
+  expect(chatCalls).toBe(1);
 });
 
 test('窄屏最小化后可阅读页面并恢复输入，从问答按别名查找并打开词条', async ({ page }) => {
@@ -432,7 +628,7 @@ test('窄屏最小化后可阅读页面并恢复输入，从问答按别名查�
   await restore.click();
   await expect(question).toHaveValue('帮我打开 PPU 词条');
   await question.press('Enter');
-  await expect(assistant.getByRole('button', { name: '查找资料', pressed: true })).toBeVisible();
+  await expect(assistant.getByRole('region', { name: '查找资料' })).toBeVisible();
   await expect(assistant.getByRole('textbox', { name: '检索关键词' })).toHaveValue('ppu');
   await assistant.getByRole('link', { name: '像素单位', exact: true }).click();
   await expect(page).toHaveURL(/#knowledge\/pixel-unit\?find=ppu$/);
@@ -463,6 +659,7 @@ test('空工作区提供可操作的入门引导，能力问题在本地回答',
   await page.getByRole('button', { name: '打开学习智能体' }).click();
   const assistant = page.getByRole('dialog', { name: '学习智能体' });
   const guide = assistant.getByRole('region', { name: '开始使用学习智能体' });
+  await assistant.getByText('看看可以做什么', { exact: true }).click();
   await expect(guide.getByRole('button', { name: /记录第一次实践/ })).toBeVisible();
   const question = assistant.getByRole('textbox', { name: '输入问题' });
   await question.fill('你能做什么');

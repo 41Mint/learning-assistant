@@ -4,7 +4,7 @@ import type { CodeProject, CodeVersion } from '../types/projectCode';
 
 export const normalizeScriptLines = (text: string) => text.replace(/\r\n|\r/g, '\n');
 export const scriptLines = (text: string) => normalizeScriptLines(text).replace(/\n$/, '').split('\n');
-export const lineLabel = ({ startLine, endLine }: ChatCodeRange) => `第 ${startLine}${startLine === endLine ? '' : `–${endLine}`} 行`;
+export const lineLabel = ({ startLine, endLine }: Pick<ChatCodeRange, 'startLine' | 'endLine'>) => `第 ${startLine}${startLine === endLine ? '' : `–${endLine}`} 行`;
 
 export function makeCodeExcerpt(version: CodeVersion, startLine: number, text: string, offset = 0) {
   if (!text.trim() || text.length > CHAT_CODE_LIMIT) return undefined;

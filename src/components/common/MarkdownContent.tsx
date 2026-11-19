@@ -9,10 +9,13 @@ import { getImage, IMAGE_PREFIX } from '../../utils/imageStorage';
 import type { StoredImage } from '../../utils/imageStorage';
 import { rehypeSearchMatches } from '../../utils/rehypeSearchMatches';
 import { rehypeCodeLines } from '../../utils/rehypeCodeLines';
+import { readCodeCitation } from '../../utils/codeCitation';
+import type { CodeLineRange } from '../../utils/codeCitation';
+import CodeCitationLink from './CodeCitationLink';
 import NoteImage from './NoteImage';
 
 export type MarkdownLinkRenderer = (href: string) => ReactNode;
-const MarkdownOptions = createContext<{ images?: StoredImage[]; activeCodeLine?: number; onExpandImage?: () => void; renderLink?: MarkdownLinkRenderer }>({});
+const MarkdownOptions = createContext<{ images?: StoredImage[]; activeCodeLine?: number; highlightedCode?: CodeLineRange; onExpandImage?: () => void; renderLink?: MarkdownLinkRenderer }>({});
 const InsideMarkdownLink = createContext(false);
 
 function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
@@ -45,27 +48,32 @@ function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
 const markdownComponents: Components = {
   img: MarkdownImage,
   span: function MarkdownSpan({ node, ...props }) {
-    const { activeCodeLine } = useContext(MarkdownOptions);
-    return <span {...props} aria-current={node?.properties.dataCodeLine === activeCodeLine && activeCodeLine !== undefined ? 'true' : undefined} />;
+    const { activeCodeLine, highlightedCode } = useContext(MarkdownOptions);
+    const line = Number(node?.properties.dataCodeLine);
+    return <span {...props} aria-current={line === activeCodeLine ? 'true' : undefined}
+      data-code-cited={highlightedCode && line >= highlightedCode.startLine && line <= highlightedCode.endLine ? 'true' : undefined} />;
   },
   a: function MarkdownLink({ href, children }) {
     const { renderLink } = useContext(MarkdownOptions);
     const rendered = href && renderLink?.(href);
     if (rendered) return rendered;
+    const citation = href && readCodeCitation(href);
+    if (citation) return <CodeCitationLink href={href} {...citation}><InsideMarkdownLink.Provider value>{children}</InsideMarkdownLink.Provider></CodeCitationLink>;
     if (href && /^https?:\/\//i.test(href)) return <a href={href} target="_blank" rel="noreferrer"><InsideMarkdownLink.Provider value>{children}</InsideMarkdownLink.Provider></a>;
     if (href?.startsWith('#')) return <a href={href}><InsideMarkdownLink.Provider value>{children}</InsideMarkdownLink.Provider></a>;
     return <span title={`本地来源 ${href ?? ''}，请在原资料目录查看`}>{children} <small>（本地资料）</small></span>;
   },
 };
 
-export default function MarkdownContent({ content, images, searchWords, codeLines, activeCodeLine, onExpandImage, renderLink }: {
+export default function MarkdownContent({ content, images, searchWords, codeLines, firstCodeLine = 1, activeCodeLine, highlightedCode, onExpandImage, renderLink }: {
   content: string; images?: StoredImage[]; searchWords?: string[]; codeLines?: boolean; activeCodeLine?: number; onExpandImage?: () => void;
   renderLink?: MarkdownLinkRenderer;
+  firstCodeLine?: number; highlightedCode?: CodeLineRange;
 }) {
-  const options = useMemo(() => ({ images, activeCodeLine, onExpandImage, renderLink }), [images, activeCodeLine, onExpandImage, renderLink]);
+  const options = useMemo(() => ({ images, activeCodeLine, highlightedCode, onExpandImage, renderLink }), [images, activeCodeLine, highlightedCode, onExpandImage, renderLink]);
   const plugins: PluggableList = [[rehypeHighlight, { ignoreMissing: true }]];
   if (searchWords?.length) plugins.push([rehypeSearchMatches, searchWords]);
-  if (codeLines) plugins.push(rehypeCodeLines);
+  if (codeLines) plugins.push([rehypeCodeLines, firstCodeLine]);
   return (
     <MarkdownOptions.Provider value={options}>
       <ReactMarkdown

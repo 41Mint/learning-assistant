@@ -9,6 +9,7 @@ import { useWorkspaceStore } from '../../store/workspaceStore';
 import FocusEditor from '../common/FocusEditor';
 import MarkdownFields from '../common/MarkdownFields';
 import LogReviewPanel from './LogReviewPanel';
+import LogCodeCitationPicker from './LogCodeCitationPicker';
 import { AssistantSlots } from '../Assistant/assistantSlots';
 import { isEmptyLogContent } from '../../utils/studyLogs';
 import { imageMarkdown, prepareImageFile, referencedImageIds, saveWithImages } from '../../utils/imageStorage';
@@ -30,6 +31,9 @@ export default function LogContentEditor({ log, kind, creating = false, onClose 
   const [images, setImages] = useState<StoredImage[]>([]);
   const [operation, setOperation] = useState<'pasting' | 'saving'>();
   const inProgress = useRef(false);
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  const citationPicker = useRef<HTMLDetailsElement>(null);
+  const [citationVisited, setCitationVisited] = useState(false);
   const [review, setReview] = useState<{ selected: LogReviewSuggestion[]; sourceText: string }>();
   const updateLogContent = useStudyLogStore((state) => state.updateLogContent);
   const slots = useContext(AssistantSlots);
@@ -40,6 +44,21 @@ export default function LogContentEditor({ log, kind, creating = false, onClose 
 
   useEffect(() => { setLogDraft(kind, { id: log.id, date: log.date, text: content }); }, [kind, log.id, log.date, content, setLogDraft]);
   useEffect(() => () => setLogDraft(kind), [kind, setLogDraft]);
+
+  const insertCitation = (markdown: string) => {
+    const editor = textarea.current;
+    if (!editor || inProgress.current) return;
+    const start = editor.selectionStart;
+    const selected = content.slice(start, editor.selectionEnd);
+    // Preserve selected text instead of removing original notes or images.
+    const prefix = content.slice(0, start) + selected + (selected ? ' ' : '');
+    setContent(prefix + markdown + content.slice(editor.selectionEnd));
+    if (citationPicker.current) citationPicker.current.open = false;
+    requestAnimationFrame(() => {
+      editor.focus({ preventScroll: true });
+      editor.setSelectionRange(prefix.length + markdown.length, prefix.length + markdown.length);
+    });
+  };
 
   const pasteImages = async (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const clipboard = event.clipboardData;
@@ -104,7 +123,11 @@ export default function LogContentEditor({ log, kind, creating = false, onClose 
       <FocusEditor title={today ? '编辑今日记录' : '编辑历史记录'} description={log.date + ' · 支持 Markdown 和直接粘贴截图。'}
         formLabel={today ? '今日记录编辑表单' : '历史记录编辑表单'} saveLabel={today ? '保存记录' : '保存补充'}
         saveDisabled={emptyDraft || operation === 'pasting'} busy={operation === 'saving'} error={error} onSave={() => void save()} onCancel={() => onClose(false)}>
-        <MarkdownFields id={today ? 'study-log-content' : 'history-content'} label={today ? '学习内容（Markdown）' : '历史学习内容'}
+        <details ref={citationPicker} onToggle={(event) => { if (event.currentTarget.open) setCitationVisited(true); }}>
+          <summary>插入代码引用</summary>
+          {citationVisited && <LogCodeCitationPicker onInsert={insertCitation} />}
+        </details>
+        <MarkdownFields textareaRef={textarea} id={today ? 'study-log-content' : 'history-content'} label={today ? '学习内容（Markdown）' : '历史学习内容'}
           previewLabel={today ? '学习内容实时预览' : '历史学习内容实时预览'} value={content} onChange={setContent}
           placeholder="记录这次学习的内容、疑问或尝试。" images={images} readOnly={Boolean(operation)} onPaste={(event) => void pasteImages(event)} />
         {operation === 'pasting' && <p className="knowledge-muted" role="status">正在读取截图…</p>}
@@ -112,7 +135,26 @@ export default function LogContentEditor({ log, kind, creating = false, onClose 
           {review.sourceText === content ? `已选 ${review.selected.length} 项整理建议，将随日志保存。` : '正文已修改，请在智能体中更新或取消所选建议。'}
         </p>}
       </FocusEditor>
-      {slot && createPortal(<LogReviewPanel logId={log.id} content={content} formId={`assistant-review-${kind}`} onReturn={() => {
+      {slot && createPortal(<LogReviewPanel logId={log.id} date={log.date} content={content} formId={`assistant-review-${kind}`}
+        onApply={async (suggestions, original, includeLog) => {
+          if (inProgress.current || original !== content) throw new Error('日志草稿已变化，请核对后再保存。');
+          if ((creating || content !== log.content) && !includeLog) {
+            throw new Error('这篇日志还有未保存的正文。若也要保存正文，可以说「把正文和刚才选的词条一起保存」。');
+          }
+          if (!creating && content === log.content) {
+            useKnowledgeStore.getState().saveReviewedLog(log.id, content, log.content, suggestions);
+            return;
+          }
+          inProgress.current = true;
+          setOperation('saving');
+          try {
+            const referenced = new Set(referencedImageIds(content));
+            await saveWithImages(images.filter(({ id }) => referenced.has(id)), () => {
+              useKnowledgeStore.getState().saveReviewedLog(log.id, content, log.content, suggestions, creating ? log : undefined);
+            });
+            onClose(true);
+          } finally { inProgress.current = false; setOperation(undefined); }
+        }} onReturn={() => {
         slots.close();
         if (today) window.location.hash = 'today';
         else useWorkspaceStore.getState().openLog(log.date);

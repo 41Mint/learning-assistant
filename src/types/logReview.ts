@@ -14,6 +14,22 @@ export interface LogReviewContext {
   categories: string[];
 }
 
+export const draftLength = (value: string) => [...value.replace(/\s/gu, '')].length;
+
+export function wantsConciseDrafts(focus: string) {
+  return /精简|简化|简短|简洁|压缩|缩短|再短|短一点|太长|冗长|删掉.*废话|不超过\s*\d+\s*字|(?:少于|控制在|压到)\s*\d+\s*字/u.test(focus);
+}
+
+export function conciseLimit(focus: string, content: string): number | undefined {
+  if (!wantsConciseDrafts(focus)) return;
+  const original = draftLength(content);
+  const requested = Number(focus.match(/(?:不超过|内|控制在|压到|少于)?\s*(\d{1,4})\s*字/u)?.[1] ?? 0);
+  if (requested > 0) return requested;
+  // Very short drafts may already be concise; do not force factual omissions.
+  if (original < 24) return 24;
+  return Math.min(120, Math.floor(original * 0.7));
+}
+
 export type LogReviewRequest = { text: string; focus: string } & (
   | { stage: 'plan' }
   | { stage: 'suggest'; context: LogReviewContext }

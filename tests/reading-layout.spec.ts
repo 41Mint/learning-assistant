@@ -1,5 +1,20 @@
 import { expect, test } from '@playwright/test';
 
+test('插入代码引用收起时保留动画内容，结束后退出键盘焦点顺序', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/#today');
+  await page.getByRole('button', { name: '编辑', exact: true }).click();
+  const summary = page.getByText('插入代码引用', { exact: true });
+  await summary.click();
+  const picker = page.getByRole('combobox', { name: '引用代码版本', exact: true });
+  await expect(picker).toBeVisible();
+  await summary.click();
+  const details = page.locator('details').filter({ has: summary });
+  await expect(details.locator('input[role="combobox"]')).toHaveCount(1);
+  await expect(details.locator('input[role="combobox"]')).toBeHidden();
+  await expect(summary).toBeFocused();
+});
+
 test('今日日志的标签与知识点可用键盘或按钮添加并分别移除', async ({ page }) => {
   await page.goto('/#today');
   const tags = page.getByRole('region', { name: '标签', exact: true });

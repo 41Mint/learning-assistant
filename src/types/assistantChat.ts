@@ -17,6 +17,27 @@ export interface ChatMessage {
   content: string;
 }
 
+export type ConversationAction =
+  | { kind: 'review'; date: string; focus?: string; generate?: boolean }
+  | { kind: 'findEntry' | 'findPractice' | 'findResources'; query: string }
+  | { kind: 'recommend'; focus?: string; generate?: boolean }
+  | { kind: 'code' };
+
+export function readConversationAction(value: unknown): ConversationAction | undefined {
+  if (!reviewRecord(value)) return;
+  if (value.kind === 'review') return { kind: 'review', date: reviewText(value.date, 40), focus: reviewText(value.focus, 500), generate: value.generate !== false };
+  if (value.kind === 'findEntry' || value.kind === 'findPractice' || value.kind === 'findResources') {
+    return { kind: value.kind, query: reviewText(value.query, 160) };
+  }
+  if (value.kind === 'recommend') return { kind: 'recommend', focus: reviewText(value.focus, 180), generate: true };
+  if (value.kind === 'code') return { kind: 'code' };
+}
+
+export function readConversationOptions(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.slice(0, 8).map((item) => reviewText(item, 120)).filter((item) => item && !/[\r\n]/u.test(item)))].slice(0, 3);
+}
+
 export interface ChatLog { date: string; text: string }
 export interface ChatCodeRange { startLine: number; endLine: number; text: string }
 export interface ChatCode extends ChatCodeRange { path: string; context?: ChatCodeRange }

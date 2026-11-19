@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { buildProjectDirectoryTree } from '../../utils/projectDirectory';
 import type { ProjectDirectoryNode } from '../../utils/projectDirectory';
+import CodeFormReveal from './CodeFormReveal';
 
 function DirectoryRow({ node, renderItem }: { node: ProjectDirectoryNode; renderItem: (node: ProjectDirectoryNode) => ReactNode }) {
   const [expanded, setExpanded] = useState(false);
@@ -12,9 +13,9 @@ function DirectoryRow({ node, renderItem }: { node: ProjectDirectoryNode; render
         onClick={() => setExpanded(!expanded)}>{expanded ? '▾' : '▸'}</button>}
       {renderItem(node)}
     </div>
-    {expanded && node.children && <ul>
+    {node.children && <CodeFormReveal open={expanded}><ul>
       {node.children.map((child) => <DirectoryRow key={child.path} node={child} renderItem={renderItem} />)}
-    </ul>}
+    </ul></CodeFormReveal>}
   </li>;
 }
 

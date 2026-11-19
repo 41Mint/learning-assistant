@@ -3,7 +3,7 @@ import type { ReactNode, RefObject } from 'react';
 
 export default function CodeFormReveal({ open, trigger, children }: {
   open: boolean;
-  trigger: RefObject<HTMLButtonElement | null>;
+  trigger?: RefObject<HTMLButtonElement | null>;
   children: ReactNode;
 }) {
   const panel = useRef<HTMLDivElement>(null);
@@ -14,7 +14,7 @@ export default function CodeFormReveal({ open, trigger, children }: {
 
   useLayoutEffect(() => {
     if (open || !present) return;
-    trigger.current?.focus({ preventScroll: true });
+    trigger?.current?.focus({ preventScroll: true });
     let active = true;
     const transitions = panel.current?.getAnimations() ?? [];
     void Promise.allSettled(transitions.map(({ finished }) => finished)).then(() => {

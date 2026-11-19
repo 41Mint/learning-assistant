@@ -432,7 +432,7 @@ test('窄屏成长视图独立切换，智能推荐换一批并预填实际引�
   await candidates.getByRole('button', { name: '让智能体推荐' }).click();
   await expect(page).toHaveURL(/#path\/try$/);
   const assistant = page.getByRole('dialog', { name: '学习智能体' });
-  await expect(assistant.getByRole('button', { name: '推荐练习', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(assistant.getByRole('textbox', { name: '练习偏好（可选）' })).toBeVisible();
   const suggestions = assistant.getByRole('region', { name: '练习推荐' });
   await expect(suggestions.getByLabel('练习领域')).toHaveValue('C#');
   await assistant.getByRole('textbox', { name: '练习偏好（可选）' }).fill('只使用控制台');
@@ -1164,11 +1164,13 @@ test('智能体分组可逐组确认、加入已有卡组并撤销重做', async
   await expect(assistant.getByRole('article', { name: '无效分组' })).toHaveCount(0);
 });
 
-test('智能体工具栏和问答可打开同一练习推荐面板并保留偏好', async ({ page }) => {
+test('对话快捷问题和手动发送可打开同一练习推荐并保留偏好', async ({ page }) => {
   await seedLearning(page);
+  await page.route('**/api/growth-suggestions', (route) => route.fulfill({ json: { suggestions: [] } }));
   await page.goto('/#history');
   const assistant = page.getByRole('dialog', { name: '学习智能体' });
   await page.getByRole('button', { name: '打开学习智能体' }).click();
+  await assistant.getByText('试试这样问', { exact: true }).click();
   await assistant.getByRole('button', { name: '推荐练习', exact: true }).click();
   await expect(page).toHaveURL(/#history$/);
   const preference = assistant.getByRole('textbox', { name: '练习偏好（可选）' });
@@ -1176,7 +1178,8 @@ test('智能体工具栏和问答可打开同一练习推荐面板并保留偏�
   await assistant.getByRole('button', { name: '最小化学习智能体' }).click();
   await page.getByRole('button', { name: '恢复学习智能体' }).click();
   await expect(preference).toHaveValue('复习输入事件');
-  await assistant.getByRole('button', { name: '自由问答' }).click();
+  await assistant.getByText('试试这样问', { exact: true }).click();
+  await assistant.getByRole('button', { name: '退出当前资料' }).click();
   await assistant.getByRole('textbox', { name: '输入问题' }).fill('帮我推荐几个练习');
   await assistant.getByRole('button', { name: '发送', exact: true }).click();
   await expect(page).toHaveURL(/#history$/);

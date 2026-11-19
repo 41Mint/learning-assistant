@@ -13,6 +13,51 @@ import ProjectDirectoryView from './ProjectDirectoryView';
 
 type DirectoryImportResult = { projectId: string; added: number; reused: number };
 
+function ProjectDetailsForm({ project, onCancel, onSaved }: {
+  project: CodeProject;
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
+  const saveProject = useProjectCodeStore((state) => state.saveProject);
+  const [draft, setDraft] = useState(project);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await saveProject(project.id, draft);
+      onSaved();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : '保存失败，请重试。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="code-form" aria-label="编辑项目资料" onSubmit={submit}>
+      <fieldset disabled={busy}>
+        <legend>编辑项目资料</legend>
+        <label>项目名称
+          <input value={draft.name} maxLength={120} required onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+        </label>
+        <label>GitHub 仓库地址（可选）
+          <input type="url" value={draft.repositoryUrl} onChange={(event) => setDraft({ ...draft, repositoryUrl: event.target.value })} />
+        </label>
+        <label>教程地址（可选）
+          <input type="url" value={draft.tutorialUrl} onChange={(event) => setDraft({ ...draft, tutorialUrl: event.target.value })} />
+        </label>
+        {error && <p role="alert">{error}</p>}
+        <button type="submit" className="note-button">保存项目资料</button>
+        <button type="button" className="note-button secondary" onClick={onCancel}>取消</button>
+      </fieldset>
+    </form>
+  );
+}
+
 function ProjectCard({ project, versions, trashedCount, importStatus, importing, formOpen, onImport, onCancelImport, onImported }: {
   project: CodeProject;
   versions: CodeVersion[];
@@ -24,27 +69,13 @@ function ProjectCard({ project, versions, trashedCount, importStatus, importing,
   onCancelImport: () => void;
   onImported: (result: DirectoryImportResult) => void;
 }) {
-  const { saveProject, deleteProject } = useProjectCodeStore();
-  const [draft, setDraft] = useState<CodeProject | null>(null);
-  const [busy, setBusy] = useState(false);
+  const deleteProject = useProjectCodeStore((state) => state.deleteProject);
+  const [editing, setEditing] = useState(false);
   const [message, setMessage] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const importButton = useRef<HTMLButtonElement>(null);
-
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!draft) return;
-    setBusy(true);
-    try {
-      await saveProject(project.id, draft);
-      setDraft(null);
-      setMessage('项目资料已保存。');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '保存失败，请重试。');
-    } finally {
-      setBusy(false);
-    }
-  };
+  const editButton = useRef<HTMLButtonElement>(null);
+  const actionsLocked = editing || formOpen;
 
   return (
     <article className="module-card code-project" aria-label={project.name}>
@@ -53,16 +84,16 @@ function ProjectCard({ project, versions, trashedCount, importStatus, importing,
       <div className="code-actions">
         {project.repositoryUrl && <a href={project.repositoryUrl} target="_blank" rel="noreferrer">打开 GitHub 仓库</a>}
         {project.tutorialUrl && <a href={project.tutorialUrl} target="_blank" rel="noreferrer">打开教程来源</a>}
-        {!draft && <button ref={importButton} type="button" className="knowledge-text-button" aria-expanded={importing}
-          disabled={busy || formOpen} onClick={onImport}>
+        <button ref={importButton} type="button" className="knowledge-text-button" aria-expanded={importing}
+          disabled={actionsLocked} onClick={onImport}>
           {project.directory ? '更新目录快照' : '导入目录'}
-        </button>}
-        {!draft && <button type="button" className="knowledge-text-button" disabled={busy || formOpen} onClick={() => {
-          setDraft(project);
+        </button>
+        <button ref={editButton} type="button" className="knowledge-text-button" aria-expanded={editing} disabled={actionsLocked} onClick={() => {
+          setEditing(true);
           setMessage('');
-        }}>编辑项目资料</button>}
-        {versions.length === 0 && !draft && (
-          <button type="button" className="knowledge-text-button danger" disabled={busy || formOpen} onClick={() => setConfirmDelete(true)}>
+        }}>编辑项目资料</button>
+        {versions.length === 0 && (
+          <button type="button" className="knowledge-text-button danger" disabled={actionsLocked} onClick={() => setConfirmDelete(true)}>
             删除项目
           </button>
         )}
@@ -77,24 +108,12 @@ function ProjectCard({ project, versions, trashedCount, importStatus, importing,
           : project.directory && <p>已保存的目录快照和职责说明也会被删除，此操作无法撤销。</p>}
       </WorkspaceDialog>}
       {trashedCount > 0 && <p className="code-muted">此项目有 {trashedCount} 个代码版本在<a href={recycleBinHref('code')}>回收站</a>。</p>}
-      {draft && (
-        <form className="code-form" aria-label="编辑项目资料" onSubmit={submit}>
-          <fieldset disabled={busy}>
-            <legend>编辑项目资料</legend>
-            <label>项目名称
-              <input value={draft.name} maxLength={120} required onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
-            </label>
-            <label>GitHub 仓库地址（可选）
-              <input type="url" value={draft.repositoryUrl} onChange={(event) => setDraft({ ...draft, repositoryUrl: event.target.value })} />
-            </label>
-            <label>教程地址（可选）
-              <input type="url" value={draft.tutorialUrl} onChange={(event) => setDraft({ ...draft, tutorialUrl: event.target.value })} />
-            </label>
-            <button type="submit" className="note-button">保存项目资料</button>
-            <button type="button" className="note-button secondary" onClick={() => setDraft(null)}>取消</button>
-          </fieldset>
-        </form>
-      )}
+      <CodeFormReveal open={editing} trigger={editButton}>
+        <ProjectDetailsForm project={project} onCancel={() => setEditing(false)} onSaved={() => {
+          setEditing(false);
+          setMessage('项目资料已保存。');
+        }} />
+      </CodeFormReveal>
       {message && <p role="status">{message}</p>}
       {importStatus && <p role="status">{importStatus}</p>}
       {project.directory && <ProjectDirectoryView projectId={project.id} directory={project.directory}

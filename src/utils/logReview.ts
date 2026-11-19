@@ -3,11 +3,13 @@ import { useProjectCodeStore } from '../store/projectCodeStore';
 import { useStudyLogStore } from '../store/studyLogStore';
 import { LOG_REVIEW_ENDPOINT, LOG_REVIEW_MAX_TEXT, readReviewQueries, readReviewResult, reviewRecord, reviewText } from '../types/logReview';
 import type { LogReviewContext, LogReviewRequest, LogReviewSuggestion } from '../types/logReview';
+import { readReviewConversationResult } from '../types/reviewConversation';
+import type { ReviewConversationRequest } from '../types/reviewConversation';
 import { entryNames, normalizedName } from './knowledge';
 import { buildRelationGraph, relationLabel } from './relations';
 import { entrySearchFields, matchesWords, searchWords } from './resourceSearch';
 
-async function requestReview(body: LogReviewRequest, signal: AbortSignal): Promise<unknown> {
+async function requestReview(body: LogReviewRequest | ReviewConversationRequest, signal: AbortSignal): Promise<unknown> {
   const response = await fetch(LOG_REVIEW_ENDPOINT, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal,
   });
@@ -17,6 +19,10 @@ async function requestReview(body: LogReviewRequest, signal: AbortSignal): Promi
     throw new Error(message || '整理服务不可用。请在本机启动学习助手后重试。');
   }
   return value;
+}
+
+export async function converseAboutLog(input: ReviewConversationRequest, signal: AbortSignal) {
+  return readReviewConversationResult(await requestReview(input, signal), input);
 }
 
 async function queryLogResources(logId: string, queries: string[]): Promise<LogReviewContext> {

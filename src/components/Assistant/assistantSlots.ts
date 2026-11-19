@@ -1,9 +1,14 @@
 import { createContext } from 'react';
 import type { GrowthDomain } from '../../types';
-import type { ChatCode, ChatGrowthCard, ChatGrowthCards, ChatGrowthGroup } from '../../types/assistantChat';
+import type { ChatCode, ChatGrowthCard, ChatGrowthCards, ChatGrowthGroup, ChatMessage, ConversationAction } from '../../types/assistantChat';
 
 export interface AssistantLogDraft { id: string; date: string; text: string }
 export type AssistantLogKind = 'today' | 'history';
+export type ReviewReply = { answer: string; action?: ConversationAction };
+export interface ReviewConversation {
+  respond: (question: string, history: ChatMessage[], signal: AbortSignal) => Promise<ReviewReply>;
+  generate: (focus: string) => void;
+}
 export type AssistantCodeExcerpt = ChatCode & { id: string; versionId: string };
 export type AssistantCodeReference = AssistantCodeExcerpt | { kind: 'script'; id: string; versionId: string; path: string };
 export type AssistantGrowthSelection = { id: string; kind: 'selection'; selection: ChatGrowthCards; cardIds: string[] };
@@ -18,13 +23,13 @@ export const AssistantSlots = createContext<{
   today: HTMLDivElement | null;
   history: HTMLDivElement | null;
   close: () => void;
-  reviewFocus: string;
+  registerReview: (id: string, conversation: ReviewConversation) => () => void;
   setLogDraft: (kind: AssistantLogKind, value?: AssistantLogDraft) => void;
   askAboutCode: (reference: AssistantCodeReference) => void;
   askAboutGrowth: (reference: AssistantGrowthReference) => void;
   openGrowthRecommendations: (domain?: GrowthDomain) => void;
 }>({
-  today: null, history: null, close: () => {}, reviewFocus: '', setLogDraft: () => {}, askAboutCode: () => {},
+  today: null, history: null, close: () => {}, registerReview: () => () => {}, setLogDraft: () => {}, askAboutCode: () => {},
   openGrowthRecommendations: () => {},
   askAboutGrowth: () => {},
 });
