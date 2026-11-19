@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
-import { isImportableScript, previewProjectDirectory, projectDirectoryPaths, readDirectoryScripts, scanProjectDirectory } from '../../utils/projectDirectory';
+import { isImportableScript, previewProjectDirectory, projectDirectoryPaths, readDirectoryScripts } from '../../utils/projectDirectory';
 import type { DirectoryPreview } from '../../utils/projectDirectory';
 import ProjectDirectoryTree from './ProjectDirectoryTree';
 
@@ -16,46 +16,37 @@ export default function ProjectDirectoryImport({ initialProjectId = '', onCancel
   const [preview, setPreview] = useState<DirectoryPreview | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
-  const [scanning, setScanning] = useState(false);
   const [error, setError] = useState('');
+  const [pickerMessage, setPickerMessage] = useState('');
   const files = useMemo(() => preview ? [...preview.byPath.keys()].sort() : [], [preview]);
   const paths = useMemo(() => projectDirectoryPaths(files), [files]);
   const previous = projects.find((project) => project.id === projectId)?.directory;
   const lostNotes = previous?.notes.filter(({ path }) => !paths.has(path)).length ?? 0;
-  const picker = window as Window & { showDirectoryPicker?: (options: { mode: 'read' }) => Promise<FileSystemDirectoryHandle> };
   const acceptPreview = (next: DirectoryPreview) => {
     setPreview(next);
     setName(next.root);
     setSelected(new Set());
+    setPickerMessage(`已读取「${next.root}」的 ${next.byPath.size} 个文件路径。请在下方查看目录预览；尚未保存。`);
   };
-  const pickDirectory = async () => {
-    if (!picker.showDirectoryPicker || scanning) return;
-    setScanning(true);
-    setError('');
-    try {
-      acceptPreview(await scanProjectDirectory(await picker.showDirectoryPicker({ mode: 'read' })));
-    } catch (error) {
-      if (!(error instanceof DOMException && error.name === 'AbortError')) {
-        setError(error instanceof Error ? error.message : '无法读取目录，请重试或使用兼容选择方式。');
-      }
-    } finally { setScanning(false); }
-  };
+  const nothingPicked = () => setPickerMessage(preview
+    ? '没有读取到新文件夹，已保留上次的目录预览。'
+    : '未选择文件夹。请选择项目根目录以预览。');
 
   const choose = (selection: FileList | null) => {
-    if (!selection?.length) return;
     setError('');
-    setSelected(new Set());
+    if (!selection?.length) { nothingPicked(); return; }
     try {
       acceptPreview(previewProjectDirectory(selection));
     } catch (error) {
-      setPreview(null);
+      setPickerMessage('');
       setError(error instanceof Error ? error.message : '目录读取失败，请重新选择。');
     }
   };
   const save = async () => {
-    if (!preview || busy || scanning) return;
+    if (!preview || busy) return;
     setBusy(true);
     setError('');
+    setPickerMessage('');
     try {
       const scripts = await readDirectoryScripts(preview.byPath, selected);
       const result = await importDirectory({ project: projectId ? { id: projectId } : { name, repositoryUrl: '', tutorialUrl: '' }, files, scripts });
@@ -75,23 +66,27 @@ export default function ProjectDirectoryImport({ initialProjectId = '', onCancel
     event.preventDefault();
     void save();
   }}>
-    <fieldset disabled={busy || scanning} className="project-directory-fields">
+    <fieldset disabled={busy} className="project-directory-fields">
       <legend>导入项目目录</legend>
-      <p className="code-muted">只在浏览器内读取目录，不会上传。保存目录结构时，只保留勾选的 .cs 脚本正文。</p>
+      <p className="code-muted">选择项目根目录后，可预览目录并勾选要一并保存的 .cs 脚本。若浏览器显示「上传」提示，确认后本页会在本地读取所选文件。</p>
       <div className="code-form">
-        {picker.showDirectoryPicker && <button type="button" className="note-button secondary" onClick={() => void pickDirectory()}>
-          {scanning ? '正在读取目录…' : '选择项目文件夹（只读）'}
-        </button>}
-        <details open={picker.showDirectoryPicker ? undefined : true}>
-          <summary>兼容选择方式</summary>
-          <p className="code-muted">浏览器可能显示「上传」提示，这是授予本页读取权限；应用不会上传文件。</p>
-          <label>本地项目文件夹
-          <input type="file" ref={(input) => { if (input) input.webkitdirectory = true; }} onChange={(event) => {
+        <label>本地项目文件夹
+          <input type="file" ref={(input) => {
+            if (!input) return;
+            input.webkitdirectory = true;
+            const cancelSelection = () => {
+              setError('');
+              nothingPicked();
+            };
+            input.addEventListener('cancel', cancelSelection);
+            return () => input.removeEventListener('cancel', cancelSelection);
+          }} onChange={(event) => {
             choose(event.currentTarget.files);
             event.currentTarget.value = '';
           }} />
-          </label>
-        </details>
+        </label>
+        {pickerMessage && <p role="status" className="code-muted">{pickerMessage}</p>}
+        {error && <p role="alert">{error}</p>}
         {projects.length > 0 && <label>保存到
           <select value={projectId} onChange={(event) => setProjectId(event.target.value)}>
             <option value="">新建项目</option>
@@ -117,9 +112,8 @@ export default function ProjectDirectoryImport({ initialProjectId = '', onCancel
           </label>;
         }} />
       </>}
-      {error && <p role="alert">{error}</p>}
       <div className="code-actions">
-        <button type="submit" className="note-button" disabled={!preview || scanning || (!projectId && !name.trim())}>
+        <button type="submit" className="note-button" disabled={!preview || (!projectId && !name.trim())}>
           {busy ? '保存中…' : '保存目录快照'}
         </button>
         <button type="button" className="note-button secondary" onClick={onCancel}>取消</button>

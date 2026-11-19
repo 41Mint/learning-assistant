@@ -18,7 +18,7 @@ import type { AssistantAction } from './assistantActions';
 import { reviewDateFilter } from './assistantActions';
 import type { SearchScope } from '../Search/ResourceSearch';
 import { AssistantSlots } from './assistantSlots';
-import type { AssistantCodeReference, AssistantGrowthReference, AssistantLogDraft, AssistantLogKind, ReviewConversation } from './assistantSlots';
+import type { AssistantCodeReference, AssistantGrowthReference, AssistantLogDraft, AssistantLogKind, ReviewConversation, ReviewReference } from './assistantSlots';
 import { assistantViewport, boundFrame, boundPosition, defaultFrame, resizeFrame, windowGap } from './assistantGeometry';
 import type { Frame, Point } from './assistantGeometry';
 
@@ -48,6 +48,7 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
   const [reviewId, setReviewId] = useState<string>();
   const [recentReviews, setRecentReviews] = useState<string[]>([]);
   const [reviewStart, setReviewStart] = useState<{ focus: string }>();
+  const [reviewReference, setReviewReference] = useState<ReviewReference>();
   const reviewPanels = useRef(new Map<string, ReviewConversation>());
   const [searchQuery, setSearchQuery] = useState('');
   const [searchScope, setSearchScope] = useState<SearchScope>('all');
@@ -142,8 +143,14 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
     reviewPanels.current.set(id, view);
     return () => { if (reviewPanels.current.get(id) === view) reviewPanels.current.delete(id); };
   }, []);
-  const slots = useMemo(() => ({ today, history, close, registerReview, setLogDraft, askAboutCode, openGrowthRecommendations, askAboutGrowth }),
-    [today, history, close, registerReview, setLogDraft, askAboutCode, openGrowthRecommendations, askAboutGrowth]);
+  const focusToolInput = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      dialog.current?.querySelector<HTMLTextAreaElement>('#assistant-input')?.focus({ preventScroll: true });
+    });
+  }, []);
+  const slots = useMemo(() => ({ today, history, close, registerReview, reviewReference, setReviewReference, focusAssistantInput: focusToolInput,
+    setLogDraft, askAboutCode, openGrowthRecommendations, askAboutGrowth }),
+  [today, history, close, registerReview, reviewReference, focusToolInput, setLogDraft, askAboutCode, openGrowthRecommendations, askAboutGrowth]);
   useEffect(() => {
     if (tab !== 'review' || showPicker || !reviewForm || !reviewStart) return;
     // Wait for the selected panel to finish mounting (including StrictMode's effect replay).
@@ -237,9 +244,6 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
     setMinimized(false);
     setOpen(true);
   };
-  const focusToolInput = () => window.requestAnimationFrame(() => {
-    dialog.current?.querySelector<HTMLTextAreaElement>('#assistant-input')?.focus({ preventScroll: true });
-  });
   const selectReviewLog = (id: string) => {
     setReviewId(id);
     setRecentReviews((current) => [...current.filter((item) => item !== id), id].slice(-4));
@@ -398,6 +402,8 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
           <AssistantChat source={source} active={open} onAction={runAction}
             review={tab === 'review' && !showPicker && reviewForm && reviewTarget ? {
               id: reviewTarget.id, date: reviewTarget.date,
+              reference: reviewReference?.formId === reviewForm && reviewReference.logId === reviewTarget.id ? reviewReference : undefined,
+              onRemoveReference: () => setReviewReference(undefined),
               respond: async (question, history, signal) => {
                 const panel = reviewPanels.current.get(reviewForm);
                 if (!panel) throw new Error('这篇日志正在加载，请稍后再试。');

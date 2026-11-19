@@ -10,6 +10,10 @@
 
 文本框、下拉框和多行输入沿用主题强调色边框和浅色光晕。按钮、链接和可聚焦区域共用 `:focus-visible` 的主题色细轮廓和浅色内光晕，侧栏等带裁切的区域也能显示完整的焦点提示。标签要与控件关联。关闭原位表单后将焦点交还打开它的按钮，便于继续用键盘操作。[全局样式](../src/index.css) · [代码表单展开示例](../src/components/ProjectCode/CodeFormReveal.tsx)
 
+鼠标悬停和键盘聚焦分别验证。词条列表、知识网络目录及智能体建议卡片在悬停或键盘聚焦时用主题强调色标出标题，次要信息沿用原有颜色。只显示图标的按钮用强调色细边框反馈悬停，保持可见的键盘焦点和选中状态。[全局样式](../src/index.css)
+
+日志标签支持双击原位编辑，触屏轻点或键盘激活也可进入。Enter 保存，Esc 或点开其他区域取消，保存或按 Esc 后焦点回到标签。[日志标签](../src/components/StudyLog/LogMetadataField.tsx)
+
 ## 展开与收起
 
 普通折叠区可用 `details` 和 `summary`，沿用全局双向过渡。自定义折叠区用 `aria-expanded` 表示当前状态，收起时让内部控件退出键盘焦点顺序。收起过渡完成后再卸载需要清空草稿的表单。时长和缓动使用 `--app-motion-duration` 与 `--app-motion-ease`。系统开启减少动态效果时，时长为零。[全局样式](../src/index.css) · [日志整理示例](../src/components/StudyLog/LogReviewPanel.tsx)

@@ -18,6 +18,7 @@ export interface ReviewConversationRequest {
   date: string;
   items: ReviewItem[];
   lastEdited: number[];
+  referenceId?: number;
   stale: boolean;
 }
 
@@ -66,6 +67,7 @@ export function readReviewConversationRequest(value: unknown): ReviewConversatio
   });
   return { stage: 'conversation', question: value.question.trim(), date: value.date, history, items,
     lastEdited: value.lastEdited.filter((id): id is number => typeof id === 'number' && ids.has(id)).slice(0, LOG_REVIEW_MAX_SUGGESTIONS),
+    referenceId: typeof value.referenceId === 'number' && ids.has(value.referenceId) ? value.referenceId : undefined,
     stale: value.stale === true };
 }
 

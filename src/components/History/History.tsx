@@ -30,7 +30,7 @@ const formatDateStr = (date: Date): string => {
 };
 
 const History = ({ draft, setDraft }: LogEditingProps) => {
-  const { logs, loadLogs, getLogByDate, changeTag } = useStudyLogStore();
+  const { logs, loadLogs, getLogByDate, changeTag, renameTag } = useStudyLogStore();
   const { historyDate: selectedDate, openLog, search: searchLocation } = useWorkspaceStore();
   const [calendarView, setCalendarView] = useState(() => ({ date: selectedDate, month: new Date(`${selectedDate}T12:00:00`) }));
   const currentMonth = useMemo(() => calendarView.date === selectedDate ? calendarView.month : new Date(`${selectedDate}T12:00:00`), [calendarView, selectedDate]);
@@ -214,7 +214,8 @@ const History = ({ draft, setDraft }: LogEditingProps) => {
 
             <LogMetadataField key={'tags-' + selectedLog.id} label="标签" sectionLabel="编辑标签" placeholder="例如 Unity、C#、算法"
               items={selectedLog.tags} searchWords={search?.words}
-              onAdd={(tag) => changeTag(selectedLog.id, tag, true)} onRemove={(tag) => changeTag(selectedLog.id, tag, false)} />
+              onAdd={(tag) => changeTag(selectedLog.id, tag, true)} onRemove={(tag) => changeTag(selectedLog.id, tag, false)}
+              onRename={(previous, next) => renameTag(selectedLog.id, previous, next)} />
 
             {selectedLog.knowledgePoints.length > 0 && (
               <ul className="log-chips history-log-chips" aria-label="学到的知识点">

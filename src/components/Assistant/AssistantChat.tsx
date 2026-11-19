@@ -8,7 +8,7 @@ import { assistantAction, isAssistantGuideQuestion } from './assistantActions';
 import type { AssistantAction } from './assistantActions';
 import { isScriptReference } from './assistantSlots';
 import type { AssistantCodeExcerpt, AssistantCodeReference, AssistantGrowthReference } from './assistantSlots';
-import type { ReviewConversation } from './assistantSlots';
+import type { ReviewConversation, ReviewReference } from './assistantSlots';
 import AssistantGuide from './AssistantGuide';
 import type { AssistantStart } from './AssistantGuide';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
@@ -70,7 +70,7 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
   tools: ReactNode;
   toolKey?: string;
   onReturnToChat: () => void;
-  review?: { id: string; date: string; respond: ReviewConversation['respond'] };
+  review?: { id: string; date: string; reference?: ReviewReference; onRemoveReference: () => void; respond: ReviewConversation['respond'] };
 }) {
   const toolActive = Boolean(toolKey);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -171,7 +171,8 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
     const current = new AbortController();
     controller.current = current;
     setError('');
-    const sourceInfo = review ? { id: 'review:' + review.id, label: review.date }
+    const sourceInfo = review ? { id: 'review:' + review.id, label: review.reference
+      ? `${review.date} · 建议 ${review.reference.id}「${review.reference.label}」` : review.date }
       : codeExcerpt && codeLabel ? { id: 'code:' + codeExcerpt.id, label: codeLabel }
       : growthReference && growthLabel ? { id: `growth:${growthReference.kind}:${growthReference.id}`, label: growthLabel }
       : attached ? { id: 'log:' + attached.id, label: attached.date + (attached.draft ? ' · 草稿' : '') } : undefined;
@@ -272,6 +273,11 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
           </div>
         </details>
       </div>
+      {review?.reference && <div className="assistant-code-context assistant-review-reference" role="group" aria-label="已引用的建议">
+        <p>引用建议 · 第 {review.reference.id} 项「{review.reference.label}」</p>
+        <button type="button" className="knowledge-text-button" aria-label="移除建议引用" disabled={Boolean(pending)}
+          onClick={review.onRemoveReference}>移除</button>
+      </div>}
       {!toolActive && codeExcerpt && <div className="assistant-code-context">
         <p>引用 {codeLabel}</p>
         <button type="button" className="knowledge-text-button" disabled={Boolean(pending)} onClick={onRemoveCode}>{wholeScript ? '移除脚本' : '移除代码片段'}</button>

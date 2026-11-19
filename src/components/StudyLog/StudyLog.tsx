@@ -20,6 +20,7 @@ export default function StudyLog({ draft, setDraft }: LogEditingProps) {
     loadLogs,
     addTag,
     removeTag,
+    renameTag,
     addKnowledgePoint,
     removeKnowledgePoint,
   } = useStudyLogStore();
@@ -81,7 +82,8 @@ export default function StudyLog({ draft, setDraft }: LogEditingProps) {
         <CodeLinksPanel key={currentLog.id + '-code'} target={{ kind: 'log', id: currentLog.id }} title="项目代码" />
 
         <div className="log-metadata">
-          <LogMetadataField label="标签" placeholder="例如 Unity、C#、算法" items={currentLog.tags} onAdd={addTag} onRemove={removeTag} />
+          <LogMetadataField key={currentLog.id} label="标签" placeholder="例如 Unity、C#、算法" items={currentLog.tags}
+            onAdd={addTag} onRemove={removeTag} onRename={(previous, next) => renameTag(currentLog.id, previous, next)} />
           <LogMetadataField label="学到的知识点" placeholder="添加学到的知识点" items={currentLog.knowledgePoints}
             onAdd={addKnowledgePoint} onRemove={removeKnowledgePoint} />
         </div>

@@ -564,32 +564,43 @@ test('编辑项目资料原位展开，取消与保存都平滑收起并归还�
   await expect(edit).toBeFocused();
 });
 
-test('只读目录跳过 Unity 缓存，保存前不读脚本正文，版本资料原位编辑', async ({ page }) => {
+test('目录导入保留取消前的预览，保存前不读脚本正文，版本资料原位编辑', async ({ page }, testInfo) => {
+  const root = testInfo.outputPath('Unity 场景');
+  for (const [relative, content] of [
+    ['Assets/Player.cs', 'class Player {}'],
+    ['Assets/Player.cs.meta', 'meta'],
+    ['Library/Skipped.cs', 'cache'],
+  ]) {
+    const file = path.join(root, relative);
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, content);
+  }
   await page.addInitScript(() => {
     const audit: string[] = [];
     Object.defineProperty(window, 'directoryAudit', { value: audit });
-    const folder = (name: string, children: object[]) => ({ name, kind: 'directory', async *values() {
-      audit.push('list:' + name);
-      yield* children;
-    } });
-    const file = (name: string) => ({ name, kind: 'file', async getFile() {
-      audit.push('read:' + name);
-      return new File(['class Player {}'], name, { type: 'text/plain' });
-    } });
-    Object.defineProperty(window, 'showDirectoryPicker', { value: async ({ mode }: { mode: string }) => {
-      audit.push(mode);
-      return folder('Unity 场景', [folder('Library', [file('Skipped.cs')]),
-        folder('Assets', [file('Player.cs'), file('Player.cs.meta'), file('Scene.unity')])]);
-    } });
+    const read = File.prototype.arrayBuffer;
+    File.prototype.arrayBuffer = function () {
+      audit.push(this.name);
+      return read.call(this);
+    };
   });
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto('/#code');
   await page.getByRole('button', { name: '导入项目目录', exact: true }).click();
   const importer = page.getByRole('form', { name: '导入项目目录' });
-  await importer.getByRole('button', { name: '选择项目文件夹（只读）' }).click();
+  const picker = importer.getByLabel('本地项目文件夹');
+  const save = importer.getByRole('button', { name: '保存目录快照' });
+  await expect(picker).toBeVisible();
+  await expect(importer.locator('input[type="file"]')).toHaveCount(1);
+  await picker.dispatchEvent('cancel');
+  await expect(importer.getByRole('status')).toContainText('未选择文件夹');
+  await expect(save).toBeDisabled();
+  await picker.setInputFiles(root);
+  await expect(importer.getByRole('status')).toContainText('尚未保存');
+  await expect(importer.getByLabel('项目名称')).toHaveValue('Unity 场景');
   await importer.getByRole('button', { name: '展开 Assets' }).click();
   const audit = () => page.evaluate(() => (window as Window & { directoryAudit?: string[] }).directoryAudit);
-  expect(await audit()).toEqual(['read', 'list:Unity 场景', 'list:Assets']);
+  expect(await audit()).toEqual([]);
   const saveScript = importer.getByRole('checkbox', { name: '保存脚本 Assets/Player.cs' });
   await saveScript.check();
   await importer.getByRole('button', { name: '折叠 Assets' }).click();
@@ -597,10 +608,14 @@ test('只读目录跳过 Unity 缓存，保存前不读脚本正文，版本资�
   await importer.getByRole('button', { name: '展开 Assets' }).click();
   await expect(saveScript).toBeChecked();
   await expect(importer.getByText('Library', { exact: true })).toHaveCount(0);
-  await importer.getByRole('button', { name: '保存目录快照' }).click();
+  await picker.dispatchEvent('cancel');
+  await expect(importer.getByRole('status')).toContainText('已保留上次的目录预览');
+  await expect(saveScript).toBeChecked();
+  expect(await audit()).toEqual([]);
+  await save.click();
   const project = page.getByRole('article', { name: 'Unity 场景' });
   await project.getByRole('link', { name: 'Assets/Player.cs', exact: true }).click();
-  expect(await audit()).toEqual(['read', 'list:Unity 场景', 'list:Assets', 'read:Player.cs']);
+  expect(await audit()).toEqual(['Player.cs']);
   const snapshot = page.getByRole('region', { name: '脚本快照' });
   const trigger = page.getByRole('button', { name: '编辑版本资料', exact: true });
   const currentUrl = page.url();

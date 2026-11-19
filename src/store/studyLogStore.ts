@@ -73,6 +73,7 @@ interface StudyLogStore {
   // 添加标签
   addTag: (tag: string) => void;
   changeTag: (logId: string, tag: string, add: boolean) => void;
+  renameTag: (logId: string, previous: string, value: string) => void;
 
   // 删除标签
   removeTag: (tag: string) => void;
@@ -193,6 +194,15 @@ export const useStudyLogStore = create<StudyLogStore>((set, get) => ({
     if ((add && !label) || log.tags.includes(label) === add) return;
     const tags = add ? [...log.tags, label] : log.tags.filter((item) => item !== label);
     get().saveLog({ ...log, tags });
+  },
+
+  renameTag: (logId, previous, value) => {
+    const log = readStoredLogs().find((candidate) => candidate.id === logId && !isTrashedLog(candidate));
+    if (!log?.tags.includes(previous)) throw new Error('原标签已不存在，请重新打开日志。');
+    const tag = value.trim();
+    if (tag === previous) return;
+    if (!tag || log.tags.includes(tag)) throw new Error('标签不能为空，也不能与已有标签重复。');
+    get().saveLog({ ...log, tags: log.tags.map((item) => item === previous ? tag : item) });
   },
 
   addTag: (tag) => {

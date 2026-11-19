@@ -36,6 +36,90 @@ test('今日日志的标签与知识点可用键盘或按钮添加并分别移�
   await expect(removePoint).toHaveCount(0);
 });
 
+test('今日和历史日志可双击改标签，保存排序并拒绝空值或重名', async ({ page }) => {
+  const date = '2026-11-05';
+  await page.goto('/#today');
+  await page.evaluate(async (date) => {
+    const { useStudyLogStore } = await import('/src/store/studyLogStore.ts');
+    const store = useStudyLogStore.getState();
+    for (const tag of ['Unity', '2D物理', 'Input System']) store.addTag(tag);
+    store.appendToDate(date, '历史日志正文。');
+    const log = store.getLogByDate(date)!;
+    store.changeTag(log.id, '历史标签', true);
+  }, date);
+  const today = page.getByRole('region', { name: '标签', exact: true });
+  const physics = today.getByRole('button', { name: '编辑标签「2D物理」', exact: true });
+  const editor = today.getByRole('textbox', { name: '编辑标签「2D物理」', exact: true });
+  await physics.click();
+  await expect(editor).toHaveCount(0);
+  await physics.dblclick();
+  await expect(editor).toBeFocused();
+  await editor.fill(' ');
+  await editor.press('Enter');
+  await expect(today.getByRole('alert')).toHaveText('标签不能为空。');
+  await editor.fill(' Unity ');
+  await editor.press('Enter');
+  await expect(today.getByRole('alert')).toHaveText('已有同名标签。');
+  await editor.press('Escape');
+  await expect(physics).toBeFocused();
+
+  await physics.press('Enter');
+  await editor.fill('  2D 碰撞  ');
+  await editor.press('Enter');
+  await expect(today.getByRole('button', { name: '编辑标签「2D 碰撞」' })).toBeFocused();
+  await expect(today.getByRole('list', { name: '标签' }).getByRole('listitem')).toHaveText(['Unity×', '2D 碰撞×', 'Input System×']);
+
+  await page.goto('/#history/' + date);
+  const history = page.getByRole('region', { name: '编辑标签', exact: true });
+  const old = history.getByRole('button', { name: '编辑标签「历史标签」' });
+  const historyEditor = history.getByRole('textbox', { name: '编辑标签「历史标签」' });
+  await old.dblclick();
+  await historyEditor.fill('点外部会取消');
+  await history.getByRole('textbox', { name: '标签', exact: true }).click();
+  await expect(old).toBeVisible();
+  await old.dblclick();
+  await historyEditor.fill('项目复习');
+  await historyEditor.press('Enter');
+  await page.reload();
+  await expect(history.getByRole('button', { name: '编辑标签「项目复习」' })).toBeVisible();
+  await expect(page.getByText('历史日志正文。', { exact: true })).toBeVisible();
+  await page.goto('/#today');
+  await expect(today.getByRole('button', { name: '编辑标签「2D 碰撞」' })).toBeVisible();
+});
+
+test('词条列表与网络目录高亮悬停标题，智能体图标显示悬停及键盘描边', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  for (const route of ['knowledge', 'network']) {
+    await page.goto('/?workspace=knowledge-demo#' + route);
+    const directory = page.locator('.knowledge-directory:visible');
+    await expect(directory.locator('summary').first()).toBeVisible();
+    const title = directory.locator('button strong:visible').first();
+    if (await title.count() === 0) await directory.locator('summary').first().click();
+    const color = await title.evaluate((element) => getComputedStyle(element).color);
+    await title.hover();
+    await expect(title).toHaveCSS('color', 'rgb(59, 130, 246)');
+    await page.mouse.move(0, 0);
+    await expect(title).toHaveCSS('color', color);
+  }
+  await page.getByRole('button', { name: '打开学习智能体' }).click();
+  const drawer = page.getByRole('dialog', { name: '学习智能体' });
+  const options = drawer.getByRole('button', { name: '窗口选项' });
+  const minimize = drawer.getByRole('button', { name: '最小化学习智能体' });
+  const close = drawer.getByRole('button', { name: '关闭学习智能体' });
+  for (const button of [options, minimize, close, drawer.getByRole('button', { name: '引用代码', exact: true })]) {
+    await button.hover();
+    await expect(button).toHaveCSS('outline-color', 'rgb(59, 130, 246)');
+    await expect(button).toHaveCSS('outline-style', 'solid');
+  }
+  await page.mouse.move(0, 0);
+  await options.focus();
+  await page.keyboard.press('Tab');
+  await expect(minimize).toBeFocused();
+  await expect(minimize).toHaveCSS('outline-style', 'solid');
+  await expect(close).toHaveCSS('outline-style', 'none');
+});
+
 test('明暗主题与桌面/窄屏下编辑框和预览框等高，桌面上下对齐', async ({ page }, testInfo) => {
   await page.goto('/');
   await page.evaluate(async () => {

@@ -110,6 +110,66 @@ test('只用聊天提炼、询问、按字段编辑、撤销并保存，不需�
   await expect(input).toHaveValue('');
 });
 
+test('建议菜单只保存当前项，引用建议保留输入并指向准确的编号', async ({ page }) => {
+  const requests: ReviewConversationRequest[] = [];
+  await page.route('**/api/log-review', async (route) => {
+    const input = route.request().postDataJSON() as LogReviewRequest | ReviewConversationRequest;
+    if (input.stage === 'plan') return route.fulfill({ json: { queries: [] } });
+    if (input.stage === 'suggest') return route.fulfill({ json: { summary: '两条建议', suggestions: [
+      { kind: 'tag', tag: 'Tilemap', evidence: '用 Tilemap 拼出地面。' },
+      { kind: 'entry', title: 'Tilemap', category: '2D', content: '用瓦片组成地图。', evidence: '用 Tilemap 拼出地面。' },
+    ] } });
+    if (input.stage !== 'conversation') throw new Error('unexpected legacy request');
+    requests.push(input);
+    if (!input.items.length) return route.fulfill({ json: { answer: '准备整理。', operation: { kind: 'generate', focus: '' } } });
+    return route.fulfill({ json: { answer: input.referenceId === 2 ? '这条建议是一个词条。' : '这一轮没有引用建议。' } });
+  });
+  const { assistant } = await openReview(page, text, false);
+  const input = assistant.getByRole('textbox', { name: '输入问题' });
+  await input.fill('找找这篇里有什么值得记下来的');
+  await input.press('Enter');
+  const entry = assistant.getByRole('button', { name: '展开 · 新建词条 · Tilemap' });
+  const tag = assistant.getByRole('button', { name: '展开 · 添加标签 · Tilemap' });
+  const menu = assistant.getByRole('menu', { name: '建议操作' });
+  await expect(entry).toBeVisible();
+  await input.fill('这条建议是什么？');
+  await entry.press('Shift+F10');
+  await expect(menu.getByRole('menuitem', { name: '保存这条建议' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await expect(entry).toBeFocused();
+  await entry.click({ button: 'right' });
+  await menu.getByRole('menuitem', { name: '引用这条建议继续询问' }).click();
+  const reference = assistant.getByRole('group', { name: '已引用的建议' });
+  await expect(reference).toContainText('第 2 项「Tilemap」');
+  await expect(input).toHaveValue('这条建议是什么？');
+  await expect(input).toBeFocused();
+  expect(requests).toHaveLength(1);
+
+  await tag.click({ button: 'right' });
+  await menu.getByRole('menuitem', { name: '保存这条建议' }).click();
+  await expect(tag).toContainText('已保存');
+  await expect(entry).not.toContainText('已保存');
+  await expect(reference).toBeVisible();
+  await tag.click({ button: 'right' });
+  await expect(menu.getByRole('menuitem', { name: '保存这条建议' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await input.press('Enter');
+  await expect(assistant.getByRole('log').getByText('这条建议是一个词条。')).toBeVisible();
+  expect(requests.at(-1)?.referenceId).toBe(2);
+  const data = await page.evaluate(() => ({
+    tags: JSON.parse(localStorage.getItem('learning-assistant:study-logs')!)[0].tags,
+    entries: JSON.parse(localStorage.getItem('learning-assistant:knowledge')!).entries,
+  }));
+  expect(data.tags).toContain('Tilemap');
+  expect(data.entries).not.toContainEqual(expect.objectContaining({ title: 'Tilemap' }));
+  await reference.getByRole('button', { name: '移除建议引用' }).click();
+  await input.fill('继续说说这篇日志。');
+  await input.press('Enter');
+  await expect(assistant.getByRole('log').getByText('这一轮没有引用建议。')).toBeVisible();
+  expect(requests.at(-1)?.referenceId).toBeUndefined();
+});
+
 test('自然语言可从普通问答发起整理，正文精简达不到要求不覆盖草稿', async ({ page }) => {
   await seedReview(page);
   const original = '这一篇记录里先解释输入向量的来源，然后解释实际刚体速度的含义，最后强调两者不能互相替代。';

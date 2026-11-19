@@ -6,6 +6,8 @@ import type { ReviewEdit, ReviewField, ReviewItem } from '../../types/reviewConv
 import { converseAboutLog, organizeLog } from '../../utils/logReview';
 import { AssistantSlots } from '../Assistant/assistantSlots';
 import type { ReviewConversation, ReviewReply } from '../Assistant/assistantSlots';
+import ReviewSuggestionMenu from './ReviewSuggestionMenu';
+import type { ReviewMenuAnchor } from './ReviewSuggestionMenu';
 
 interface ReviewRow { suggestion: LogReviewSuggestion; checked: boolean; saved?: boolean }
 type Change = { id: number; before: LogReviewSuggestion; after: LogReviewSuggestion };
@@ -56,7 +58,7 @@ export default function LogReviewPanel({ logId, date, content, formId, onSelecti
   onReturn?: () => void;
 }) {
   const entries = useKnowledgeStore((state) => state.entries);
-  const { registerReview } = useContext(AssistantSlots);
+  const { registerReview, reviewReference, setReviewReference, focusAssistantInput } = useContext(AssistantSlots);
   const [rows, setRows] = useState<ReviewRow[]>([]);
   const [result, setResult] = useState<{ text: string; summary: string; queries: string[]; matches: number }>();
   const [phase, setPhase] = useState('');
@@ -65,13 +67,21 @@ export default function LogReviewPanel({ logId, date, content, formId, onSelecti
   const [undo, setUndo] = useState<Change[]>([]);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [manual, setManual] = useState(false);
+  const [menu, setMenu] = useState<ReviewMenuAnchor>();
   const pendingSave = useRef<{ rows: ReviewRow[]; ids: number[] } | undefined>(undefined);
   const panelId = useId();
   const request = useRef<AbortController | null>(null);
   const latestContent = useRef(content);
   useLayoutEffect(() => { latestContent.current = content; }, [content]);
+  useEffect(() => () => {
+    setReviewReference((current) => current?.formId === formId && current.logId === logId ? undefined : current);
+  }, [formId, logId, setReviewReference]);
   useEffect(() => () => request.current?.abort(), []);
   const stale = Boolean(result && result.text !== content);
+  const referenceId = reviewReference?.formId === formId && reviewReference.logId === logId ? reviewReference.id : undefined;
+  const label = (item: LogReviewSuggestion) => item.kind === 'tag' ? item.tag
+    : item.kind === 'entry' ? item.title : entries.find(({ id }) => id === item.entryId)?.title ?? '词条已不存在';
+  const description = (item: LogReviewSuggestion) => `${item.kind === 'tag' ? '添加标签' : item.kind === 'entry' ? '新建词条' : '关联词条'} · ${label(item)}`;
 
   const run = async <T,>(label: string, work: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal) => {
     if (request.current) throw new Error('这一轮还在处理中。');
@@ -87,6 +97,11 @@ export default function LogReviewPanel({ logId, date, content, formId, onSelecti
   const updateRows = (next: ReviewRow[]) => {
     pendingSave.current = undefined;
     setRows(next);
+    const referenced = referenceId && next[referenceId - 1];
+    if (referenced && label(referenced.suggestion) !== reviewReference?.label) {
+      setReviewReference((current) => current === reviewReference && current
+        ? { ...current, label: label(referenced.suggestion) } : current);
+    }
     onSelection?.(next.filter(({ checked, saved }) => checked && !saved).map(({ suggestion }) => suggestion), result?.text ?? content);
   };
   const generate = async (focus: string, signal: AbortSignal) => {
@@ -97,6 +112,8 @@ export default function LogReviewPanel({ logId, date, content, formId, onSelecti
     if (latestContent.current !== content) throw new Error('日志正文在整理时已修改，原草稿已保留。');
     setUndo([]);
     setExpanded(new Set());
+    setMenu(undefined);
+    setReviewReference((current) => current?.formId === formId && current.logId === logId ? undefined : current);
     onSelection?.([], content);
     pendingSave.current = undefined;
     setResult({ text: content, summary: next.summary, queries: next.queries, matches: next.context.entries.length });
@@ -105,9 +122,6 @@ export default function LogReviewPanel({ logId, date, content, formId, onSelecti
       ? `已根据 ${date} 的日志整理出 ${next.suggestions.length} 项草稿，尚未保存。可以继续说想改哪一项，或保存哪几项。`
       : next.summary || '这篇日志暂时没有可新增的词条、标签或关联。';
   };
-  const label = (item: LogReviewSuggestion) => item.kind === 'tag' ? item.tag
-    : item.kind === 'entry' ? item.title : entries.find(({ id }) => id === item.entryId)?.title ?? '词条已不存在';
-  const description = (item: LogReviewSuggestion) => `${item.kind === 'tag' ? '添加标签' : item.kind === 'entry' ? '新建词条' : '关联词条'} · ${label(item)}`;
   const commit = async (ids: number[], includeLog: boolean, signal: AbortSignal) => {
     signal.throwIfAborted();
     if (!result || result.text !== latestContent.current || !ids.length) throw new Error('草稿或日志已变化，请先核对。');
@@ -117,6 +131,8 @@ export default function LogReviewPanel({ logId, date, content, formId, onSelecti
     updateRows(rows.map((row, index) => ids.includes(index + 1) ? { ...row, saved: true, checked: false } : row));
     return '已保存：' + targets.map(({ suggestion }) => '「' + label(suggestion) + '」').join('、') + '。';
   };
+  const saveDrafts = (ids: number[]) => void run('正在保存', (signal) => commit(ids, false, signal))
+    .then(setStatus).catch((problem: unknown) => setError(problem instanceof Error ? problem.message : '保存失败。'));
   const undoLast = () => {
     const available = undo.filter(({ id, after }) => !rows[id - 1]?.saved && rows[id - 1]?.suggestion === after);
     if (!available.length) return '没有可撤销的未保存修订。';
@@ -136,7 +152,7 @@ export default function LogReviewPanel({ logId, date, content, formId, onSelecti
       id: index + 1, label: label(suggestion), suggestion, selected: checked, saved: Boolean(saved),
     }));
     const response = await converseAboutLog({ stage: 'conversation', question, history, date, items,
-      lastEdited: undo.map(({ id }) => id), stale }, active);
+      lastEdited: undo.map(({ id }) => id), referenceId, stale }, active);
     active.throwIfAborted();
     const { operation, answer } = response;
     if (!operation) return { answer };
@@ -187,6 +203,7 @@ export default function LogReviewPanel({ logId, date, content, formId, onSelecti
   const change = (index: number, suggestion: LogReviewSuggestion) =>
     updateRows(rows.map((row, position) => position === index ? { ...row, suggestion } : row));
   const categories = [...new Set(entries.map(({ category }) => category).filter(Boolean))];
+  const menuRow = menu && rows[menu.id - 1];
   return <section className="log-review" aria-label="日志整理建议" id={formId} data-preserves-on-navigation>
     <p className="knowledge-muted">{result ? '可按编号或名称直接修改、保存，也可点卡片查看详情。继续对话时，这批草稿会发给 DeepSeek 作为上下文。'
       : '可以直接说「从这篇日志提炼词条」。整理时会将日志文字和相关资料名称发给 DeepSeek。'}</p>
@@ -210,7 +227,18 @@ export default function LogReviewPanel({ logId, date, content, formId, onSelecti
               {manual && <input type="checkbox" checked={row.checked} disabled={Boolean(phase) || row.saved || (!row.checked && (stale || (item.kind === 'link' && !entry)))}
                 aria-label={description(item)} onChange={(event) => updateRows(rows.map((other, i) => i === index ? { ...other, checked: event.target.checked } : other))} />}
               <button type="button" className="log-review-card-title" aria-label={`${open ? '收起' : '展开'} · ${description(item)}`}
-                aria-expanded={open} aria-controls={detailId} onClick={() => setExpanded((current) => {
+                aria-expanded={open} aria-controls={detailId} aria-keyshortcuts="Shift+F10"
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  setMenu({ id: index + 1, x: event.clientX, y: event.clientY, trigger: event.currentTarget });
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'ContextMenu' && (event.key !== 'F10' || !event.shiftKey)) return;
+                  event.preventDefault();
+                  const { left, bottom } = event.currentTarget.getBoundingClientRect();
+                  setMenu({ id: index + 1, x: left, y: bottom, trigger: event.currentTarget });
+                }}
+                onClick={() => setExpanded((current) => {
                   const next = new Set(current);
                   if (open) next.delete(index); else next.add(index);
                   return next;
@@ -240,6 +268,13 @@ export default function LogReviewPanel({ logId, date, content, formId, onSelecti
           </li>;
         })}
       </ul>
+      {menu && menuRow && <ReviewSuggestionMenu key={menu.id} anchor={menu} title={label(menuRow.suggestion)}
+        canSave={!phase && !stale && available.includes(menuRow)} onClose={() => setMenu((current) => current === menu ? undefined : current)}
+        onSave={() => saveDrafts([menu.id])}
+        onQuote={() => {
+          setReviewReference(() => ({ formId, logId, id: menu.id, label: label(menuRow.suggestion) }));
+          focusAssistantInput();
+        }} />}
     </div>}
     <details className="log-review-search" onToggle={(event) => setManual(event.currentTarget.open)}>
       <summary>手动操作</summary>
@@ -250,8 +285,7 @@ export default function LogReviewPanel({ logId, date, content, formId, onSelecti
         {undo.length > 0 && <button type="button" className="knowledge-text-button" disabled={Boolean(phase) || stale}
           onClick={() => setStatus(undoLast())}>撤销上次修订</button>}
         {drafts.length > 0 && <button type="button" className="note-button" disabled={Boolean(phase) || stale}
-          onClick={() => void run('正在保存', (signal) => commit(rows.flatMap((row, index) => row.checked && !row.saved ? [index + 1] : []), false, signal))
-            .then(setStatus).catch((problem: unknown) => setError(problem instanceof Error ? problem.message : '保存失败。'))}>保存所选建议</button>}
+          onClick={() => saveDrafts(rows.flatMap((row, index) => row.checked && !row.saved ? [index + 1] : []))}>保存所选建议</button>}
         {onReturn && <button type="button" className="knowledge-text-button" onClick={onReturn}>返回日志</button>}
       </div>
       {available.length > 0 && <label className="log-review-choice log-review-select-all">

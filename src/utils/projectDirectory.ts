@@ -2,30 +2,7 @@ import { isProjectRelativePath, MAX_SCRIPT_BYTES, readScriptFile } from './proje
 
 const excludedRootFolders = new Set(['.git', '.vs', '.idea', 'library', 'temp', 'obj', 'logs', 'usersettings', 'build', 'builds']);
 
-export type DirectoryFile = File | FileSystemFileHandle | null;
-
-export async function scanProjectDirectory(directory: FileSystemDirectoryHandle) {
-  const byPath = new Map<string, DirectoryFile>();
-  let skipped = 0;
-  const visit = async (folder: FileSystemDirectoryHandle, prefix = '') => {
-    for await (const entry of folder.values()) {
-      const path = prefix + entry.name;
-      if ((!prefix && entry.kind === 'directory' && excludedRootFolders.has(entry.name.toLowerCase()))
-        || (entry.kind === 'file' && /\.meta$/i.test(entry.name))) {
-        skipped++;
-        continue;
-      }
-      if (!isProjectRelativePath(path)) throw new Error(`路径「${path}」无法保存，请检查目录名称。`);
-      if (entry.kind === 'directory') await visit(entry, path + '/');
-      else byPath.set(path, /\.cs$/i.test(path) ? entry : null);
-    }
-  };
-  await visit(directory);
-  if (!byPath.size) throw new Error('这个文件夹中没有可保存的项目路径。');
-  return { root: directory.name, byPath, skipped };
-}
-
-export type DirectoryPreview = Awaited<ReturnType<typeof scanProjectDirectory>>;
+export type DirectoryPreview = ReturnType<typeof previewProjectDirectory>;
 export function projectDirectoryPaths(files: readonly string[]): Set<string> {
   const paths = new Set(files);
   for (const path of files) {
@@ -87,17 +64,17 @@ export function previewProjectDirectory(files: FileList) {
   return { root, byPath, skipped };
 }
 
-export function isImportableScript(path: string, file: File | FileSystemFileHandle): boolean {
-  return /\.cs$/i.test(path) && path === path.trim() && (!(file instanceof File) || file.size <= MAX_SCRIPT_BYTES);
+export function isImportableScript(path: string, file: File): boolean {
+  return /\.cs$/i.test(path) && path === path.trim() && file.size <= MAX_SCRIPT_BYTES;
 }
 
-export async function readDirectoryScripts(byPath: ReadonlyMap<string, DirectoryFile>, selected: ReadonlySet<string>) {
+export async function readDirectoryScripts(byPath: ReadonlyMap<string, File>, selected: ReadonlySet<string>) {
   const scripts: { path: string; content: string }[] = [];
   for (const path of selected) {
     const file = byPath.get(path);
     if (!file) throw new Error(`未找到所选文件「${path}」。请重新选择项目目录。`);
     try {
-      scripts.push({ path, content: await readScriptFile(file instanceof File ? file : await file.getFile()) });
+      scripts.push({ path, content: await readScriptFile(file) });
     } catch (error) {
       throw new Error(`${path}：${error instanceof Error ? error.message : '无法读取脚本。'}`);
     }
