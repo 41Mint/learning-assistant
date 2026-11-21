@@ -2,15 +2,10 @@ import { useCallback, useImperativeHandle, useLayoutEffect, useMemo, useRef, use
 import type { ClipboardEventHandler, Ref } from 'react';
 import type { StoredImage } from '../../utils/imageStorage';
 import { formatMarkdown } from '../../utils/markdownEditing';
-import type { MarkdownEdit, MarkdownFormat } from '../../utils/markdownEditing';
+import type { HeadingLevel, MarkdownEdit, MarkdownFormat } from '../../utils/markdownEditing';
 import MarkdownContent from './MarkdownContent';
 import type { MarkdownLinkRenderer } from './MarkdownContent';
-import SegmentedControl from './SegmentedControl';
-
-const formatGroups = [
-  [['heading', '二级标题', 'H2'], ['bold', '加粗', 'B'], ['italic', '斜体', 'I'], ['code', '行内代码', '</>'], ['link', '链接', null]],
-  [['quote', '引用', '❞'], ['bullet', '无序列表', '•≡'], ['numbered', '有序列表', '1≡'], ['task', '任务列表', '☑'], ['codeBlock', '代码块', '代码块']],
-] as const;
+import MarkdownToolbar from './MarkdownToolbar';
 
 export interface MarkdownEditorHandle {
   insertAfterSelection: (text: string, separatorWhenSelected?: string) => boolean;
@@ -93,32 +88,17 @@ export default function MarkdownFields({ id, label, previewLabel, value, onChang
     applyEdit(edit);
   }, [isPreview, applyEdit]);
 
-  const format = (command: MarkdownFormat) => {
+  const format = (command: MarkdownFormat, headingLevel?: HeadingLevel) => {
     const field = textarea.current;
-    if (field && !isPreview) applyEdit(formatMarkdown(field.value, field.selectionStart, field.selectionEnd, command));
+    if (field && !isPreview) applyEdit(formatMarkdown(field.value, field.selectionStart, field.selectionEnd, command, headingLevel));
   };
 
   return (
     <div className="markdown-editor">
       <label className="markdown-editor-label" htmlFor={id}>{label}</label>
       <div className="markdown-editor-shell">
-        <div className="markdown-editor-bar">
-          <div className="markdown-formatting" role="group" aria-label="Markdown 格式">
-            {formatGroups.map((tools) => <div className="markdown-format-group" key={tools[0][0]}>
-              {tools.map(([command, name, symbol]) => <button key={command} type="button" className="markdown-format-button"
-                data-format={command} aria-label={name} title={name} disabled={isPreview || readOnly}
-                onMouseDown={(event) => event.preventDefault()} onClick={() => format(command)}>{symbol ?? (
-                  <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                    <path d="M10 13.5a4 4 0 0 0 5.7 0l3.4-3.4a4 4 0 0 0-5.7-5.7l-1.7 1.7m2.3 4.4a4 4 0 0 0-5.7 0l-3.4 3.4a4 4 0 0 0 5.7 5.7l1.7-1.7" />
-                  </svg>
-                )}</button>)}
-            </div>)}
-          </div>
-          <SegmentedControl className="markdown-editor-modes" label="Markdown 视图">
-            <button type="button" aria-pressed={!isPreview} aria-controls={id} onClick={() => switchMode('source')}>源码</button>
-            <button type="button" aria-pressed={isPreview} aria-controls={preview ? previewId : undefined} onClick={() => switchMode('preview')}>预览</button>
-          </SegmentedControl>
-        </div>
+        <MarkdownToolbar sourceId={id} previewId={preview ? previewId : undefined} mode={mode} readOnly={readOnly}
+          onModeChange={switchMode} onFormat={format} />
         <div ref={area} className="markdown-editor-area" data-mode={mode} style={{ height }}>
           <textarea ref={textarea} id={id} className="markdown-editor-view" inert={isPreview} value={value}
             onChange={(event) => onChange(event.target.value)} placeholder={placeholder} readOnly={readOnly} onPaste={onPaste} />

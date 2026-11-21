@@ -174,3 +174,67 @@ test('贴左图标侧栏悬停覆盖展开，子页支持刷新和历史记录',
   await page.goBack();
   await expect(topics).toHaveAttribute('aria-current', 'page');
 });
+
+test('侧栏主题按钮跟随系统默认，可用键盘切换并在刷新后保留', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+  await page.goto('/#today');
+  const root = page.locator('html');
+  const navigation = page.getByRole('navigation', { name: '主要功能' });
+  const daylight = navigation.getByRole('button', { name: '切换到日间主题' });
+  const night = navigation.getByRole('button', { name: '切换到夜间主题' });
+  await expect(root).toHaveCSS('color-scheme', 'dark');
+  await expect(daylight).toBeInViewport();
+  const sun = await daylight.locator('svg path').getAttribute('d');
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect(night).toBeInViewport();
+  expect(await night.locator('svg path').getAttribute('d')).not.toBe(sun);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(daylight).toBeVisible();
+
+  await page.getByRole('button', { name: '编辑', exact: true }).click();
+  const editor = page.getByLabel('学习内容（Markdown）');
+  await editor.fill('今天练习 `Tilemap`。');
+  await page.getByRole('button', { name: '预览', exact: true }).click();
+  const code = page.getByRole('region', { name: '学习内容预览' }).locator('code');
+  await expect(code).toHaveCSS('background-color', 'rgb(55, 65, 81)');
+  await navigation.getByRole('button', { name: '检索资料' }).focus();
+  await page.keyboard.press('Tab');
+  await expect(daylight).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(night).toBeFocused();
+  await expect(root).toHaveCSS('background-color', 'rgb(243, 246, 250)');
+  await expect(root).toHaveCSS('color-scheme', 'light');
+  await expect(code).toHaveCSS('background-color', 'rgb(229, 231, 235)');
+  await page.getByRole('button', { name: '源码', exact: true }).click();
+  await expect(editor).toHaveValue('今天练习 `Tilemap`。');
+  await expect(editor).toHaveCSS('color-scheme', 'light');
+
+  await page.reload();
+  await expect(night).toBeInViewport();
+  await expect(root).toHaveCSS('color-scheme', 'light');
+  await night.click();
+  await expect(root).toHaveCSS('color-scheme', 'dark');
+});
+
+test('低高度窄屏的主题按钮在抽屉底部，切换后可继续操作导航', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 380 });
+  await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
+  await page.goto('/#today');
+  const navigation = page.getByRole('navigation', { name: '主要功能' });
+  const menu = navigation.getByRole('button', { name: '页面菜单', exact: true });
+  const night = navigation.getByRole('button', { name: '切换到夜间主题' });
+  await expect(night).toBeHidden();
+  await menu.click();
+  await expect(night).toBeInViewport({ ratio: 1 });
+  const bounds = (await night.boundingBox())!;
+  expect(bounds.y + bounds.height).toBeGreaterThan(350);
+  await night.click();
+  await expect(page.locator('html')).toHaveCSS('color-scheme', 'dark');
+  await expect(menu).toHaveAttribute('aria-expanded', 'true');
+  const daylight = navigation.getByRole('button', { name: '切换到日间主题' });
+  await expect(daylight).toBeInViewport({ ratio: 1 });
+  await navigation.getByRole('link', { name: '数据管理', exact: true }).click();
+  await expect(page).toHaveURL(/#data$/);
+  await expect(daylight).toBeHidden();
+  await expect(navigation.getByRole('button', { name: '检索资料' })).toBeInViewport();
+});

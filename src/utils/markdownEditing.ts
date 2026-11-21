@@ -6,8 +6,10 @@ export interface MarkdownEdit {
   selectionEnd: number;
 }
 
+export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
+
 const lineFormats = {
-  heading: { marker: /^#{1,6}(?:[ \t]+|$)/, prefix: () => '## ', placeholder: '标题' },
+  heading: { marker: /^#{1,6}(?:[ \t]+|$)/, prefix: (_number: number, level: HeadingLevel) => '#'.repeat(level) + ' ', placeholder: '标题' },
   quote: { marker: /^>[ \t]?/, prefix: () => '> ', placeholder: '引用内容' },
   bullet: { marker: /^[-+*][ \t]+(?!\[[ xX]\][ \t])/, prefix: () => '- ', placeholder: '列表项' },
   numbered: { marker: /^\d+[.)][ \t]+/, prefix: (number: number) => `${number}. `, placeholder: '列表项' },
@@ -25,7 +27,7 @@ function wrap(start: number, end: number, text: string, prefix: string, suffix: 
   return replace(start, end, prefix + text + suffix, prefix.length, prefix.length + text.length);
 }
 
-function formatLines(source: string, start: number, end: number, format: LineFormat): MarkdownEdit {
+function formatLines(source: string, start: number, end: number, format: LineFormat, headingLevel: HeadingLevel): MarkdownEdit {
   const first = source.lastIndexOf('\n', start - 1) + 1;
   const from = start === 0 ? 0 : first;
   const after = source.indexOf('\n', Math.max(start, end - 1));
@@ -36,17 +38,20 @@ function formatLines(source: string, start: number, end: number, format: LineFor
   const oldListMarker = /^(?:[-+*]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?/;
   if (lines.length === 1 && !lines[0].trim()) {
     const indent = lines[0];
-    return wrap(from, to, placeholder, indent + prefix(1), '');
+    return wrap(from, to, placeholder, indent + prefix(1, headingLevel), '');
   }
 
-  const unmark = lines.filter((line) => line.trim()).every((line) => marker.test(line.trimStart()));
+  const unmark = lines.filter((line) => line.trim()).every((line) => {
+    const previous = line.trimStart().match(marker)?.[0];
+    return previous !== undefined && (format !== 'heading' || previous.trimEnd().length === headingLevel);
+  });
   let number = 0;
   const text = lines.map((line) => {
     if (!line.trim()) return line;
     const indent = line.match(/^[ \t]*/)?.[0] ?? '';
     const body = line.slice(indent.length);
     if (unmark) return indent + body.replace(marker, '');
-    return indent + prefix(++number) + body.replace(list ? oldListMarker : marker, '');
+    return indent + prefix(++number, headingLevel) + body.replace(list ? oldListMarker : marker, '');
   }).join('\n');
   if (start === end) {
     const caret = Math.max(0, start - from + text.length - lines[0].length);
@@ -59,7 +64,7 @@ function longestBackticks(text: string) {
   return (text.match(/`+/g) ?? []).reduce((longest, item) => Math.max(longest, item.length), 0);
 }
 
-export function formatMarkdown(source: string, start: number, end: number, format: MarkdownFormat): MarkdownEdit {
+export function formatMarkdown(source: string, start: number, end: number, format: MarkdownFormat, headingLevel: HeadingLevel = 2): MarkdownEdit {
   const selected = source.slice(start, end);
   switch (format) {
     case 'bold':
@@ -100,6 +105,6 @@ export function formatMarkdown(source: string, start: number, end: number, forma
       return wrap(start, end, code, before + fence + '\n', (code.endsWith('\n') ? '' : '\n') + fence + after);
     }
     default:
-      return formatLines(source, start, end, format);
+      return formatLines(source, start, end, format, headingLevel);
   }
 }

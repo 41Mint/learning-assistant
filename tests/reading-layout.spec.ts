@@ -381,6 +381,102 @@ test('Markdown 格式工具操作选区，可撤销并在预览中核对', async
   await expect(page.getByRole('region', { name: '今日学习', exact: true }).getByRole('link', { name: '后文' })).toBeVisible();
 });
 
+test('Markdown 标题在空白处横向展开，鼠标与键盘都能选择级别', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/#today');
+  await page.getByRole('button', { name: '编辑', exact: true }).click();
+  const form = page.getByRole('form', { name: '今日记录编辑表单' });
+  const source = form.getByRole('textbox', { name: '学习内容（Markdown）' });
+  const tools = form.getByRole('group', { name: 'Markdown 格式' });
+  const modes = form.getByRole('group', { name: 'Markdown 视图' });
+  const h2 = tools.getByRole('button', { name: '二级标题', exact: true });
+  const levels = tools.getByRole('group', { name: '标题级别', exact: true });
+  const h6 = levels.getByRole('button', { name: '六级标题', exact: true });
+  await source.fill('### 检查配置\n运行场景');
+  await source.evaluate((element: HTMLTextAreaElement) => element.select());
+  const sourceBounds = await source.boundingBox();
+  const modeBounds = (await modes.boundingBox())!;
+  await expect(h2).toHaveAttribute('aria-expanded', 'false');
+  await h2.hover();
+  await expect(h2).toHaveAttribute('aria-expanded', 'true');
+  await expect(levels.getByRole('button')).toHaveCount(5);
+  await h6.hover();
+  await expect(h2).toHaveAttribute('aria-expanded', 'true');
+  const levelBounds = (await levels.boundingBox())!;
+  const triggerBounds = (await h2.boundingBox())!;
+  expect(levelBounds.x).toBeCloseTo(triggerBounds.x + triggerBounds.width, 0);
+  expect(levelBounds.x + levelBounds.width).toBeLessThan(modeBounds.x);
+  expect(await modes.boundingBox()).toEqual(modeBounds);
+  expect(await source.boundingBox()).toEqual(sourceBounds);
+  await source.hover({ position: { x: 15, y: 15 } });
+  await expect(h2).toHaveAttribute('aria-expanded', 'false');
+
+  await tools.getByRole('button', { name: '代码块', exact: true }).focus();
+  await page.keyboard.press('Tab');
+  await expect(h2).toBeFocused();
+  await expect(h2).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Tab');
+  await expect(levels.getByRole('button', { name: '一级标题', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(h2).toBeFocused();
+  await expect(h2).toHaveAttribute('aria-expanded', 'false');
+  await h2.press('Enter');
+  await expect(source).toHaveValue('## 检查配置\n## 运行场景');
+  await expect(source).toBeFocused();
+  await source.press('Control+z');
+  await expect(source).toHaveValue('### 检查配置\n运行场景');
+
+  await source.evaluate((element: HTMLTextAreaElement) => element.select());
+  await h2.hover();
+  await h6.click();
+  await expect(source).toHaveValue('###### 检查配置\n###### 运行场景');
+  await modes.getByRole('button', { name: '预览', exact: true }).click();
+  const preview = form.getByRole('region', { name: '学习内容预览' });
+  await expect(preview.getByRole('heading', { level: 6, name: '检查配置' })).toBeVisible();
+  await expect(preview.getByRole('heading', { level: 6, name: '运行场景' })).toBeVisible();
+  await expect(h2).toBeDisabled();
+});
+
+test.describe('触屏 Markdown 标题', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test('窄编辑区原位选择全部级别，宽屏触摸可以展开', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
+    await page.goto('/#today');
+    await page.getByRole('button', { name: '编辑', exact: true }).tap();
+    const form = page.getByRole('form', { name: '今日记录编辑表单' });
+    const source = form.getByRole('textbox', { name: '学习内容（Markdown）' });
+    const tools = form.getByRole('group', { name: 'Markdown 格式' });
+    const picker = tools.getByRole('button', { name: '选择标题级别', exact: true });
+    const levels = tools.getByRole('group', { name: '标题级别', exact: true });
+    await source.fill('测试标题');
+    const closed = await source.boundingBox();
+    await picker.tap();
+    await expect(levels.getByRole('button', { name: /[一二三四五六]级标题/ })).toHaveCount(6);
+    await expect(tools.getByRole('button', { name: '加粗', exact: true })).toHaveCount(0);
+    expect(await source.boundingBox()).toEqual(closed);
+    await expect(levels.getByRole('button', { name: '二级标题', exact: true })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(picker).toBeFocused();
+    await expect(levels).toHaveCount(0);
+    await picker.tap();
+    await levels.getByRole('button', { name: '四级标题', exact: true }).tap();
+    await expect(source).toHaveValue('#### 测试标题');
+    await expect(source).toBeFocused();
+    await expect(levels).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+
+    await page.setViewportSize({ width: 1320, height: 900 });
+    const h2 = tools.getByRole('button', { name: '二级标题', exact: true });
+    await h2.tap();
+    await expect(source).toHaveValue('#### 测试标题');
+    await expect(h2).toHaveAttribute('aria-expanded', 'true');
+    await levels.getByRole('button', { name: '五级标题', exact: true }).tap();
+    await expect(source).toHaveValue('##### 测试标题');
+  });
+});
+
 test('连在一起的文字入口平滑移动选中底色，键盘焦点用下划线', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto('/?workspace=knowledge-demo#path');

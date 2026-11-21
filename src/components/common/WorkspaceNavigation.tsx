@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import type { GrowthView } from '../../store/workspaceStore';
 import ResourceSearch from '../Search/ResourceSearch';
+import { useColorTheme } from './useColorTheme';
 
 const items = [
   { id: 'today', label: '今日学习', icon: 'M3 10 12 3l9 7v10h-6v-6H9v6H3Z' },
@@ -11,6 +12,9 @@ const items = [
   { id: 'network', label: '知识网络', icon: 'M8 7h8M7 9l4 7m6-7-4 7M8 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0Zm12 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0Zm-6 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z' },
   { id: 'data', label: '数据管理', icon: 'M4 6c0-4 16-4 16 0v12c0 4-16 4-16 0Zm0 0c0 4 16 4 16 0M4 12c0 4 16 4 16 0' },
 ] as const;
+
+const SUN_ICON = 'M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4m0-14.2-1.4 1.4M6.3 17.7l-1.4 1.4M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z';
+const MOON_ICON = 'M20.9 13.3A9 9 0 0 1 10.7 3.1 9 9 0 1 0 20.9 13.3Z';
 
 function NavIcon({ path }: { path: string }) {
   return <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.7"
@@ -24,6 +28,8 @@ export default function WorkspaceNavigation({ activePage, activeLabel, growthVie
 }) {
   const [drawer, setDrawer] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const { theme, toggleTheme } = useColorTheme();
+  const themeAction = theme === 'dark' ? '切换到日间主题' : '切换到夜间主题';
   const mobileTrigger = useRef<HTMLButtonElement>(null);
   const drawerClose = useRef<HTMLButtonElement>(null);
   const inGrowth = activePage === 'path' || activePage === 'code';
@@ -56,7 +62,7 @@ export default function WorkspaceNavigation({ activePage, activeLabel, growthVie
       closeDrawer();
     }}>
     <button ref={mobileTrigger} type="button" className="app-navigation-toggle" aria-label="页面菜单"
-      aria-expanded={drawer} aria-controls="app-navigation-links" onClick={() => setDrawer(!drawer)}>
+      aria-expanded={drawer} aria-controls="app-navigation-links app-navigation-theme" onClick={() => setDrawer(!drawer)}>
       <NavIcon path="M4 6h16M4 12h16M4 18h16" /><span>{activeLabel}</span>
     </button>
     <button className="app-navigation-backdrop" type="button" tabIndex={-1} aria-hidden={!drawer} aria-label="关闭页面菜单" onClick={closeDrawer} />
@@ -82,6 +88,11 @@ export default function WorkspaceNavigation({ activePage, activeLabel, growthVie
     </div>
     <div className="app-navigation-search" onClick={closeDrawer}>
       <ResourceSearch triggerContent={<><NavIcon path="M16 16l4 4M18 11a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" /><span className="app-nav-label">检索</span></>} />
+    </div>
+    <div className="app-navigation-theme" id="app-navigation-theme">
+      <button className="app-nav-item" type="button" aria-label={themeAction} title={themeAction} onClick={toggleTheme}>
+        <NavIcon path={theme === 'dark' ? SUN_ICON : MOON_ICON} /><span className="app-nav-label">{themeAction}</span>
+      </button>
     </div>
   </nav>;
 }

@@ -5,6 +5,15 @@
     <link rel="icon" type="image/svg+xml" href="/learning-assistant.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>游戏开发学习助手</title>
+    <script>
+      (() => {
+        let preference;
+        try { preference = localStorage.getItem('learning-assistant:theme'); }
+        catch { /* Use the system theme when storage is unavailable. */ }
+        const systemTheme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.dataset.theme = preference === 'light' || preference === 'dark' ? preference : systemTheme;
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
