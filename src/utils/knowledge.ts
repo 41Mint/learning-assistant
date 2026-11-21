@@ -1,5 +1,5 @@
-import type { KnowledgeEntry, KnowledgeLogLink, KnowledgeRelation, StoredKnowledgeData, TrashedKnowledgeEntry } from '../types';
-import { isRelationAnnotation } from './relationAnnotation';
+import type { KnowledgeEntry, KnowledgeLogLink, KnowledgeRelation, StoredKnowledgeData, TrashedKnowledgeEntry } from '../types/index.ts';
+import { isRelationAnnotation } from './relationAnnotation.ts';
 
 export const emptyKnowledgeTrash = (): StoredKnowledgeData['trash'] => ({ entries: [], logLinks: [], relations: [] });
 export const emptyKnowledge = (): StoredKnowledgeData => ({ version: 1, entries: [], logLinks: [], relations: [], trash: emptyKnowledgeTrash() });

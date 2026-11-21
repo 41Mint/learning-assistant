@@ -32,6 +32,10 @@
 
 今日和历史日志的「选择任务」在关联列表下原位展开。多选列表沿用关键词筛选。新建时可搜索所属主题，提交后同时保存新任务与当前勾选的关联。保存失败保留输入，取消或收起丢弃本次未保存的更改。[日志任务关联](../src/components/StudyLog/LogTaskLinks.tsx)
 
+成长记录的卡组封面、「卡组」下拉和检索共用卡组弹窗。看板上等高的「卡组」下拉和「新建卡组」排在领域筛选之后。组内卡片详情用带组名的返回链接，组内筛选和建卡收在「组内操作」。只有同时展示两种状态时才显示「实践记录」与「想尝试」分组标题。[卡组弹窗](../src/components/Growth/GrowthFolder.tsx)
+
+并排的次要操作需要横向展开时，将触发按钮放在这一组操作的末尾，展开面板与按钮等高对齐。以组内「添加练习」为例，右侧有空间时，悬停可平滑展开两个选项，移开后收起。点击、轻点和键盘激活可打开同一组选项，空间不足时向下显示。Esc 先关闭选项，焦点回到触发按钮。动效沿用主题设置。[添加练习控件](../src/components/Growth/GrowthExerciseActions.tsx)
+
 ## 下拉列表与关键词筛选
 
 - **固定选项**用原生 `select`。支持 `::picker(select)` 的浏览器用全局主题装饰列表，保留原生键盘和选择行为。其余浏览器与系统强制配色模式使用原生下拉面板。[Chrome 开发文档](https://developer.chrome.com/docs/modern-web-guidance/guides/forms/branded-select-styling)
@@ -39,6 +43,7 @@
 - **浮层样式**。面板靠近触发控件展开。关键词筛选列表与控件同宽，紧凑的固定选项菜单可以按文字宽度加宽，空间不足时调整展开方向。用视口约束菜单尺寸，给长名称留出换行空间和选中标记位置。浮层使用主题表面、圆角、限高和细滚动条。Esc 优先关闭最内层浮层。验收覆盖明暗主题、窄屏、弹窗和全屏画布。
 - **文字筛选**。实时搜索和筛选输入设 `autoComplete="off"`。应用需要展示候选时使用同一套带定位和键盘操作的列表。
 - **多选资料**用 `ReferenceChoices`。筛选只影响当前显示的选项，其他已勾选的选项继续保留。
+- **卡片领域**复用 `GrowthDomainFields`。常用领域用复选框，自定义领域用文本框。Enter 或「添加」将名称加入当前选择，直接保存也会录入已填写的领域。长名称可以换行，领域筛选和卡组封面同步使用保存后的名称。[卡片领域](../src/components/Growth/GrowthDomainFields.tsx)
 - 复用 `searchWords` 和 `matchesWords`。空格分隔的词须全部匹配，可分布在不同搜索字段。日志可按日期、标题、标签、知识点或正文筛选。测试时覆盖空输入、无匹配、键盘确认以及选择后执行操作。
 
 [单选组件](../src/components/common/SearchableSelect.tsx) · [多选组件](../src/components/common/ReferenceChoices.tsx) · [检索规则](../src/utils/resourceSearch.ts)

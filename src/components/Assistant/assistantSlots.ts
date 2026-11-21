@@ -31,7 +31,7 @@ export const AssistantSlots = createContext<{
   setLogDraft: (kind: AssistantLogKind, value?: AssistantLogDraft) => void;
   askAboutCode: (reference: AssistantCodeReference) => void;
   askAboutGrowth: (reference: AssistantGrowthReference) => void;
-  openGrowthRecommendations: (domain?: GrowthDomain) => void;
+  openGrowthRecommendations: (domain?: GrowthDomain, groupId?: string) => void;
 }>({
   today: null, history: null, close: () => {}, registerReview: () => () => {}, setReviewReference: () => {}, focusAssistantInput: () => {},
   setLogDraft: () => {}, askAboutCode: () => {},

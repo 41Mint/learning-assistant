@@ -3,6 +3,7 @@ import type { PointerEvent, ReactNode } from 'react';
 import type { GrowthDomain, SavedExercise, StudyLog } from '../../types';
 import { useGrowthStore } from '../../store/growthStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
+import { useWorkspaceStore } from '../../store/workspaceStore';
 import { useKnowledgeStore } from '../../store/knowledgeStore';
 import { isOpenSelect } from '../../utils/selectPicker';
 import { getStorageItem, setStorageItem } from '../../utils/storage';
@@ -34,7 +35,7 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
   activePage: string;
   activeLog?: { kind: AssistantLogKind; log: StudyLog; editing: boolean };
   onStart: (page: AssistantStart) => void;
-  onRecordRecommendation: (item: SavedExercise) => void;
+  onRecordRecommendation: (item: SavedExercise, groupId?: string) => void;
   editingGrowth: boolean;
   children: ReactNode;
 }) {
@@ -56,11 +57,14 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
   const [practiceQuery, setPracticeQuery] = useState('');
   const [practiceRequest, setPracticeRequest] = useState(0);
   const [recommendationDomain, setRecommendationDomain] = useState<GrowthDomain | ''>('');
+  const [recommendationGroupId, setRecommendationGroupId] = useState<string>();
   const [recommendationFocus, setRecommendationFocus] = useState('');
   const [recommendationStart, setRecommendationStart] = useState(false);
   const logs = useStudyLogStore((state) => state.logs);
   const growthLoaded = useGrowthStore((state) => state.isLoaded);
   const growthError = useGrowthStore((state) => state.error);
+  const recommendationGroup = useGrowthStore((state) => state.groups.find(({ id }) => id === recommendationGroupId));
+  const activeGroupId = useWorkspaceStore((state) => state.growthGroupId);
   const [codeExcerpt, setCodeExcerpt] = useState<AssistantCodeReference>();
   const [growthReference, setGrowthReference] = useState<AssistantGrowthReference>();
   const [pickingCode, setPickingCode] = useState(false);
@@ -101,6 +105,8 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
   };
   const windowFrame = preview && preview.kind !== 'launcher' ? preview.frame : frame ? boundFrame(frame, viewport) : defaultFrame(viewport);
   const shown = preview?.kind === 'launcher' ? preview.frame : position && boundPosition(position, 48, 48, viewport);
+  const overGroup = Boolean(recommendationGroup && activePage === 'path' && activeGroupId === recommendationGroup.id && !editingGrowth);
+  const modal = viewport.compact || overGroup;
   const setLogDraft = useCallback((kind: AssistantLogKind, value?: AssistantLogDraft) => {
     setDrafts((current) => ({ ...current, [kind]: value }));
   }, []);
@@ -115,8 +121,9 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
     close();
     setMinimized(true);
   };
-  const openGrowthRecommendations = useCallback((domain?: GrowthDomain) => {
-    if (domain) setRecommendationDomain(domain);
+  const openGrowthRecommendations = useCallback((domain?: GrowthDomain, groupId?: string) => {
+    if (domain !== undefined) setRecommendationDomain(domain);
+    setRecommendationGroupId(groupId);
     setMode('recommend');
     setMenu(undefined);
     setMinimized(false);
@@ -145,7 +152,9 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
     return () => { if (reviewPanels.current.get(id) === view) reviewPanels.current.delete(id); };
   }, []);
   const focusToolInput = useCallback(() => {
+    const previousFocus = document.activeElement;
     window.requestAnimationFrame(() => {
+      if (document.activeElement !== previousFocus && document.activeElement !== document.body) return;
       dialog.current?.querySelector<HTMLTextAreaElement>('#assistant-input')?.focus({ preventScroll: true });
     });
   }, []);
@@ -184,14 +193,14 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
   }, []);
   useLayoutEffect(() => {
     const element = dialog.current;
-    if (!element || !open || (element.open && element.matches(':modal') === viewport.compact)) return;
+    if (!element || !open || (element.open && element.matches(':modal') === modal)) return;
     const previousFocus = document.activeElement;
     if (element.open) element.close();
-    if (viewport.compact) element.showModal();
+    if (modal) element.showModal();
     else element.show();
     if (previousFocus instanceof HTMLElement && element.contains(previousFocus)) previousFocus.focus({ preventScroll: true });
     else closeButton.current?.focus({ preventScroll: true });
-  }, [open, viewport.compact]);
+  }, [open, modal]);
 
   const saveFrame = (next: Frame | null) => {
     setFrame(next);
@@ -256,7 +265,7 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
     if (action.kind === 'recommend') {
       if (action.focus) setRecommendationFocus(action.focus);
       if (action.generate) setRecommendationStart(true);
-      openGrowthRecommendations();
+      openGrowthRecommendations(undefined, overGroup ? recommendationGroupId : undefined);
     } else if (action.kind === 'review') {
       setMode('review');
       if (action.generate) setReviewStart({ focus: action.focus ?? '' });
@@ -462,8 +471,9 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
           <input className="workspace-input assistant-inline-filter" aria-label="练习偏好（可选）" placeholder="练习偏好（可选）"
             value={recommendationFocus} onChange={(event) => setRecommendationFocus(event.target.value)} maxLength={180} />
           <GrowthSuggestions domain={recommendationDomain} focus={recommendationFocus} onDomain={setRecommendationDomain}
+            groupId={recommendationGroupId} groupName={recommendationGroup?.name}
             onNavigate={minimize} recordDisabledReason={editingGrowth ? '请先保存或取消正在编辑的卡片或实践。' : growthError || (!growthLoaded ? '正在加载成长记录…' : undefined)}
-            onRecord={(item) => { minimize(); onRecordRecommendation(item); }} />
+            onRecord={(item) => { minimize(); onRecordRecommendation(item, recommendationGroupId); }} />
         </div>
         </>} />
         </div>

@@ -21,7 +21,7 @@ import { useStudyLogStore } from './store/studyLogStore';
 import { useStreakStore } from './store/streakStore';
 import { useCurrentGoalStore } from './store/currentGoalStore';
 import { useGrowthStore } from './store/growthStore';
-import { readWorkspaceHash, useWorkspaceStore } from './store/workspaceStore';
+import { growthBoardHref, readWorkspaceHash, useWorkspaceStore } from './store/workspaceStore';
 import { IS_TEST_WORKSPACE } from './utils/workspaceMode';
 import { generateId } from './utils/storage';
 import { GROWTH_PRESETS } from './data/growthPresets';
@@ -130,19 +130,22 @@ function App() {
     window.location.hash = page;
     enterPage(page);
   };
-  const recordRecommendation = ({ id, title, domains, action, sources }: SavedExercise) => {
+  const recordRecommendation = ({ id, title, domains, action, sources }: SavedExercise, targetGroupId?: string) => {
     const { outcomes, exercises, hiddenPresetIds, groups } = useGrowthStore.getState();
     const saved = outcomes.find((item) => item.id === id || normalizedName(item.title) === normalizedName(title));
     const exercise = growthExercises({ exercises, hiddenPresetIds }).find((item) => item.id === id || normalizedName(item.title) === normalizedName(title));
     const existing = saved ?? exercise;
-    const group = groups.find(({ cardIds }) => cardIds.includes(existing?.id ?? id));
+    const group = groups.find((item) => existing ? item.cardIds.includes(existing.id) : item.id === targetGroupId);
     setGrowthDraft((draft) => draft ?? {
       outcome: { id: existing?.id ?? id, title: existing?.title ?? title, domains: existing?.domains ?? domains,
         description: saved?.description ?? exercise?.action ?? action },
       preset: GROWTH_PRESETS.some((item) => item.id === existing?.id),
       suggestedSources: exercises.find((item) => item.id === exercise?.id)?.sources ?? sources,
+      groupId: group?.id,
     });
-    window.location.assign(group ? '#path?' + new URLSearchParams({ group: group.id }) : '#path');
+    const view = targetGroupId && activePage === 'path' && growthView === 'try' ? 'try' : 'recent';
+    const href = growthBoardHref(view, group?.id);
+    if (window.location.hash !== href) window.location.assign(href);
     enterPage('path');
   };
   const pageLabel = activePage === 'path' && growthView === 'topics' ? '参考路径与任务'

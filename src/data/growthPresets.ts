@@ -1,4 +1,4 @@
-import type { GrowthDomain } from '../types';
+import type { GrowthDomain } from '../types/index.ts';
 
 export const GROWTH_DOMAINS: readonly GrowthDomain[] = ['Unity', 'C#', '算法', '图形学', '其他'];
 

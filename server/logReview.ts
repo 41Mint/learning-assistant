@@ -7,6 +7,7 @@ import type { ChatGrowthCard } from '../src/types/assistantChat.ts';
 import { isProjectRelativePath } from '../src/utils/projectCode.ts';
 import { GROWTH_SUGGESTIONS_ENDPOINT, readGrowthSuggestions } from '../src/types/growthSuggestions.ts';
 import type { GrowthSuggestionRequest } from '../src/types/growthSuggestions.ts';
+import { isGrowthDomains } from '../src/utils/growthDomains.ts';
 import { PRACTICE_IDEAS_LABEL, PRACTICE_RECORDS_LABEL, PRACTICE_VERIFICATION_LABEL } from '../src/utils/growthLabels.ts';
 
 const maxBodyBytes = ASSISTANT_REQUEST_BYTES;
@@ -128,7 +129,7 @@ async function deepSeek(apiKey: string, model: string, messages: ModelMessage[],
 
 function isChatCard(card: unknown, descriptionLimit: number): card is ChatGrowthCard {
   return reviewRecord(card) && typeof card.title === 'string' && !!card.title.trim() && card.title.length <= 100
-    && Array.isArray(card.domains) && card.domains.length <= 5 && card.domains.every((domain) => typeof domain === 'string' && domain.length <= 12)
+    && isGrowthDomains(card.domains)
     && typeof card.description === 'string' && card.description.length <= descriptionLimit;
 }
 

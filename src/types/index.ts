@@ -107,7 +107,7 @@ export interface StoredKnowledgeData extends KnowledgeData {
   };
 }
 
-export type GrowthDomain = 'Unity' | 'C#' | '算法' | '图形学' | '其他';
+export type GrowthDomain = string;
 
 export interface GrowthPractice {
   id: string;

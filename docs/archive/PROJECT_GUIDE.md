@@ -1,5 +1,7 @@
 # 项目管理指南
 
+这里保留项目早期的协作流程。当前开发流程和文档维护约定见[工程协作约定](../ENGINEERING_PLAYBOOK.md)。
+
 ## 在AI Coding场景下如何跟进开发
 
 ### 📁 文档体系（已创建）
@@ -16,7 +18,7 @@ learning-assistant/
 
 ### 🔄 AI Coding开发流程
 
-> 功能开发还应遵循 [ENGINEERING_PLAYBOOK.md](./ENGINEERING_PLAYBOOK.md)：先将意图转化为可验收规格，再实施、验证并沉淀决策。此文档保留日常协作节奏；工程工作约定是质量与交付依据。
+> 项目已有[工程协作约定](../ENGINEERING_PLAYBOOK.md)，涵盖从需求到实施、验证和记录的流程。
 
 #### 1️⃣ 开始新功能前
 ```

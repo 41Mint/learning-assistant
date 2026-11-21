@@ -2,11 +2,11 @@ import { useEffect, useRef } from 'react';
 import type { DragEventHandler, MouseEventHandler } from 'react';
 import type { GrowthDomain, GrowthGroup } from '../../types';
 import { GROWTH_DRAG_TYPE, useGrowthDragStore } from '../../store/growthDragStore';
-import { growthBoardHref } from '../../store/workspaceStore';
 import { startCardDragMotion } from './cardDragMotion';
 
-export default function GrowthGroupStack({ group, count, domains, canDrag, menuOpen, onDragOver, onDrop, onOpen, onMenu }: {
+export default function GrowthGroupStack({ group, href, count, domains, canDrag, menuOpen, onDragOver, onDrop, onOpen, onMenu }: {
   group: GrowthGroup;
+  href: string;
   count: number;
   domains: GrowthDomain[];
   canDrag: boolean;
@@ -34,7 +34,7 @@ export default function GrowthGroupStack({ group, count, domains, canDrag, menuO
         useGrowthDragStore.setState({ drag: { groupId: group.id } });
         stopMotion.current = startCardDragMotion(event.currentTarget, event, event.dataTransfer);
       }}>
-      <a href={growthBoardHref('all', group.id)} className="growth-stack-open" draggable={false}
+      <a href={href} className="growth-stack-open" draggable={false}
         aria-label={`打开卡组 ${group.name}，${count} 张卡片`} aria-haspopup="dialog" onClick={onOpen}>
         <div className="growth-stack-header">
           <strong>{group.name}</strong>

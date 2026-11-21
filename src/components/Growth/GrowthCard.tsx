@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { MouseEventHandler, ReactNode } from 'react';
 import { useCurrentGoalStore } from '../../store/currentGoalStore';
 import { GROWTH_DRAG_TYPE, useGrowthDragStore } from '../../store/growthDragStore';
 import type { GrowthDrag } from '../../store/growthDragStore';
@@ -15,7 +15,7 @@ export interface GrowthCardAction {
   run?: (trigger: HTMLButtonElement) => void;
 }
 
-export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, batch, actions, children, href, highlighted, selected, onSelect, drag, onDragOver, onDrop }: {
+export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, batch, actions, children, href, onOpen, highlighted, selected, onSelect, drag, onDragOver, onDrop }: {
   id: string;
   card: ChatGrowthCard;
   recordLabel: string;
@@ -25,6 +25,7 @@ export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, bat
   actions?: GrowthCardAction[];
   children: ReactNode;
   href?: string;
+  onOpen?: MouseEventHandler<HTMLAnchorElement>;
   highlighted?: boolean;
   selected?: boolean;
   onSelect?: (extend: boolean) => void;
@@ -127,7 +128,7 @@ export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, bat
     showMenu(event.clientX || box?.left || 0, event.clientY || box?.bottom || 0, event.button !== 2);
   }}>
     <div className="growth-card-heading">
-      <h3>{href ? <a href={href} draggable={false}>{card.title}</a> : card.title}</h3>
+      <h3>{href ? <a href={href} draggable={false} onClick={onOpen}>{card.title}</a> : card.title}</h3>
       <button ref={trigger} type="button" className="growth-card-menu-button" aria-label="卡片操作" title="卡片操作" aria-expanded={menuOpen}
         onClick={(event) => {
           const box = event.currentTarget.getBoundingClientRect();

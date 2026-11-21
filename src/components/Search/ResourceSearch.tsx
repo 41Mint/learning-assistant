@@ -77,7 +77,7 @@ export function SearchResults({ query, words, scope, includeSource, editingPages
       }),
       path: [
         ...growthGroups.map(({ id, name, cardIds }) => searchable({
-          href: growthBoardHref('all', id), title: name, detail: `卡组 · ${cardIds.length} 张卡片`, fields: [name],
+          href: growthBoardHref('recent', id), title: name, detail: `卡组 · ${cardIds.length} 张卡片`, fields: [name],
         })),
         ...cards.map(({ id, title, fields }) => {
           const group = cardGroups.get(id);

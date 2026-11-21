@@ -1,5 +1,6 @@
-import { GROWTH_DOMAINS, GROWTH_PRESETS } from '../data/growthPresets';
-import type { GrowthData, GrowthDomain, GrowthGroup, GrowthOutcome, GrowthPractice, SavedExercise, StudyLog } from '../types';
+import { GROWTH_PRESETS } from '../data/growthPresets';
+import type { GrowthData, GrowthGroup, GrowthOutcome, GrowthPractice, SavedExercise, StudyLog } from '../types';
+import { isGrowthDomains } from './growthDomains';
 import { normalizedName } from './knowledge';
 import { isCalendarDate } from './storage';
 
@@ -46,7 +47,7 @@ function isPractice(value: unknown): value is GrowthPractice {
 
 function isCard(value: unknown): value is Pick<GrowthOutcome, 'id' | 'title' | 'domains'> {
   return isRecord(value) && nonempty(value.id) && nonempty(value.title)
-    && uniqueStrings(value.domains) && value.domains.every((domain) => GROWTH_DOMAINS.includes(domain as GrowthDomain));
+    && isGrowthDomains(value.domains);
 }
 
 function isOutcome(value: unknown): value is GrowthOutcome {

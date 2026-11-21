@@ -1,16 +1,17 @@
 import { useState } from 'react';
-import { GROWTH_DOMAINS } from '../../data/growthPresets';
 import { useGrowthStore } from '../../store/growthStore';
 import { useKnowledgeStore } from '../../store/knowledgeStore';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
 import type { GrowthOutcome, GrowthPractice, SavedExercise } from '../../types';
 import { logLabel } from '../../utils/growth';
+import { withGrowthDomain } from '../../utils/growthDomains';
 import { codeVersionLabel, practiceCodeIds } from '../../utils/projectCode';
 import { codeSearchFields, entrySearchFields, logSearchFields } from '../../utils/resourceSearch';
 import { generateId, getTodayDate } from '../../utils/storage';
 import FocusEditor from '../common/FocusEditor';
 import ReferenceChoices from '../common/ReferenceChoices';
+import GrowthDomainFields from './GrowthDomainFields';
 
 export interface GrowthDraft {
   outcome: Omit<GrowthOutcome, 'practices'>;
@@ -21,13 +22,10 @@ export interface GrowthDraft {
   exercise?: SavedExercise;
 }
 
-function toggleSelection<T>(values: T[], value: T) {
-  return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
-}
-
 export default function GrowthPracticeForm({ draft, onClose }: { draft: GrowthDraft; onClose: (savedId?: string) => void }) {
   const [title, setTitle] = useState(draft.outcome.title);
   const [domains, setDomains] = useState(draft.outcome.domains);
+  const [customDomain, setCustomDomain] = useState('');
   const [description, setDescription] = useState(() => draft.outcome.description
     ?? useGrowthStore.getState().exercises.find(({ id }) => id === draft.outcome.id)?.action ?? '');
   const [date, setDate] = useState(draft.practice?.date ?? getTodayDate);
@@ -55,7 +53,8 @@ export default function GrowthPracticeForm({ draft, onClose }: { draft: GrowthDr
       const id = draft.practice?.id ?? generateId();
       const codeVersionIds = codeSelection ?? draft.practice?.codeVersionIds;
       savePractice(
-        { id: draft.outcome.id, title: title.trim(), domains, description: draft.preset ? draft.outcome.description : description.trim() },
+        { id: draft.outcome.id, title: title.trim(), domains: withGrowthDomain(domains, customDomain),
+          description: draft.preset ? draft.outcome.description : description.trim() },
         { id, date, note: note.trim(), logIds, entryIds, codeVersionIds },
         draft.groupId,
         draft.exercise,
@@ -78,15 +77,7 @@ export default function GrowthPracticeForm({ draft, onClose }: { draft: GrowthDr
           <label className="growth-field">成果名称
             <input value={title} onChange={(event) => setTitle(event.target.value)} required />
           </label>
-          <fieldset className="growth-domains">
-            <legend>领域（可选）</legend>
-            {GROWTH_DOMAINS.map((domain) => (
-              <label key={domain}>
-                <input type="checkbox" checked={domains.includes(domain)} onChange={() => setDomains(toggleSelection(domains, domain))} />
-                {domain}
-              </label>
-            ))}
-          </fieldset>
+          <GrowthDomainFields domains={domains} onChange={setDomains} customName={customDomain} onCustomNameChange={setCustomDomain} />
         </>
       )}
       {!draft.preset && <label className="growth-field">卡片说明（可选）

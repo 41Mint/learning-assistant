@@ -16,7 +16,7 @@ export default function useGrowthBoxSelection(enabled: boolean, onSelect: (ids: 
       suppressClick.current = false;
       if (!enabled || event.button !== 0 || event.pointerType !== 'mouse' || !event.isPrimary ||
         !(event.target instanceof Element) ||
-        event.target.closest('.growth-card-slot, article, button, a, input, textarea, select, label, .growth-board-toolbar, .growth-selection, .growth-folder-content > header')) return;
+        event.target.closest('.growth-card-slot, article, button, a, input, textarea, select, label, .growth-board-toolbar, .growth-selection, .growth-folder-content > header, .growth-folder-tools')) return;
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
       drag.current = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false, extend: event.shiftKey };

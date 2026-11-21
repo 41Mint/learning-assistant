@@ -698,7 +698,7 @@ textarea.markdown-editor-view { font: 13px/1.65 'Fira Code', Consolas, monospace
   .knowledge-directory { max-height: 240px; }
 }
 
-.growth-workspace { display: grid; gap: 16px; }
+.growth-workspace { --growth-action-padding-block: 5px; display: grid; gap: 16px; }
 .growth-workspace > [hidden] { display: none; }
 .growth-workspace h2, .growth-workspace h3, .growth-workspace h4 { margin: 0; }
 .growth-workspace p { margin: 6px 0; }
@@ -706,7 +706,7 @@ textarea.markdown-editor-view { font: 13px/1.65 'Fira Code', Consolas, monospace
 .growth-card-meta { display: flex; align-items: center; gap: 5px 7px; margin: 6px 0; flex-wrap: wrap; color: var(--app-muted); }
 .growth-domain {
   --domain-tone: var(--app-muted);
-  padding: 2px 7px; border-radius: 5px; font-size: 12px;
+  max-width: 100%; overflow-wrap: anywhere; padding: 2px 7px; border-radius: 5px; font-size: 12px;
   background: color-mix(in srgb, var(--domain-tone) 14%, var(--app-surface)); color: var(--domain-tone);
 }
 .growth-domain[data-domain="Unity"] { --domain-tone: #116d66; }
@@ -723,8 +723,8 @@ textarea.markdown-editor-view { font: 13px/1.65 'Fira Code', Consolas, monospace
 }
 .growth-board-primary { margin-inline-start: auto; }
 .growth-history-tools { display: flex; gap: 4px; }
-.growth-board-group-button {
-  padding: 5px 9px; border: 1px solid var(--app-border); border-radius: 6px;
+.growth-board-group-button, .growth-board-toolbar .growth-group-picker {
+  padding: var(--growth-action-padding-block) 9px; border: 1px solid var(--app-border); border-radius: 6px;
   color: var(--app-text); background: var(--app-surface); font-size: 13px; cursor: pointer;
 }
 .workspace-dialog {
@@ -736,7 +736,6 @@ textarea.markdown-editor-view { font: 13px/1.65 'Fira Code', Consolas, monospace
 .workspace-dialog h2 { margin: 0; font-size: 18px; }
 .workspace-dialog select { max-width: 100%; min-width: 0; }
 .workspace-dialog .code-actions { margin: 14px 0 0; }
-.growth-board .growth-group-status { margin: 14px 0 8px; font-size: 14px; color: var(--app-muted); }
 .growth-summary[data-card-focus] { border-color: var(--app-accent); }
 .growth-summary[data-selected] { border-color: var(--app-accent); box-shadow: inset 0 0 0 1px var(--app-accent); }
 .growth-selection { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 10px 0; color: var(--app-muted); }
@@ -804,7 +803,19 @@ textarea.markdown-editor-view { font: 13px/1.65 'Fira Code', Consolas, monospace
 .growth-folder-content { padding: 18px; }
 .growth-folder-content > header { display: flex; align-items: center; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--app-border); }
 .growth-folder-content > header h2 { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 20px; }
+.growth-folder-content > header h2:focus { outline: none; box-shadow: none; }
 .growth-folder-content > h3 { margin: 12px 0 8px; color: var(--app-muted); font-size: 14px; }
+.growth-folder-tools { margin-block: 10px; font-size: 13px; }
+.growth-folder-tools > summary { width: fit-content; color: var(--app-muted); cursor: pointer; }
+.growth-folder-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding-block-start: 8px; }
+.growth-folder-controls .growth-filter { margin: 0; }
+.growth-folder-controls select { max-inline-size: min(18rem, 100%); }
+.growth-folder-add-exercise > button > span { color: var(--app-muted); margin-inline-start: 3px; }
+@media (max-width: 480px) {
+  .growth-folder-content > header { flex-wrap: wrap; }
+  .growth-folder-content > header h2 { flex-basis: 100%; }
+  .growth-folder-content > header .growth-history-tools { margin-inline-end: auto; }
+}
 .growth-card-menu button[data-danger] { color: var(--color-red-500, #e34f5c); }
 .growth-summary[draggable="true"] { cursor: grab; }
 .growth-card-slot { min-width: 0; }
@@ -846,7 +857,20 @@ textarea.markdown-editor-view { font: 13px/1.65 'Fira Code', Consolas, monospace
   color: var(--app-muted); background: transparent; cursor: pointer;
 }
 .workspace-context-menu.growth-card-menu { position: fixed; inset: auto; width: 176px; margin: 0; }
-.workspace-context-menu.growth-add-exercise { position: fixed; inset: auto; width: 160px; margin: 0; }
+.workspace-context-menu.growth-add-exercise { position: fixed; inset: auto; width: 160px; max-width: calc(100dvw - 16px); margin: 0; }
+.workspace-context-menu.growth-add-exercise[data-side="right"] {
+  width: max-content; min-width: 0; padding-block: 0; white-space: nowrap;
+  clip-path: inset(0 100% 0 0); pointer-events: none;
+  transition: clip-path var(--app-motion-duration) var(--app-motion-ease),
+    display var(--app-motion-duration) allow-discrete, overlay var(--app-motion-duration) allow-discrete;
+}
+.growth-add-exercise[data-side="right"] > button { width: auto; padding-block: var(--growth-action-padding-block); }
+.workspace-context-menu.growth-add-exercise[data-side="right"]:popover-open {
+  display: flex; clip-path: inset(-8px); pointer-events: auto;
+}
+@starting-style {
+  .workspace-context-menu.growth-add-exercise[data-side="right"]:popover-open { clip-path: inset(0 100% 0 0); }
+}
 .growth-summary .growth-card-meta { margin: 0; }
 .growth-summary .growth-card-summary {
   margin: 0; color: var(--app-muted); font-size: 14px; overflow: hidden;
@@ -917,8 +941,13 @@ textarea.markdown-editor-view { font: 13px/1.65 'Fira Code', Consolas, monospace
 .growth-field { display: grid; gap: 6px; margin: 12px 0; }
 .growth-field .searchable-select { display: grid; gap: 6px; }
 .growth-field textarea { resize: vertical; }
-.growth-domains { display: flex; gap: 8px 16px; flex-wrap: wrap; min-width: 0; margin: 6px 0; border: 1px solid var(--app-border); border-radius: 6px; }
-.growth-domains label { display: flex; align-items: baseline; gap: 6px; cursor: pointer; }
+.growth-domains { display: grid; gap: 10px; min-width: 0; margin: 6px 0; border: 1px solid var(--app-border); border-radius: 6px; }
+.growth-domain-choices { display: flex; gap: 8px 16px; flex-wrap: wrap; }
+.growth-domain-choices label { display: flex; align-items: baseline; gap: 6px; min-width: 0; max-width: 100%; cursor: pointer; }
+.growth-domain-choices label span { overflow-wrap: anywhere; }
+.growth-custom-domain { display: flex; align-items: end; gap: 6px; }
+.growth-custom-domain label { flex: 1; display: grid; gap: 4px; min-width: 0; color: var(--app-muted); font-size: 13px; }
+.growth-custom-domain :is(.workspace-input, .workspace-button) { min-height: 36px; }
 .reference-choices { margin: 10px 0; }
 .reference-choices summary { cursor: pointer; font-weight: 600; }
 .reference-choices .search-input { margin-top: 8px; }
@@ -1075,7 +1104,7 @@ textarea.markdown-editor-view { font: 13px/1.65 'Fira Code', Consolas, monospace
 .assistant-growth-suggestions { display: grid; gap: 10px; font-size: 14px; }
 .assistant-growth-suggestions :is(p, h3, .growth-field) { margin: 0; }
 .assistant-growth-suggestions .growth-recommend-form, .assistant-growth-cards { display: grid; gap: 10px; }
-.assistant-growth-suggestions .growth-field select { justify-self: start; }
+.assistant-growth-suggestions .growth-field select { justify-self: start; max-width: 100%; }
 .assistant-context { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin: 0 0 10px; font-weight: 650; }
 .assistant-review-picker, .assistant-search, .assistant-practice, .assistant-goal-form { display: grid; gap: 8px; font-size: 14px; }
 .assistant-practice > :is(p, h3), .assistant-goal-form p { margin: 0; }
