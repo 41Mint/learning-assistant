@@ -10,7 +10,7 @@ interface ReferenceChoicesProps {
   initiallyOpen?: boolean;
 }
 
-export default function ReferenceChoices({ title, options, selected, onChange, emptyText = '暂无可选记录。', initiallyOpen }: ReferenceChoicesProps) {
+export function ReferenceOptions({ title, options, selected, onChange, emptyText = '暂无可选记录。' }: Omit<ReferenceChoicesProps, 'initiallyOpen'>) {
   const [query, setQuery] = useState('');
   const words = searchWords(query);
   const optionIds = new Set(options.map((option) => option.id));
@@ -19,8 +19,7 @@ export default function ReferenceChoices({ title, options, selected, onChange, e
   const choices = words.length ? allChoices.filter(({ label, fields = [] }) => matchesWords([label, ...fields], words)) : allChoices;
 
   return (
-    <details className="reference-choices" open={initiallyOpen}>
-      <summary>{title}（{selected.length}）</summary>
+    <>
       {options.length > 0 && (
         <input className="search-input" type="search" autoComplete="off" aria-label={'筛选' + title} placeholder="按关键词筛选"
           value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => {
@@ -38,6 +37,13 @@ export default function ReferenceChoices({ title, options, selected, onChange, e
           </label>
         ))}
       </div>
-    </details>
+    </>
   );
+}
+
+export default function ReferenceChoices({ initiallyOpen, ...props }: ReferenceChoicesProps) {
+  return <details className="reference-choices" open={initiallyOpen}>
+    <summary>{props.title}（{props.selected.length}）</summary>
+    <ReferenceOptions {...props} />
+  </details>;
 }

@@ -663,7 +663,9 @@ test('日志引用固定代码版本，可预览行号、跳到整段并在新�
   await end.fill('999');
   await expect(editor.getByRole('button', { name: '插入到正文' })).toBeDisabled();
   await end.fill('3');
+  await editor.getByRole('button', { name: '预览', exact: true }).click();
   await editor.getByRole('button', { name: '插入到正文' }).click();
+  await expect(body).toBeFocused();
   await expect(body).toHaveValue('看看输入设置。 [Update()](<' + href + '?cite=1&lines=2-3>)');
   await editor.getByRole('button', { name: '保存补充' }).click();
   await page.reload();

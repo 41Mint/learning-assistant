@@ -11,6 +11,7 @@ import { codeVersionLabel, entryCodeIds } from '../../utils/projectCode';
 import { codeSearchFields, entrySearchFields, logSearchFields } from '../../utils/resourceSearch';
 import FocusEditor from '../common/FocusEditor';
 import MarkdownFields from '../common/MarkdownFields';
+import type { MarkdownEditorHandle } from '../common/MarkdownFields';
 import ReferenceChoices from '../common/ReferenceChoices';
 import SearchableSelect from '../common/SearchableSelect';
 import KnowledgeLogCitation from './KnowledgeLogCitation';
@@ -36,7 +37,7 @@ export default function KnowledgeEditor({ entry, categories, initialCategory, sa
   const [codeSelection, setCodeSelection] = useState<string[] | null>(null);
   const [error, setError] = useState('');
   const contentId = useId();
-  const editor = useRef<HTMLTextAreaElement>(null);
+  const editor = useRef<MarkdownEditorHandle>(null);
   const current = entries.find((item) => item.id === entry?.id);
   const previousLogs = new Map(logLinks.filter((link) => link.entryId === entry?.id).map((link) => [link.logId, link.note]));
   const logIds = logSelection ?? [...previousLogs.keys()];
@@ -45,16 +46,8 @@ export default function KnowledgeEditor({ entry, categories, initialCategory, sa
   const sortedLogs = [...logs].sort((a, b) => b.date.localeCompare(a.date));
 
   const insertCitation = () => {
-    const textarea = editor.current;
-    if (!textarea || !logs.some(({ id }) => id === citationLogId)) return;
-    const offset = textarea.selectionEnd;
-    const citation = knowledgeLogCitation(citationLogId);
-    setContent(content.slice(0, offset) + citation + content.slice(offset));
+    if (!logs.some(({ id }) => id === citationLogId) || !editor.current?.insertAfterSelection(knowledgeLogCitation(citationLogId))) return;
     if (!logIds.includes(citationLogId)) setLogSelection([...logIds, citationLogId]);
-    window.requestAnimationFrame(() => {
-      textarea.focus({ preventScroll: true });
-      textarea.setSelectionRange(offset + citation.length, offset + citation.length);
-    });
   };
 
   const save = () => {
@@ -91,8 +84,8 @@ export default function KnowledgeEditor({ entry, categories, initialCategory, sa
         <button type="button" className="workspace-button" disabled={!logs.some(({ id }) => id === citationLogId)}
           onClick={insertCitation}>插入引用</button>
       </div>}
-      <MarkdownFields id={contentId} label="词条正文（Markdown）" previewLabel="词条正文实时预览" value={content}
-        onChange={setContent} placeholder="我的理解、使用例子、仍有疑问…" textareaRef={editor}
+      <MarkdownFields id={contentId} label="词条正文（Markdown）" previewLabel="词条正文预览" value={content}
+        onChange={setContent} placeholder="我的理解、使用例子、仍有疑问…" editorRef={editor}
         renderLink={(href) => {
           const id = citedLogId(href);
           if (id !== undefined) return <KnowledgeLogCitation id={id} logIds={logIds} logs={logs} />;

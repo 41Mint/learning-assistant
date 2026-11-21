@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { STORAGE_KEYS, LEGACY_LOG_PREFIX, generateId, getTodayDate, isCalendarDate } from '../utils/storage';
-import { createTodayLogDraft, isEmptyLogContent, isTrashedLog, readStoredLogs } from '../utils/studyLogs';
+import { createTodayLogDraft, isEmptyLogContent, isTrashedLog, logsWithTaskLinks, readStoredLogs } from '../utils/studyLogs';
 import type { StoredStudyLog } from '../utils/studyLogs';
 import type { LearningTask, StudyLog, TrashedStudyLog } from '../types';
 
@@ -183,20 +183,9 @@ export const useStudyLogStore = create<StudyLogStore>((set, get) => ({
   },
 
   setLogTasks: (id, taskIds, previousTaskIds) => {
-    const stored = readStoredLogs();
-    const log = stored.find((item) => item.id === id && !isTrashedLog(item));
-    if (!log) throw new Error('这篇日志已不存在，请重新打开后再试。');
-    const current = log.taskIds ?? [];
-    if (current.length !== previousTaskIds.length || current.some((taskId, index) => taskId !== previousTaskIds[index])) {
-      throw new Error('关联任务已更新，请关闭后重新打开选择。');
-    }
     const tasks: LearningTask[] = JSON.parse(localStorage.getItem(STORAGE_KEYS.TASKS) ?? '[]');
-    const validIds = new Set(tasks.map((task) => task.id));
-    const next = [...new Set(taskIds)];
-    if (next.some((taskId) => !validIds.has(taskId))) throw new Error('所选任务已不存在，请重新选择。');
-    if (current.length === next.length && current.every((taskId, index) => taskId === next[index])) return;
-    const updated = { ...log, taskIds: next.length ? next : undefined, updatedAt: Date.now() };
-    set(saveStoredLogs(stored.map((item) => item.id === id ? updated : item)));
+    const logs = logsWithTaskLinks(id, taskIds, previousTaskIds, new Set(tasks.map((task) => task.id)));
+    if (logs) set(saveStoredLogs(logs));
   },
 
   updateContent: (content: string) => {

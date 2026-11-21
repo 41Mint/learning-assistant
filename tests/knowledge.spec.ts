@@ -156,6 +156,8 @@ test('词条可在正文光标处引用多条日志，解除一条关联后其�
   await source.press('ArrowDown');
   await source.press('Enter');
   await expect(source).toHaveValue('2026-10-02 · Day1 素材处理');
+  await page.getByRole('button', { name: '预览', exact: true }).click();
+  await expect(page.getByRole('region', { name: '词条正文预览' })).toContainText('先处理素材。');
   await insert.click();
   await expect(content).toBeFocused();
   await expect(content).toHaveValue(/^先处理素材。\[日志引用\].+\n\n再验证尺寸。$/);

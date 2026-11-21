@@ -248,26 +248,28 @@ test('今日和历史日志多选关联任务，改名和完成后仍能双向�
   await topic.getByPlaceholder('添加一个可执行任务').fill('补做镜头跟随');
   await topic.getByRole('button', { name: '保存任务', exact: true }).click();
   await page.getByRole('link', { name: '今日学习', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '选择关联任务' });
-  const old = dialog.getByRole('checkbox', { name: /^旧任务/ });
+  const selection = page.getByRole('region', { name: '选择关联任务' });
+  const old = selection.getByRole('checkbox', { name: /^旧任务/ });
   await todayLinks.getByRole('button', { name: '选择任务' }).click();
   await old.check();
-  await dialog.getByRole('button', { name: '取消', exact: true }).click();
+  await todayLinks.getByRole('button', { name: '收起任务' }).click();
+  await expect(selection).toBeHidden();
+  await expect(todayLinks.getByRole('button', { name: '选择任务' })).toBeFocused();
   await expect(todayLinks.getByRole('link')).toHaveCount(0);
   await todayLinks.getByRole('button', { name: '选择任务' }).click();
   await expect(old).not.toBeChecked();
   await old.check();
-  await dialog.getByRole('searchbox', { name: '筛选学习任务' }).fill('镜头');
+  await selection.getByRole('searchbox', { name: '筛选学习任务' }).fill('镜头');
   await expect(old).toHaveCount(0);
-  await dialog.getByRole('checkbox', { name: /^补做镜头跟随/ }).check();
-  await dialog.getByRole('button', { name: '保存关联' }).click();
+  await selection.getByRole('checkbox', { name: /^补做镜头跟随/ }).check();
+  await selection.getByRole('button', { name: '保存关联' }).click();
   await expect(todayLinks.getByRole('link')).toHaveCount(2);
 
   await page.goto('/#history/' + oldDate);
   const historyLinks = page.getByRole('region', { name: '历史回顾', exact: true }).getByRole('region', { name: '关联任务' });
   await historyLinks.getByRole('button', { name: '选择任务' }).click();
   await old.check();
-  await dialog.getByRole('button', { name: '保存关联' }).click();
+  await selection.getByRole('button', { name: '保存关联' }).click();
   await historyLinks.getByRole('link', { name: '旧任务' }).click();
   const task = topic.locator('[data-task-focus]');
   await task.getByRole('button', { name: '编辑', exact: true }).click();
@@ -301,6 +303,49 @@ test('今日和历史日志多选关联任务，改名和完成后仍能双向�
     await expect(restored.getByLabel('定位学习日期')).toHaveValue(oldDate);
     await expect(restored.getByRole('region', { name: '关联任务' }).getByRole('link', { name: '复习角色移动' })).toBeVisible();
   } finally { await context.close(); }
+});
+
+test('没有任务时可以从日志原位新建，写入失败保留草稿供重试', async ({ page }) => {
+  await page.goto('/#today');
+  const links = page.getByRole('region', { name: '关联任务', exact: true });
+  const selectTasks = links.getByRole('button', { name: '选择任务', exact: true });
+  const selection = links.getByRole('region', { name: '选择关联任务' });
+  await selectTasks.click();
+  await expect(selection.getByText('暂无学习任务。')).toBeVisible();
+  await selection.getByRole('button', { name: '添加任务', exact: true }).click();
+  const form = selection.getByRole('form', { name: '新建关联任务' });
+  const save = form.getByRole('button', { name: '保存任务并关联' });
+  const title = form.getByLabel('任务名称');
+  await title.fill('验证拾取物引用');
+  await form.getByLabel('任务说明').fill('比较两个场景的预制体实例。');
+  await expect(save).toBeDisabled();
+  await form.getByRole('combobox', { name: '所属主题' }).fill('Unity');
+  await form.getByRole('option', { name: 'Unity 核心工作流', exact: true }).click();
+  await page.evaluate(() => {
+    const set = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'learning-assistant:study-logs') {
+        Storage.prototype.setItem = set;
+        throw new Error('模拟日志写入失败');
+      }
+      return set.call(this, key, value);
+    };
+  });
+  await save.click();
+  await expect(selection.getByRole('alert')).toHaveText('保存任务和关联失败，请重试。');
+  await expect(title).toHaveValue('验证拾取物引用');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('learning-assistant:tasks') ?? '[]'))).toEqual([]);
+  await save.click();
+  await expect(selection).toBeHidden();
+  await expect(selectTasks).toBeFocused();
+  const taskLink = links.getByRole('link', { name: '验证拾取物引用', exact: true });
+  await taskLink.click();
+  const task = page.getByRole('article', { name: 'Unity 核心工作流' }).locator('[data-task-focus]');
+  await expect(task).toContainText('比较两个场景的预制体实例。');
+  await expect(task.getByText('学习日志（1）', { exact: true })).toBeVisible();
+  await page.goBack();
+  await page.reload();
+  await expect(taskLink).toHaveCount(1);
 });
 
 test('删除任务或主题会解除日志关联，写入失败时回退', async ({ page }) => {
@@ -339,7 +384,9 @@ test('删除任务或主题会解除日志关联，写入失败时回退', async
   await expect(topic).toHaveCount(0);
   await page.goto('/#history/' + oldDate);
   await expect(page.getByRole('heading', { name: '角色移动笔记' })).toBeVisible();
-  await expect(page.getByRole('link', { name: '去参考路径添加任务' })).toBeVisible();
+  const links = page.getByRole('region', { name: '关联任务', exact: true });
+  await links.getByRole('button', { name: '选择任务' }).click();
+  await expect(links.getByText('暂无学习任务。')).toBeVisible();
   expect(await page.evaluate((date) => JSON.parse(localStorage.getItem('learning-assistant:study-logs')!)
     .find((item: { date: string }) => item.date === date).taskIds, oldDate)).toBeUndefined();
 });

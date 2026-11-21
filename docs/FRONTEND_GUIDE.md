@@ -10,7 +10,8 @@
 
 文本框、下拉框和多行输入聚焦时用主题强调色边框和浅色光晕。标签要与控件关联。词条列表、知识网络目录及智能体建议卡片在悬停或键盘聚焦时用主题强调色标出标题。[全局样式](../src/index.css)
 
-- **筛选、分段切换、工具栏图标和描边操作链接**。悬停及 `:focus-visible` 使用内侧细描边，保留控件原有底色和文字颜色。选中状态用固定底色表示，禁用按钮沿用禁用样式。
+- **独立筛选按钮、工具栏图标和描边操作链接**。悬停及 `:focus-visible` 使用内侧细描边，保留控件原有底色和文字颜色。选中状态用固定底色表示，禁用按钮沿用禁用样式。
+- **连在一起的文字切换入口**。Markdown 源码和预览、实践记录和想尝试、回收站分类共用 `SegmentedControl`。选中底色在组内平滑移动，Tab 焦点用文字下划线提示。路由入口使用链接和 `aria-current`，同页模式用按钮和 `aria-pressed`。减少动态效果时立即更新选中位置。[分段控件](../src/components/common/SegmentedControl.tsx)
 - **原位辅助按钮**。导入图文学习记录、选择任务等 `.workspace-button` 用底色和文字颜色反馈悬停及键盘聚焦，保留静态边框。系统强制配色下使用可见的焦点轮廓。
 - **实底主次按钮**。`.note-button` 保留操作层级的实底配色，键盘聚焦时用高对比细描边。
 - **详情操作行**。日志、词条和代码版本的主按钮及描边链接共用 `--app-detail-action-height`，按行居中，窄屏允许换行。导入按钮继续靠左，文字操作按原有文字样式显示。
@@ -23,6 +24,8 @@
 
 普通折叠区可用 `details` 和 `summary`，沿用全局双向过渡。添加、编辑任务和项目代码等原位表单复用 `InlineReveal`，用 `aria-expanded` 表示状态。收起时立即让内部控件退出键盘焦点顺序，并把焦点交还触发按钮，过渡结束后卸载表单。时长和缓动使用 `--app-motion-duration` 与 `--app-motion-ease`。系统开启减少动态效果时，时长为零。[通用展开组件](../src/components/common/InlineReveal.tsx) · [全局样式](../src/index.css)
 
+今日和历史日志的「选择任务」在关联列表下原位展开。多选列表沿用关键词筛选。新建时可搜索所属主题，提交后同时保存新任务与当前勾选的关联。保存失败保留输入，取消或收起丢弃本次未保存的更改。[日志任务关联](../src/components/StudyLog/LogTaskLinks.tsx)
+
 ## 下拉列表与关键词筛选
 
 - **固定选项**用原生 `select`。支持 `::picker(select)` 的浏览器用全局主题装饰列表，保留原生键盘和选择行为。其余浏览器与系统强制配色模式使用原生下拉面板。[Chrome 开发文档](https://developer.chrome.com/docs/modern-web-guidance/guides/forms/branded-select-styling)
@@ -34,6 +37,10 @@
 
 [单选组件](../src/components/common/SearchableSelect.tsx) · [多选组件](../src/components/common/ReferenceChoices.tsx) · [检索规则](../src/utils/resourceSearch.ts)
 
-## 代码显示
+## Markdown 编辑与代码显示
+
+日志和词条共用 `MarkdownFields`。插入引用的折叠区与正文标签之间留出分组间距。仅显示图标的工具按钮提供可访问名称和悬停提示。格式按钮应用到当前选区或光标所在行，预览时为禁用状态。插入学习日志或代码引用后回到源码和插入位置。格式操作在浏览器支持时进入原生撤销栈。[Markdown 编辑组件](../src/components/common/MarkdownFields.tsx) · [浏览器编辑历史](https://developer.mozilla.org/en-US/docs/Web/API/Document/execCommand)
+
+「源码」和「预览」在同一编辑区切换，各自记住滚动位置，源码保留选区。预览图按比例限宽限高，普通图片可点击查看原图。编辑区域右下角的拖动手柄与滚动条分开，支持鼠标和触屏拖动、方向键调整以及 Enter 恢复默认高度。两种模式共用高度，宽度跟随页面布局。验收时检查长文、截图、模式切换和窄屏。[Markdown 编辑组件](../src/components/common/MarkdownFields.tsx)
 
 代码块、项目快照与正文引用预览统一使用基于 [One Monokai](https://github.com/azemoh/vscode-one-monokai) 的 Highlight.js 颜色和本地打包的 [Fira Code](https://github.com/tonsky/FiraCode) 网页字体。代码区域保持同一套配色，不改变应用明暗主题。代码引用可用鼠标或 Tab 预览，也可直接激活链接跳转。

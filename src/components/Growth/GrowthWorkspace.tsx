@@ -24,6 +24,7 @@ import GrowthCardGrid from './GrowthCardGrid';
 import useGrowthBoxSelection from './useGrowthBoxSelection';
 import WorkspaceDialog from '../common/WorkspaceDialog';
 import HistoryButtons from '../common/HistoryButtons';
+import SegmentedControl from '../common/SegmentedControl';
 import GrowthGroupStack from './GrowthGroupStack';
 import GrowthFolder from './GrowthFolder';
 import GrowthContextMenu from './GrowthContextMenu';
@@ -543,10 +544,10 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
         onDragOver={(event) => { if (!(event.target instanceof Element && event.target.closest('.growth-board-toolbar, article, a'))) acceptDrop(event, group?.id); }}
         onDrop={(event) => { if (!(event.target instanceof Element && event.target.closest('.growth-board-toolbar, article, a'))) dropOn(event, group?.id); }}>
         <div className="growth-board-toolbar">
-          <nav className="workspace-segments" aria-label="实践卡片视图">
+          <SegmentedControl as="nav" label="实践卡片视图">
             {group && <a href={growthBoardHref('all', group.id)} aria-current={activeView === 'all' ? 'page' : undefined}>全部</a>}
             {GROWTH_VIEWS.map((view) => <a key={view.id} href={growthBoardHref(view.id, group?.id)} aria-current={activeView === view.id ? 'page' : undefined}>{view.label}</a>)}
-          </nav>
+          </SegmentedControl>
           <label className="growth-filter">卡组
             <select aria-label="卡组" value={group?.id ?? ''} onChange={(event) => {
               const id = event.target.value;

@@ -9,6 +9,7 @@ import { RECYCLE_CATEGORIES, recycleBinHref, useWorkspaceStore } from '../../sto
 import { logLabel } from '../../utils/growth';
 import { entryNames } from '../../utils/knowledge';
 import { codeVersionHref, codeVersionSource } from '../../utils/projectCode';
+import SegmentedControl from '../common/SegmentedControl';
 import WorkspaceDialog from '../common/WorkspaceDialog';
 
 type TrashItem = { kind: 'log'; item: TrashedStudyLog } | { kind: 'entry'; item: TrashedKnowledgeEntry }
@@ -64,9 +65,9 @@ export default function RecycleBin() {
 
   return <section className="module-card backup-card log-trash" aria-label="回收站">
     <h2>回收站</h2>
-    <nav className="workspace-segments recycle-views" aria-label="回收站分类">
+    <SegmentedControl as="nav" className="recycle-views" label="回收站分类">
       {RECYCLE_CATEGORIES.map(({ id, label }) => <a key={id} href={recycleBinHref(id)} aria-current={id === category ? 'page' : undefined}>{label}</a>)}
-    </nav>
+    </SegmentedControl>
     {categoryError && <p role="alert">{categoryError}</p>}
     {result?.kind === category && <p role="status">{result.text}{result.href && <a href={result.href}>{result.label}</a>}。</p>}
     {loading && <p role="status">正在读取代码回收站…</p>}

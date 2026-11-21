@@ -30,6 +30,7 @@ async function importNote(page: Page) {
 
 function pasteScreenshots(editor: Locator, count = 1) {
   return editor.evaluate((element, { bytes, count }) => {
+    element.focus();
     const clipboard = new DataTransfer();
     for (let index = 0; index < count; index++) clipboard.items.add(new File([new Uint8Array(bytes)], `截图-${index + 1}.png`, { type: 'image/png' }));
     return element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: clipboard, bubbles: true, cancelable: true }));
@@ -51,7 +52,10 @@ test('今日编辑可粘贴截图和替换选区，仅保存仍引用的图片�
   await edit.click();
   const original = await editor.inputValue();
   await pasteScreenshots(editor);
-  const preview = today.getByRole('region', { name: '学习内容实时预览' });
+  const showPreview = today.getByRole('button', { name: '预览', exact: true });
+  const showSource = today.getByRole('button', { name: '源码', exact: true });
+  await showPreview.click();
+  const preview = today.getByRole('region', { name: '学习内容预览' });
   await expect(preview.getByRole('img', { name: '截图', exact: true })).toBeVisible();
   expect(await savedImageIds(page)).toEqual([]);
   await today.getByRole('button', { name: '取消编辑' }).click();
@@ -70,8 +74,10 @@ test('今日编辑可粘贴截图和替换选区，仅保存仍引用的图片�
   expect(textAllowed).toBe(true);
   expect(await pasteScreenshots(editor, 2)).toBe(false);
   await expect(editor).toHaveValue(/^粘贴前\n\n!\[截图 1\]\(learning-image:[\w-]+\)\n\n!\[截图 2\]\(learning-image:[\w-]+\)\n\n粘贴后$/);
-  await expect(preview.getByRole('img')).toHaveCount(2);
   await expect.poll(() => editor.evaluate((element: HTMLTextAreaElement) => element.value.slice(element.selectionStart))).toBe('粘贴后');
+  await showPreview.click();
+  await expect(preview.getByRole('img')).toHaveCount(2);
+  await showSource.click();
   await editor.fill((await editor.inputValue()).replace(/!\[截图 2\]\(learning-image:[\w-]+\)\n\n/, ''));
   await today.getByRole('button', { name: '保存记录' }).click();
   await expect(today.getByRole('img', { name: '截图 1', exact: true })).toBeVisible();
@@ -106,7 +112,9 @@ test('历史日志粘贴保存失败时保留正文草稿并回退新图片，�
   const editor = form.getByRole('textbox', { name: '历史学习内容', exact: true });
   await editor.press('Control+End');
   await pasteScreenshots(editor, 2);
-  await expect(form.getByRole('img', { name: /^截图/ })).toHaveCount(2);
+  await form.getByRole('button', { name: '预览', exact: true }).click();
+  await expect(form.getByRole('region', { name: '历史学习内容预览' }).getByRole('img', { name: /^截图/ })).toHaveCount(2);
+  await form.getByRole('button', { name: '源码', exact: true }).click();
   const draft = await editor.inputValue();
   const save = form.getByRole('button', { name: '保存补充' });
   await page.evaluate(() => {
@@ -163,7 +171,15 @@ test('大截图保存后稳定显示，单击切换尺寸，双击打开原图�
     clipboard.items.add(new File([blob!], '大截图.png', { type: 'image/png' }));
     element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: clipboard, bubbles: true, cancelable: true }));
   });
-  await expect(today.getByRole('region', { name: '学习内容实时预览' }).getByRole('img', { name: '截图' })).toBeVisible();
+  await today.getByRole('button', { name: '预览', exact: true }).click();
+  const previewImage = today.getByRole('region', { name: '学习内容预览' }).getByRole('img', { name: '截图' });
+  await expect(previewImage).toBeVisible();
+  await expect.poll(() => previewImage.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(3840);
+  const thumbnail = (await previewImage.boundingBox())!;
+  expect(thumbnail.height).toBeLessThanOrEqual(180);
+  expect(thumbnail.width / thumbnail.height).toBeCloseTo(3840 / 2400, 1);
+  await expect(previewImage.locator('..')).toHaveAttribute('href', /^blob:/);
+  await today.getByRole('button', { name: '源码', exact: true }).click();
   await editor.fill(await editor.inputValue() + '\n\n' + '截图后的学习记录。\n\n'.repeat(16));
   await today.getByRole('button', { name: '保存记录' }).click();
   const expand = today.getByRole('button', { name: '展开全文', exact: true });

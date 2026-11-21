@@ -5,6 +5,9 @@ test('插入代码引用收起时保留动画内容，结束后退出键盘焦�
   await page.goto('/#today');
   await page.getByRole('button', { name: '编辑', exact: true }).click();
   const summary = page.getByText('插入代码引用', { exact: true });
+  const label = page.locator('label[for="study-log-content"]');
+  const foldBounds = (await summary.boundingBox())!;
+  expect((await label.boundingBox())!.y - foldBounds.y - foldBounds.height).toBeGreaterThanOrEqual(10);
   await summary.click();
   const picker = page.getByRole('combobox', { name: '引用代码版本', exact: true });
   await expect(picker).toBeVisible();
@@ -263,27 +266,151 @@ test('原位辅助按钮聚焦时填色，详情操作按钮与关系链接等�
   }
 });
 
-test('明暗主题与桌面/窄屏下编辑框和预览框等高，桌面上下对齐', async ({ page }, testInfo) => {
+test('Markdown 源码和预览共用编辑区，切换保留各自的滚动位置', async ({ page }, testInfo) => {
   await page.goto('/');
   await page.evaluate(async () => {
     const { useStudyLogStore } = await import('/src/store/studyLogStore.ts');
     useStudyLogStore.getState().updateContent('# Day1 学习记录\n\n' + 'PPU 素材设置和学习观察。\n\n'.repeat(40));
   });
   await page.locator('.study-log-card').getByRole('button', { name: '编辑', exact: true }).click();
+  const editor = page.locator('#study-log-content');
+  const modes = page.getByRole('group', { name: 'Markdown 视图' });
+  const preview = page.getByRole('region', { name: '学习内容预览' });
   for (const theme of ['light', 'dark'] as const) {
-    await page.emulateMedia({ colorScheme: theme });
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
-      const editor = await page.locator('#study-log-content').boundingBox();
-      const preview = await page.getByRole('region', { name: '学习内容实时预览' }).boundingBox();
-      expect(Math.abs(editor!.height - preview!.height)).toBeLessThanOrEqual(1);
-      if (width > 1180) expect(Math.abs(editor!.y - preview!.y)).toBeLessThanOrEqual(1);
-      expect(await page.locator('#study-log-content').evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
-      expect(await page.getByRole('region', { name: '学习内容实时预览' }).evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+      const before = await editor.evaluate((element: HTMLTextAreaElement) => {
+        element.setSelectionRange(300, 304);
+        element.scrollTop = 150;
+        return element.scrollTop;
+      });
+      const sourceBounds = (await editor.boundingBox())!;
+      await modes.getByRole('button', { name: '预览', exact: true }).click();
+      await expect(editor).toBeHidden();
+      expect(await preview.boundingBox()).toEqual(sourceBounds);
+      expect(await preview.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      const previewScroll = await preview.evaluate((element) => {
+        element.scrollTop = 380;
+        return element.scrollTop;
+      });
+      expect(previewScroll).toBeGreaterThan(0);
+      await modes.getByRole('button', { name: '源码', exact: true }).click();
+      await expect(preview).toHaveCount(0);
+      expect(await editor.evaluate((element: HTMLTextAreaElement) => [element.selectionStart, element.selectionEnd, element.scrollTop]))
+        .toEqual([300, 304, before]);
+      await modes.getByRole('button', { name: '预览', exact: true }).click();
+      expect(await preview.evaluate((element) => element.scrollTop)).toBe(previewScroll);
+      await modes.getByRole('button', { name: '源码', exact: true }).click();
     }
   }
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.locator('.editor-grid').screenshot({ path: testInfo.outputPath('editor-alignment-dark.png') });
+  await page.locator('.markdown-editor').screenshot({ path: testInfo.outputPath('markdown-source-dark.png') });
+  await modes.getByRole('button', { name: '预览', exact: true }).click();
+  await page.locator('.markdown-editor').screenshot({ path: testInfo.outputPath('markdown-preview-dark.png') });
+});
+
+test('Markdown 编辑区支持拖动和键盘调整高度，源码和预览共用新高度', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 960 });
+  await page.goto('/#today');
+  await page.getByRole('button', { name: '编辑', exact: true }).click();
+  const form = page.getByRole('form', { name: '今日记录编辑表单' });
+  const source = form.getByRole('textbox', { name: '学习内容（Markdown）' });
+  const preview = form.getByRole('region', { name: '学习内容预览' });
+  const resize = form.getByRole('button', { name: '调整编辑区高度' });
+  const initial = (await source.boundingBox())!.height;
+  await form.getByRole('button', { name: '预览', exact: true }).click();
+  await resize.scrollIntoViewIfNeeded();
+  const handle = (await resize.boundingBox())!;
+  const x = handle.x + handle.width / 2;
+  const y = handle.y + handle.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y + 64, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(async () => (await preview.boundingBox())!.height).toBeGreaterThan(initial + 60);
+  const height = (await preview.boundingBox())!.height;
+  await form.getByRole('button', { name: '源码', exact: true }).click();
+  expect((await source.boundingBox())!.height).toBe(height);
+  await resize.press('ArrowUp');
+  expect((await source.boundingBox())!.height).toBeCloseTo(height - 24, 0);
+  await resize.press('Enter');
+  expect((await source.boundingBox())!.height).toBe(initial);
+});
+
+test('Markdown 格式工具操作选区，可撤销并在预览中核对', async ({ page }) => {
+  await page.goto('/#today');
+  await page.getByRole('button', { name: '编辑', exact: true }).click();
+  const form = page.getByRole('form', { name: '今日记录编辑表单' });
+  const body = form.getByRole('textbox', { name: '学习内容（Markdown）' });
+  const tools = form.getByRole('group', { name: 'Markdown 格式' });
+  await body.fill('比较预制体实例');
+  await body.evaluate((field: HTMLTextAreaElement) => field.setSelectionRange(2, 5));
+  await tools.getByRole('button', { name: '加粗', exact: true }).click();
+  await expect(body).toHaveValue('比较**预制体**实例');
+  await expect(body).toBeFocused();
+  expect(await body.evaluate((field: HTMLTextAreaElement) => field.value.slice(field.selectionStart, field.selectionEnd))).toBe('预制体');
+  await body.press('Control+z');
+  await expect(body).toHaveValue('比较预制体实例');
+  await body.press('Control+Shift+z');
+  await expect(body).toHaveValue('比较**预制体**实例');
+
+  await body.fill('前文\n\n检查配置\n运行场景\n\n后文');
+  await body.evaluate((field: HTMLTextAreaElement) => field.setSelectionRange(field.value.indexOf('检查'), field.value.indexOf('\n\n后文')));
+  await tools.getByRole('button', { name: '有序列表', exact: true }).click();
+  await expect(body).toHaveValue('前文\n\n1. 检查配置\n2. 运行场景\n\n后文');
+  await tools.getByRole('button', { name: '任务列表', exact: true }).click();
+  await expect(body).toHaveValue('前文\n\n- [ ] 检查配置\n- [ ] 运行场景\n\n后文');
+  await body.evaluate((field: HTMLTextAreaElement) => {
+    const start = field.value.indexOf('后文');
+    field.setSelectionRange(start, start + 2);
+  });
+  const link = tools.getByRole('button', { name: '链接', exact: true });
+  await expect(link.locator('svg')).toBeVisible();
+  await expect(link).toHaveAttribute('title', '链接');
+  await link.click();
+  await page.keyboard.insertText('https://example.test/notes');
+  await expect(body).toHaveValue(/\[后文\]\(https:\/\/example.test\/notes\)/);
+  await form.getByRole('button', { name: '预览', exact: true }).click();
+  const preview = form.getByRole('region', { name: '学习内容预览' });
+  await expect(preview.getByRole('checkbox')).toHaveCount(2);
+  await expect(preview.getByRole('link', { name: '后文' })).toHaveAttribute('href', 'https://example.test/notes');
+  await expect(tools.getByRole('button', { name: '加粗', exact: true })).toBeDisabled();
+  await form.getByRole('button', { name: '保存记录' }).click();
+  await expect(page.getByRole('region', { name: '今日学习', exact: true }).getByRole('link', { name: '后文' })).toBeVisible();
+});
+
+test('连在一起的文字入口平滑移动选中底色，键盘焦点用下划线', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/?workspace=knowledge-demo#path');
+  await page.addStyleTag({ content: '@media (prefers-reduced-motion: no-preference) { .workspace-segments { --app-motion-duration: 800ms; } }' });
+  const views = page.getByRole('navigation', { name: '实践卡片视图' });
+  const indicator = views.locator('.workspace-segment-indicator');
+  const ideas = views.getByRole('link', { name: '想尝试', exact: true });
+  await ideas.hover();
+  await expect(ideas).toHaveCSS('outline-style', 'none');
+  await views.getByRole('link', { name: '实践记录', exact: true }).focus();
+  await page.keyboard.press('Tab');
+  await expect(ideas).toBeFocused();
+  await expect(ideas).toHaveCSS('text-decoration-line', 'underline');
+  await expect(ideas).toHaveCSS('outline-style', 'none');
+  await expect(ideas).toHaveCSS('box-shadow', 'none');
+  await ideas.press('Enter');
+  await expect(ideas).toHaveAttribute('aria-current', 'page');
+  await expect.poll(() => indicator.evaluate((marker) => marker.getAnimations().some(
+    (animation) => animation instanceof CSSTransition && animation.transitionProperty === 'transform',
+  ))).toBe(true);
+  await page.goBack();
+  await expect(views.getByRole('link', { name: '实践记录', exact: true })).toHaveAttribute('aria-current', 'page');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(indicator).toHaveCSS('transition-duration', '0s, 0s, 0s');
+  await page.goto('/?workspace=knowledge-demo#data');
+  const trash = page.getByRole('navigation', { name: '回收站分类' });
+  const entries = trash.getByRole('link', { name: '词条', exact: true });
+  await entries.click();
+  await expect(entries).toHaveAttribute('aria-current', 'page');
+  await expect(trash.locator('.workspace-segment-indicator')).toBeVisible();
 });
 
 test('历史长文默认预览，可展开/收起；短文完整显示，编辑不受折叠影响', async ({ page }, testInfo) => {
