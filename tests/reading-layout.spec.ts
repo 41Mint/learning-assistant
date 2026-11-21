@@ -120,6 +120,149 @@ test('词条列表与网络目录高亮悬停标题，智能体图标显示悬�
   await expect(close).toHaveCSS('outline-style', 'none');
 });
 
+test('紧凑下拉随选项适当加宽，长名称在窄屏内换行', async ({ page }, testInfo) => {
+  await page.goto('/?workspace=knowledge-demo#path');
+  const themedPicker = await page.evaluate(() => CSS.supports('appearance', 'base-select')
+    && CSS.supports('width', 'anchor-size(width)') && CSS.supports('selector(select::picker(select))'));
+  test.skip(!themedPicker, '此浏览器使用原生选择列表。');
+  const board = page.getByRole('region', { name: '实践记录', exact: true });
+  const groups = board.getByRole('combobox', { name: '卡组', exact: true });
+  const domains = board.getByRole('combobox', { name: '按领域筛选', exact: true });
+  for (const [theme, width, height, surface] of [
+    ['dark', 1440, 900, 'rgb(30, 41, 59)'],
+    ['light', 320, 680, 'rgb(255, 255, 255)'],
+  ] as const) {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
+    await page.setViewportSize({ width, height });
+    if (width === 320) await groups.evaluate((element) => {
+      element.append(new Option('检查预制体资源引用与场景实例覆盖并交叉验证动画控制器工作流', 'long-name'));
+    });
+    for (const control of [groups, domains]) {
+      await control.click();
+      await expect.poll(() => control.evaluate((element) => element.matches(':open'))).toBe(true);
+      const picker = await control.evaluate((element: HTMLSelectElement) => {
+        const style = getComputedStyle(element, '::picker(select)');
+        const rows = Array.from(element.options, (option) => {
+          const text = document.createRange();
+          text.selectNodeContents(option);
+          const { left, right } = option.getBoundingClientRect();
+          return { left, right, lines: text.getClientRects().length };
+        });
+        return { background: style.backgroundColor, radius: style.borderRadius, scrollbar: style.scrollbarWidth,
+          menuWidth: parseFloat(style.width), controlWidth: element.getBoundingClientRect().width, rows };
+      });
+      expect(picker).toMatchObject({ background: surface, radius: '8px', scrollbar: 'thin' });
+      expect(picker.menuWidth).toBeGreaterThan(picker.controlWidth);
+      expect(picker.rows.every(({ left, right }) => left >= 0 && right <= width)).toBe(true);
+      expect(picker.rows.slice(0, 2).map(({ lines }) => lines)).toEqual([1, 1]);
+      if (control === groups) {
+        if (width === 320) expect(picker.rows.at(-1)!.lines).toBeGreaterThan(1);
+        await page.screenshot({ path: testInfo.outputPath(`growth-picker-${theme}.png`) });
+      }
+      await control.press('Escape');
+      await expect.poll(() => control.evaluate((element) => element.matches(':open'))).toBe(false);
+    }
+  }
+});
+
+test('词条分类支持浏览和关键词筛选，确认后才更改当前分类', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 680 });
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+  await page.goto('/?workspace=knowledge-demo#knowledge');
+  const catalog = page.getByRole('complementary', { name: '词条目录', exact: true });
+  const name = catalog.getByRole('searchbox', { name: '搜索名称或别名' });
+  await expect(name).toHaveAttribute('autocomplete', 'off');
+  const filter = catalog.getByRole('combobox', { name: '词条分类', exact: true });
+  const options = catalog.getByRole('listbox', { name: '词条分类', exact: true });
+  await expect(filter).toHaveValue('全部分类');
+  await filter.click();
+  await expect(options.getByRole('option', { name: '2D 渲染', exact: true })).toBeVisible();
+  await filter.fill('调试 性能');
+  await expect(options.getByRole('option')).toHaveCount(1);
+  await expect(catalog.getByRole('heading', { name: '词条列表（96）' })).toBeVisible();
+  await filter.press('ArrowDown');
+  await filter.press('Enter');
+  await expect(filter).toHaveValue('调试与性能');
+  await expect(catalog.getByRole('heading', { name: '词条列表（12）' })).toBeVisible();
+  await filter.fill('不存在的分类');
+  await expect(options.getByRole('status')).toBeVisible();
+  await filter.press('Escape');
+  await expect(filter).toHaveValue('调试与性能');
+  await filter.click();
+  await options.getByRole('option', { name: '全部分类', exact: true }).click();
+  await expect(catalog.getByRole('heading', { name: '词条列表（96）' })).toBeVisible();
+});
+
+test('检索类型按钮悬停和键盘聚焦只描边', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/#knowledge');
+  await page.getByRole('button', { name: '检索资料', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '检索资料' });
+  const search = dialog.getByRole('searchbox', { name: '检索关键词' });
+  const all = dialog.getByRole('button', { name: '全部', exact: true });
+  const logs = dialog.getByRole('button', { name: '学习日志', exact: true });
+  await expect(search).toHaveAttribute('autocomplete', 'off');
+  const appearance = await logs.evaluate((button) => {
+    const style = getComputedStyle(button);
+    return { background: style.backgroundColor, color: style.color };
+  });
+  const expectOutline = async () => {
+    await expect(logs).toHaveCSS('outline-color', 'rgb(59, 130, 246)');
+    await expect(logs).toHaveCSS('outline-style', 'solid');
+    await expect(logs).toHaveCSS('box-shadow', 'none');
+    await expect(logs).toHaveCSS('background-color', appearance.background);
+    await expect(logs).toHaveCSS('color', appearance.color);
+  };
+  await logs.hover();
+  await expectOutline();
+  await expect(logs).toHaveAttribute('aria-pressed', 'false');
+  await expect(all).toHaveAttribute('aria-pressed', 'true');
+  await page.mouse.move(0, 0);
+  await expect(logs).toHaveCSS('outline-style', 'none');
+  await search.press('Tab');
+  await expect(all).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(logs).toBeFocused();
+  await expectOutline();
+  await logs.press('Enter');
+  await expect(logs).toHaveAttribute('aria-pressed', 'true');
+  await expect(all).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('原位辅助按钮聚焦时填色，详情操作按钮与关系链接等高', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  const demo = '/?workspace=knowledge-demo#';
+  await page.goto(demo + 'today');
+  const today = page.getByRole('region', { name: '今日学习', exact: true });
+  const importLog = today.getByRole('button', { name: '导入图文学习记录', exact: true });
+  const task = today.getByRole('region', { name: '关联任务' }).getByRole('button', { name: '选择任务', exact: true });
+  for (const button of [importLog, task]) {
+    await button.hover();
+    await expect(button).toHaveCSS('background-color', 'rgb(23, 37, 84)');
+    await expect(button).toHaveCSS('outline-style', 'none');
+    await page.mouse.move(0, 0);
+    await button.focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    await expect(button).toBeFocused();
+    await expect(button).toHaveCSS('background-color', 'rgb(23, 37, 84)');
+    await expect(button).toHaveCSS('box-shadow', 'none');
+    await expect(button).toHaveCSS('outline-style', 'none');
+  }
+
+  for (const [route, count] of [['today', 2], ['history/2026-10-01', 2], ['knowledge/demo-entry-0-0', 3], ['code/demo-code-1-1', 2]] as const) {
+    await page.goto(demo + route);
+    const actions = page.locator(':is(.history-note-actions, .detail-actions):visible > :is(.note-button, .relation-entry-link)');
+    await expect(actions).toHaveCount(count);
+    const sizes = await actions.evaluateAll((elements) => elements.map((element) => {
+      const { height, top } = element.getBoundingClientRect();
+      return { height, top };
+    }));
+    expect(sizes.every(({ height, top }) => height === sizes[0].height && top === sizes[0].top)).toBe(true);
+  }
+});
+
 test('明暗主题与桌面/窄屏下编辑框和预览框等高，桌面上下对齐', async ({ page }, testInfo) => {
   await page.goto('/');
   await page.evaluate(async () => {

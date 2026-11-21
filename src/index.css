@@ -171,6 +171,8 @@ body {
   --app-danger: #b91c1c;
   --app-positive: #047857;
   --app-scrollbar-thumb: color-mix(in srgb, var(--app-muted) 72%, var(--app-border));
+  --app-picker-shadow: 0 8px 22px #0f172a50;
+  --app-detail-action-height: 38px;
   --app-motion-duration: 220ms;
   --app-motion-ease: cubic-bezier(.2, .7, .25, 1);
   color: var(--app-text);
@@ -322,10 +324,15 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
   border: 1px solid var(--app-border); border-radius: 7px; background: var(--app-bg); color: var(--app-text);
   font-size: 13px; font-weight: 550; cursor: pointer; white-space: nowrap; text-decoration: none;
 }
-.workspace-button:hover:not(:disabled), .workspace-button[data-active] { background: var(--app-active); color: var(--app-accent-text); }
+.workspace-button:is(:hover, :focus-visible):not(:disabled), .workspace-button[data-active] {
+  background: var(--app-active); color: var(--app-accent-text);
+}
+.workspace-button[data-active]:is(:hover, :focus-visible):not(:disabled) {
+  background: color-mix(in srgb, var(--app-active) 80%, var(--app-accent));
+}
 .workspace-button[data-danger] { color: var(--app-danger); }
-.workspace-button[data-danger]:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--app-danger) 8%, var(--app-surface)); color: var(--app-danger);
+.workspace-button[data-danger]:is(:hover, :focus-visible):not(:disabled) {
+  background: color-mix(in srgb, var(--app-danger) 12%, var(--app-surface)); color: var(--app-danger);
 }
 .workspace-button:disabled { opacity: 0.5; cursor: not-allowed; }
 .workspace-input {
@@ -390,8 +397,11 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .focus-editor .editor-pane-area { display: block; width: 100%; height: clamp(280px, 42vh, 420px); min-height: 0; max-height: none; margin: 0; border: 1px solid var(--app-border); border-radius: 8px; padding: 12px; overflow: auto; background: var(--app-surface); color: var(--app-text); }
 .focus-editor textarea.editor-pane-area { resize: none; font: 13px/1.65 'Fira Code', Consolas, monospace; }
 .collapsible-note { scroll-margin-top: 90px; }
-.history-note-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 4px; }
-.history-note-actions .note-button { margin-inline-end: 0; }
+.detail-actions, .history-note-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.history-note-actions { justify-content: flex-end; }
+:is(.detail-actions, .history-note-actions) > :is(.note-button, .relation-entry-link) {
+  min-height: var(--app-detail-action-height); margin: 0; padding-block: 6px;
+}
 .history-note-actions > .log-import-trigger { margin-inline: 0 auto; }
 .collapsible-note-window { position: relative; overflow: clip; margin-top: 24px; }
 .collapsible-note-window:not([data-can-collapse])[data-expanded="false"] { max-block-size: 320px; }
@@ -553,7 +563,8 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .knowledge-workspace { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 22px; align-items: start; }
 .knowledge-catalog { position: sticky; top: 88px; }
 .knowledge-workspace label, .knowledge-link-form label { display: block; font-size: 13px; color: var(--app-muted); margin: 12px 0 6px; }
-.knowledge-workspace input:not([type="checkbox"]), .knowledge-workspace select, .knowledge-link-form input, .knowledge-link-form select { display: block; width: 100%; border: 1px solid var(--app-border); border-radius: 6px; padding: 8px; background: var(--app-surface); color: var(--app-text); font-size: 14px; }
+.knowledge-workspace input:not([type="checkbox"]), .knowledge-link-form input { display: block; }
+.knowledge-workspace input:not([type="checkbox"]), .knowledge-link-form input { width: 100%; border: 1px solid var(--app-border); border-radius: 6px; padding: 8px; background: var(--app-surface); color: var(--app-text); font-size: 14px; }
 .knowledge-muted { color: var(--app-muted); font-size: 13px; line-height: 1.65; }
 .knowledge-chip { border: 1px solid var(--app-border); background: var(--app-bg); color: var(--app-text); border-radius: 6px; padding: 5px 8px; cursor: pointer; font-size: 13px; margin: 3px 4px 3px 0; }
 .knowledge-directory { display: grid; align-content: start; gap: 6px; max-height: 50dvh; overflow: auto; }
@@ -648,7 +659,6 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
   padding: 5px 9px; border: 1px solid var(--app-border); border-radius: 6px;
   color: var(--app-text); background: var(--app-surface); font-size: 13px; cursor: pointer;
 }
-.growth-board-group-button:hover { background: var(--app-active); }
 .workspace-dialog {
   width: min(430px, calc(100% - 24px)); max-height: calc(100dvh - 24px); padding: 18px;
   border: 1px solid var(--app-border); border-radius: 10px;
@@ -668,8 +678,9 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 }
 .workspace-segments { display: flex; gap: 3px; padding: 3px; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 8px; }
 .workspace-segments a { padding: 6px 10px; color: var(--app-muted); text-decoration: none; font-size: 14px; border-radius: 5px; }
-.workspace-segments a:is(:hover, [aria-current="page"]) { color: var(--app-accent); background: var(--app-active); }
+.workspace-segments a[aria-current="page"] { color: var(--app-accent); background: var(--app-active); }
 .growth-board-toolbar .growth-filter { margin: 0; font-size: 13px; color: var(--app-muted); }
+.growth-board-toolbar select { max-inline-size: min(18rem, 100%); }
 .growth-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 16.5rem), 1fr)); gap: 14px; align-items: start; }
 .growth-card-grid:has(> .growth-card-slot) { padding-bottom: 24px; }
 .growth-board { min-height: calc(100dvh - 148px); }
@@ -753,7 +764,6 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
   flex: none; min-width: 34px; min-height: 30px; padding: 0; border: 0; border-radius: 5px;
   color: var(--app-muted); background: transparent; cursor: pointer;
 }
-.growth-card-menu-button:hover { background: var(--app-active); color: var(--app-accent); }
 .workspace-context-menu.growth-card-menu { position: fixed; inset: auto; width: 176px; margin: 0; }
 .workspace-context-menu.growth-add-exercise { position: fixed; inset: auto; width: 160px; margin: 0; }
 .growth-summary .growth-card-meta { margin: 0; }
@@ -806,7 +816,7 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .topic-task-logs summary { cursor: pointer; }
 .topic-task-logs ul { list-style: none; padding: 0 0 0 12px; margin: 3px 0 0; display: grid; gap: 3px; }
 .topic-task-actions { display: flex; flex-wrap: wrap; gap: 4px; }
-.topic-task-editor { grid-column: 1 / -1; margin: 0; }
+.topic-task > .inline-reveal { grid-column: 1 / -1; margin-top: -6px; }
 @media (max-width: 630px) {
   .growth-topic-layout { grid-template-columns: minmax(0, 1fr); }
   .growth-topic-nav { display: flex; gap: 8px; overflow-x: auto; padding: 3px; }
@@ -824,6 +834,7 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 }
 .growth-card { border: 1px solid var(--app-border); border-radius: 10px; padding: 14px; overflow-wrap: anywhere; }
 .growth-field { display: grid; gap: 6px; margin: 12px 0; }
+.growth-field .searchable-select { display: grid; gap: 6px; }
 .growth-field textarea { resize: vertical; }
 .growth-domains { display: flex; gap: 8px 16px; flex-wrap: wrap; min-width: 0; margin: 6px 0; border: 1px solid var(--app-border); border-radius: 6px; }
 .growth-domains label { display: flex; align-items: baseline; gap: 6px; cursor: pointer; }
@@ -881,13 +892,13 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
   background: var(--app-surface); color: var(--app-text); border: 1px solid var(--app-border); border-radius: 6px;
 }
 .code-form textarea { resize: vertical; }
-.code-form-reveal, .log-review-reveal {
+.inline-reveal, .log-review-reveal {
   display: grid; grid-template-rows: 0fr;
   transition: grid-template-rows var(--app-motion-duration) var(--app-motion-ease);
 }
-.code-form-reveal[data-open], .log-review-reveal[data-open] { grid-template-rows: 1fr; }
-.code-form-reveal > div, .log-review-reveal > div { min-height: 0; overflow: clip; }
-@starting-style { .code-form-reveal[data-open] { grid-template-rows: 0fr; } }
+.inline-reveal[data-open], .log-review-reveal[data-open] { grid-template-rows: 1fr; }
+.inline-reveal > div, .log-review-reveal > div { min-height: 0; overflow: clip; }
+@starting-style { .inline-reveal[data-open] { grid-template-rows: 0fr; } }
 .searchable-select-field { position: relative; }
 .searchable-select-field > input.workspace-input { width: 100%; padding-inline-end: 32px; }
 .searchable-select-chevron {
@@ -896,13 +907,41 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 }
 .searchable-select-options {
   position: fixed; inset: auto; margin: 0; overflow-y: auto; padding: 4px;
-  border: 1px solid var(--app-border); border-radius: 8px; box-shadow: 0 8px 22px #0f172a50;
+  border: 1px solid var(--app-border); border-radius: 8px; box-shadow: var(--app-picker-shadow);
   background: var(--app-surface); color: var(--app-text); overscroll-behavior: contain;
 }
 .searchable-select-options > div { padding: 6px 8px; font-size: 14px; overflow-wrap: anywhere; }
 .searchable-select-options [role="option"] { cursor: pointer; border-radius: 4px; }
 .searchable-select-options [role="option"]:is(:hover, [data-highlighted]) {
   background: var(--app-active); color: var(--app-accent-text);
+}
+.searchable-select-options [aria-selected="true"] { font-weight: 650; }
+@media (forced-colors: none) {
+  @supports (appearance: base-select) and (width: anchor-size(width)) and selector(select::picker(select)) {
+    select, select::picker(select) { appearance: base-select; }
+    select { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
+    select:enabled { cursor: pointer; }
+    select::picker-icon { content: "⌄"; margin-inline-start: auto; color: var(--app-muted); }
+    select:open { border-color: var(--app-accent); box-shadow: 0 0 0 2px var(--app-focus-glow); }
+    select::picker(select) {
+      box-sizing: border-box; width: max-content;
+      min-width: min(anchor-size(width), calc(100dvw - 16px));
+      max-width: min(max(anchor-size(width), 20rem), calc(100dvw - 16px));
+      max-height: min(260px, calc(100dvh - 24px)); margin-block: 4px; padding: 4px;
+      overflow-y: auto; overscroll-behavior: contain;
+      scrollbar-width: thin; scrollbar-color: var(--app-scrollbar-thumb) transparent;
+      border: 1px solid var(--app-border); border-radius: 8px; box-shadow: var(--app-picker-shadow);
+      background: var(--app-surface); color: var(--app-text);
+    }
+    select option {
+      padding: 6px 8px; border-radius: 4px; gap: 8px;
+      font-size: 14px; white-space: normal; overflow-wrap: anywhere;
+    }
+    select option:enabled { cursor: pointer; }
+    select option:is(:checked, :enabled:hover, :focus-visible) { background: var(--app-active); color: var(--app-accent-text); }
+    select option:checked { font-weight: 650; }
+    select option::checkmark { order: 1; margin-inline-start: auto; }
+  }
 }
 .assistant-launcher {
   position: fixed; right: 20px; bottom: 20px; z-index: 1000000; display: grid; place-items: center; width: 48px; height: 48px;
@@ -1105,7 +1144,6 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
   display: inline-flex; align-items: center; min-height: 30px; padding: 3px 8px; margin: 0 6px 0 0;
   border: 1px solid var(--app-border); border-radius: 7px; color: var(--app-accent); font-size: 13px;
 }
-.relation-entry-link:hover { background: var(--app-active); }
 .relation-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .relation-heading h2 { margin-bottom: 3px; }
 .relation-muted { color: var(--app-muted); font-size: 13px; margin: 4px 0; line-height: 1.55; }
@@ -1318,9 +1356,22 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 }
 .growth-practices > li[data-practice-focus]:focus { outline: none; box-shadow: none; }
 
-:focus-visible, .assistant-close:is(:hover, [aria-expanded="true"]), .assistant-code-button:hover:not(:disabled) {
+:focus-visible {
   outline: 1px solid var(--app-accent); outline-offset: -1px;
   box-shadow: inset 0 0 0 2px var(--app-focus-glow);
+}
+
+:where(.search-filters button, .network-layers button, .workspace-segments a, .relation-entry-link,
+  .assistant-close, .assistant-code-button, .workspace-icon-button, .network-zoom button,
+  .growth-board-group-button, .growth-card-menu-button):is(:hover:not(:disabled), :focus-visible),
+.assistant-close[aria-expanded="true"] {
+  outline: 1px solid var(--app-accent); outline-offset: -1px; box-shadow: none;
+}
+.search-filters button[aria-pressed="true"]:is(:hover, :focus-visible) { outline-color: white; }
+.note-button:focus-visible { outline-color: white; box-shadow: none; }
+.dev-tools-row .note-button.secondary:focus-visible { outline-color: var(--app-accent); }
+@media (forced-colors: none) {
+  .workspace-button:focus-visible { outline: none; box-shadow: none; }
 }
 
 /* Apply the shared focus border after component border shorthands. */

@@ -1,4 +1,4 @@
-import { SKILL_CATEGORIES, SKILL_PATH } from '../data/skillPath';
+import { SKILL_PATH } from '../data/skillPath';
 import type { SkillNodeDefinition } from '../data/skillPath';
 import { STORAGE_KEYS } from './storage';
 
@@ -10,6 +10,7 @@ export interface SkillTreeStorage {
 
 export const SKILL_TOPIC_NAME_LIMIT = 100;
 export const SKILL_TOPIC_DESCRIPTION_LIMIT = 1200;
+export const SKILL_TOPIC_DOMAIN_LIMIT = 80;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -19,7 +20,7 @@ function isTopic(value: unknown): value is SkillNodeDefinition {
   return isRecord(value) && typeof value.id === 'string' && Boolean(value.id)
     && typeof value.name === 'string' && Boolean(value.name.trim()) && value.name.length <= SKILL_TOPIC_NAME_LIMIT
     && typeof value.description === 'string' && value.description.length <= SKILL_TOPIC_DESCRIPTION_LIMIT
-    && SKILL_CATEGORIES.some(({ id }) => id === value.category)
+    && typeof value.category === 'string' && Boolean(value.category.trim()) && value.category.length <= SKILL_TOPIC_DOMAIN_LIMIT
     && typeof value.estimatedTime === 'number' && Number.isFinite(value.estimatedTime) && value.estimatedTime >= 0
     && Array.isArray(value.prerequisites) && value.prerequisites.every((id) => typeof id === 'string')
     && new Set(value.prerequisites).size === value.prerequisites.length;

@@ -5,7 +5,7 @@ import { recycleBinHref, useWorkspaceStore } from '../../store/workspaceStore';
 import type { CodeProject, CodeVersion } from '../../types/projectCode';
 import { codeVersionHref, codeVersionSource } from '../../utils/projectCode';
 import WorkspaceDialog from '../common/WorkspaceDialog';
-import CodeFormReveal from './CodeFormReveal';
+import InlineReveal from '../common/InlineReveal';
 import CodeVersionDetail from './CodeVersionDetail';
 import CodeVersionForm from './CodeVersionForm';
 import ProjectDirectoryImport from './ProjectDirectoryImport';
@@ -98,9 +98,9 @@ function ProjectCard({ project, versions, trashedCount, importStatus, importing,
           </button>
         )}
       </div>
-      <CodeFormReveal open={importing} trigger={importButton}>
+      <InlineReveal open={importing} trigger={importButton}>
         <ProjectDirectoryImport initialProjectId={project.id} onCancel={onCancelImport} onSaved={onImported} />
-      </CodeFormReveal>
+      </InlineReveal>
       {confirmDelete && <WorkspaceDialog title="删除项目" action="确认删除" destructive
         onSave={() => deleteProject(project.id)} onClose={() => setConfirmDelete(false)}>
         <p>确定从项目列表删除「{project.name}」？</p>
@@ -108,12 +108,12 @@ function ProjectCard({ project, versions, trashedCount, importStatus, importing,
           : project.directory && <p>已保存的目录快照和职责说明也会被删除，此操作无法撤销。</p>}
       </WorkspaceDialog>}
       {trashedCount > 0 && <p className="code-muted">此项目有 {trashedCount} 个代码版本在<a href={recycleBinHref('code')}>回收站</a>。</p>}
-      <CodeFormReveal open={editing} trigger={editButton}>
+      <InlineReveal open={editing} trigger={editButton}>
         <ProjectDetailsForm project={project} onCancel={() => setEditing(false)} onSaved={() => {
           setEditing(false);
           setMessage('项目资料已保存。');
         }} />
-      </CodeFormReveal>
+      </InlineReveal>
       {message && <p role="status">{message}</p>}
       {importStatus && <p role="status">{importStatus}</p>}
       {project.directory && <ProjectDirectoryView projectId={project.id} directory={project.directory}
@@ -170,15 +170,15 @@ export default function ProjectCodeWorkspace({ adding, setAdding }: { adding: bo
             <button ref={importButton} type="button" className="note-button secondary" aria-expanded={directoryProjectId === ''}
               disabled={formOpen} onClick={() => setDirectoryProjectId('')}>导入项目目录</button>
           </div>
-          <CodeFormReveal open={adding && !importing} trigger={addButton}>
+          <InlineReveal open={adding && !importing} trigger={addButton}>
             <CodeVersionForm onCancel={() => setAdding(false)} onSaved={(id) => {
               setAdding(false);
               window.location.hash = codeVersionHref(id);
             }} />
-          </CodeFormReveal>
-          <CodeFormReveal open={directoryProjectId === ''} trigger={importButton}>
+          </InlineReveal>
+          <InlineReveal open={directoryProjectId === ''} trigger={importButton}>
             <ProjectDirectoryImport onCancel={cancelImport} onSaved={finishImport} />
-          </CodeFormReveal>
+          </InlineReveal>
         </>}
       </section>
       {isLoaded && !error && (

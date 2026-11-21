@@ -1,7 +1,8 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 
-export default function CodeFormReveal({ open, trigger, children }: {
+export default function InlineReveal({ id, open, trigger, children }: {
+  id?: string;
   open: boolean;
   trigger?: RefObject<HTMLButtonElement | null>;
   children: ReactNode;
@@ -24,7 +25,7 @@ export default function CodeFormReveal({ open, trigger, children }: {
   }, [open, present, trigger]);
 
   if (!present) return null;
-  return <div ref={panel} className="code-form-reveal" data-open={open || undefined} inert={!open}><div key={visit}>
+  return <div id={id} ref={panel} className="inline-reveal" data-open={open || undefined} inert={!open}><div key={visit}>
     {children}
   </div></div>;
 }

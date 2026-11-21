@@ -172,7 +172,7 @@ export default function ResourceSearch({ triggerContent = '检索' }: { triggerC
           <h2 id="resource-search-title">检索资料</h2>
           <button type="button" onClick={close} className="note-button secondary">关闭</button>
         </header>
-        <input ref={input} className="search-input" type="search" aria-label="检索关键词"
+        <input ref={input} className="search-input" type="search" autoComplete="off" aria-label="检索关键词"
           placeholder={scope === 'history' ? '搜索日志日期、标签或正文' : '例如 Tilemap、InputManager.cs'}
           value={query} onChange={(event) => setQuery(event.target.value)} />
         <div className="search-filters" role="group" aria-label="按资料类型筛选">

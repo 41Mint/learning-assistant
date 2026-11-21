@@ -316,6 +316,9 @@ test('日志整理查询别名和关联，仅保存勾选并核对过的建议',
   await assistant.getByRole('button', { name: '展开 · 新建词条 · Tilemap', exact: true }).click();
   const category = assistant.getByRole('combobox', { name: '词条分类', exact: true });
   await expect(category).toHaveValue('2D 素材');
+  await category.click();
+  await assistant.getByRole('option', { name: 'Unity', exact: true }).click();
+  await expect(category).toHaveValue('Unity');
   await category.fill('瓦片地图');
   await close.click();
   await page.getByRole('navigation', { name: '主要功能' }).getByRole('link', { name: '成长记录', exact: true }).click();

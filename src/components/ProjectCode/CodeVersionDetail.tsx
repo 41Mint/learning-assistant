@@ -16,7 +16,7 @@ import { codeCitationMarkdown, scriptMarkdown } from '../../utils/codeCitation';
 import type { CodeLineRange } from '../../utils/codeCitation';
 import { logCitesCode } from '../../utils/logCodeCitations';
 import MarkdownContent from '../common/MarkdownContent';
-import CodeFormReveal from './CodeFormReveal';
+import InlineReveal from '../common/InlineReveal';
 import WorkspaceDialog from '../common/WorkspaceDialog';
 import HighlightedText from '../common/HighlightedText';
 import { useScrollToSearchMatch } from '../common/useScrollToSearchMatch';
@@ -293,7 +293,7 @@ export default function CodeVersionDetail({ version, project }: { version: CodeV
           <a href={version.githubUrl} target="_blank" rel="noreferrer">在 GitHub 查看此版本</a> <code>{commit.slice(0, 10)}</code>
         </p>
       )}
-      <div className="code-actions">
+      <div className="code-actions detail-actions">
         <button ref={editTrigger} type="button" className="note-button secondary" aria-expanded={editing} disabled={busy || editing} onClick={() => {
           setNote(version.note);
           setGithubUrl('');
@@ -303,7 +303,7 @@ export default function CodeVersionDetail({ version, project }: { version: CodeV
         <RelationLink kind="code" id={version.id} />
         <button type="button" className="knowledge-text-button danger" disabled={busy || editing} onClick={() => setConfirmDelete(true)}>删除代码版本</button>
       </div>
-      <CodeFormReveal open={editing} trigger={editTrigger}>
+      <InlineReveal open={editing} trigger={editTrigger}>
         <form className="code-form" aria-label="编辑代码版本资料" onSubmit={(event) => { event.preventDefault(); void save(); }}>
           <fieldset disabled={busy}>
             <legend>编辑版本资料</legend>
@@ -321,7 +321,7 @@ export default function CodeVersionDetail({ version, project }: { version: CodeV
             <button type="button" className="note-button secondary" onClick={() => closeEditor()}>取消</button>
           </fieldset>
         </form>
-      </CodeFormReveal>
+      </InlineReveal>
       {message && !editing && <p role="status">{message}</p>}
       {version.content === null
         ? <p className="code-muted">此版本仅保存链接。私有文件可用有权限的 GitHub 账号打开。</p>

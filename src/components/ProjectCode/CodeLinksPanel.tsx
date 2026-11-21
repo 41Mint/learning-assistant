@@ -4,7 +4,7 @@ import type { CodeTarget, CodeVersion } from '../../types/projectCode';
 import { codeTargetKey, codeVersionHref, codeVersionLabel, codeVersionSource } from '../../utils/projectCode';
 import { codeSearchFields } from '../../utils/resourceSearch';
 import SearchableSelect from '../common/SearchableSelect';
-import CodeFormReveal from './CodeFormReveal';
+import InlineReveal from '../common/InlineReveal';
 import CodeVersionForm from './CodeVersionForm';
 
 interface CodeLinksPanelProps {
@@ -73,12 +73,12 @@ export default function CodeLinksPanel({ target, title }: CodeLinksPanelProps) {
             </div>
           </div>
         )}
-        <CodeFormReveal open={adding} trigger={addButton}>
+        <InlineReveal open={adding} trigger={addButton}>
           <CodeVersionForm target={target} onCancel={() => setAdding(false)} onSaved={() => {
             setAdding(false);
             setMessage('代码版本已保存并关联到这篇日志。');
           }} />
-        </CodeFormReveal>
+        </InlineReveal>
         {isLoaded && !error && data.versions.length === 0 && target.kind !== 'log' && (
           <p className="code-muted">可从学习日志或<a href="#code">项目代码</a>保存一个版本，再在这里关联。</p>
         )}

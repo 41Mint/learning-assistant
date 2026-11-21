@@ -38,7 +38,7 @@ export interface SkillNode {
   id: string;
   name: string;
   description: string;
-  category: 'Unity' | 'C#' | '算法' | '图形学' | '其他';
+  category: string;
   status: 'locked' | 'available' | 'in-progress' | 'completed';
   prerequisites: string[]; // 前置技能ID
   estimatedTime: number; // 预计学习时长（小时）
@@ -107,7 +107,7 @@ export interface StoredKnowledgeData extends KnowledgeData {
   };
 }
 
-export type GrowthDomain = SkillNode['category'];
+export type GrowthDomain = 'Unity' | 'C#' | '算法' | '图形学' | '其他';
 
 export interface GrowthPractice {
   id: string;

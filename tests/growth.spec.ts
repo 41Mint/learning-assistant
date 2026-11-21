@@ -199,6 +199,43 @@ test('旧节点和任务保留，参考基础不锁住后续节点，目标可�
   await expect(page.getByText('可以直接开始学习', { exact: true })).toBeVisible();
 });
 
+test('添加和编辑任务原位展开与收起，关闭后归还焦点', async ({ page }) => {
+  await seedLearning(page);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/#path/topics');
+  await page.getByRole('button', { name: 'Unity 核心工作流', exact: true }).click();
+  const topic = page.getByRole('article', { name: 'Unity 核心工作流', exact: true });
+  await page.addStyleTag({ content: '@media (prefers-reduced-motion: no-preference) { .growth-task-list { --app-motion-duration: 800ms; } }' });
+
+  const add = topic.getByRole('button', { name: '添加任务', exact: true });
+  const edit = topic.getByRole('listitem').filter({ hasText: '旧任务' }).getByRole('button', { name: '编辑', exact: true });
+  for (const [trigger, label] of [[add, '添加任务'], [edit, '编辑任务']] as const) {
+    const form = topic.getByRole('form', { name: label, exact: true });
+    const panel = topic.locator('.inline-reveal').filter({ has: page.locator(`form[aria-label="${label}"]`) });
+    const isAnimating = () => panel.evaluate((element) => element.getAnimations().some(
+      (animation) => animation instanceof CSSTransition && animation.transitionProperty === 'grid-template-rows',
+    ));
+    await trigger.click();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await expect(form.getByLabel('任务名称')).toBeFocused();
+    await expect.poll(isAnimating).toBe(true);
+    await form.getByLabel('任务名称').fill('取消的任务草稿');
+    await form.getByRole('button', { name: '取消', exact: true }).click();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await expect(panel).toHaveAttribute('inert', '');
+    await expect(trigger).toBeFocused();
+    await expect.poll(isAnimating).toBe(true);
+    await expect(panel).toHaveCount(0);
+  }
+  await expect(topic.getByText('旧任务', { exact: true })).toBeVisible();
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await add.click();
+  await expect(topic.locator('.inline-reveal')).toHaveCSS('transition-duration', '0s');
+  await topic.getByRole('form', { name: '添加任务', exact: true }).getByRole('button', { name: '取消', exact: true }).click();
+  await expect(topic.locator('.inline-reveal')).toHaveCount(0);
+  await expect(add).toBeFocused();
+});
+
 test('今日和历史日志多选关联任务，改名和完成后仍能双向打开，完整备份可恢复', async ({ page, browser }) => {
   await seedLearning(page);
   await page.goto('/#today');
@@ -328,11 +365,19 @@ test('参考主题可增改删，主题、任务、完成标记和引用可随�
   await board.getByRole('button', { name: '添加主题' }).click();
   const create = page.getByRole('dialog', { name: '添加主题' });
   await create.getByLabel('主题名称').fill('场景切换练习');
-  await create.getByLabel('领域').selectOption('Unity');
+  const domain = create.getByRole('combobox', { name: '领域', exact: true });
+  await domain.click();
+  await create.getByRole('option', { name: 'Unity', exact: true }).click();
+  await domain.fill(' ');
+  await expect(create.getByRole('button', { name: '保存主题' })).toBeDisabled();
+  await domain.fill('  场景工具链  ');
+  await expect(create.getByRole('status')).toHaveText('可直接填写新领域。');
+  await domain.press('Enter');
   await create.getByText('可参考的主题', { exact: true }).click();
   await create.getByRole('checkbox', { name: 'Unity 场景与组件' }).check();
   await create.getByRole('button', { name: '保存主题' }).click();
   const custom = board.getByRole('article', { name: '场景切换练习', exact: true });
+  await expect(nav.getByRole('heading', { name: '场景工具链', exact: true })).toBeVisible();
   await expect(custom.getByText('可参考 Unity 场景与组件')).toBeVisible();
   await custom.getByRole('button', { name: '标记完成', exact: true }).click();
   await expect(custom.getByText('已标记完成')).toBeVisible();
@@ -346,6 +391,7 @@ test('参考主题可增改删，主题、任务、完成标记和引用可随�
   const backup = JSON.parse(file.toString());
   const savedTopic = backup.data.skillTree.topics.find(({ name }: { name: string }) => name === 'Unity 场景与组件');
   expect(savedTopic.id).toBe('unity-foundations');
+  expect(backup.data.skillTree.topics.find(({ name }: { name: string }) => name === '场景切换练习').category).toBe('场景工具链');
 
   await page.getByRole('link', { name: '参考路径与任务', exact: true }).click();
   await renamed.getByRole('button', { name: '删除主题', exact: true }).click();
@@ -394,10 +440,17 @@ test('参考主题可增改删，主题、任务、完成标记和引用可随�
     await restored.getByRole('link', { name: '成长记录', exact: true }).click();
     await restored.getByRole('link', { name: '参考路径与任务', exact: true }).click();
     const restoredNav = restored.getByRole('navigation', { name: '参考主题' });
+    await expect(restoredNav.getByRole('heading', { name: '场景工具链', exact: true })).toBeVisible();
     await restoredNav.getByRole('button', { name: /场景切换练习/ }).click();
     const restoredTopic = restored.getByRole('article', { name: '场景切换练习', exact: true });
     await expect(restoredTopic.getByText('已标记完成')).toBeVisible();
     await expect(restoredTopic.getByText('可参考 Unity 场景与组件')).toBeVisible();
+    await restored.getByRole('button', { name: '添加主题' }).click();
+    const restoredCreate = restored.getByRole('dialog', { name: '添加主题' });
+    await restoredCreate.getByRole('combobox', { name: '领域', exact: true }).click();
+    await restoredCreate.getByRole('option', { name: '场景工具链', exact: true }).click();
+    await expect(restoredCreate.getByRole('combobox', { name: '领域', exact: true })).toHaveValue('场景工具链');
+    await restoredCreate.getByRole('button', { name: '取消', exact: true }).click();
     await restoredNav.getByRole('button', { name: 'Unity 场景与组件', exact: true }).click();
     const oldTask = restored.getByRole('article', { name: 'Unity 场景与组件', exact: true });
     await expect(oldTask.getByText('旧任务', { exact: true })).toBeVisible();

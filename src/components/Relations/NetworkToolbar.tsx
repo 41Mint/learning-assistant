@@ -3,6 +3,7 @@ import type { ButtonHTMLAttributes } from 'react';
 import type { NetworkLayers } from '../../utils/knowledgeNetwork';
 import { relationNodeKey, RELATION_KIND_LABELS } from '../../utils/relations';
 import type { RelationNode } from '../../utils/relations';
+import { isOpenSelect } from '../../utils/selectPicker';
 import type { HistoryDirection } from '../../utils/workspaceHistory';
 import HistoryButtons from '../common/HistoryButtons';
 
@@ -87,6 +88,10 @@ export default function NetworkToolbar({ query, results, onQuery, onLocate, laye
 
   return <div ref={tools} className="network-tools" role="group" aria-label="画布工具" onKeyDown={(event) => {
     if (!panel || event.key !== 'Escape' || event.nativeEvent.isComposing) return;
+    if (isOpenSelect(event.target)) {
+      event.stopPropagation();
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     trigger.current?.focus();
@@ -118,7 +123,7 @@ export default function NetworkToolbar({ query, results, onQuery, onLocate, laye
     )}
 
     {panel === 'search' && <div className="network-tool-panel" id="network-node-search">
-      <input ref={search} type="search" aria-label="节点关键词" placeholder="词条、日志标题或脚本名" value={query}
+      <input ref={search} type="search" autoComplete="off" aria-label="节点关键词" placeholder="词条、日志标题或脚本名" value={query}
         onChange={(event) => onQuery(event.target.value)} onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.nativeEvent.isComposing && results[0]) choose(results[0]);
         }} />

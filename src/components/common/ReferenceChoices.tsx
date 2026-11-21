@@ -22,7 +22,7 @@ export default function ReferenceChoices({ title, options, selected, onChange, e
     <details className="reference-choices" open={initiallyOpen}>
       <summary>{title}（{selected.length}）</summary>
       {options.length > 0 && (
-        <input className="search-input" type="search" aria-label={'筛选' + title} placeholder="按关键词筛选"
+        <input className="search-input" type="search" autoComplete="off" aria-label={'筛选' + title} placeholder="按关键词筛选"
           value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.nativeEvent.isComposing) event.preventDefault();
           }} />

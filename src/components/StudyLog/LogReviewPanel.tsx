@@ -6,6 +6,7 @@ import type { ReviewEdit, ReviewField, ReviewItem } from '../../types/reviewConv
 import { converseAboutLog, organizeLog } from '../../utils/logReview';
 import { AssistantSlots } from '../Assistant/assistantSlots';
 import type { ReviewConversation, ReviewReply } from '../Assistant/assistantSlots';
+import SearchableSelect from '../common/SearchableSelect';
 import ReviewSuggestionMenu from './ReviewSuggestionMenu';
 import type { ReviewMenuAnchor } from './ReviewSuggestionMenu';
 
@@ -202,7 +203,8 @@ export default function LogReviewPanel({ logId, date, content, formId, onSelecti
   const available = rows.filter(({ suggestion, saved }) => !saved && (suggestion.kind !== 'link' || entries.some(({ id }) => id === suggestion.entryId)));
   const change = (index: number, suggestion: LogReviewSuggestion) =>
     updateRows(rows.map((row, position) => position === index ? { ...row, suggestion } : row));
-  const categories = [...new Set(entries.map(({ category }) => category).filter(Boolean))];
+  const categoryOptions = [...new Set(entries.map(({ category }) => category).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'zh-CN')).map((category) => ({ id: category, label: category }));
   const menuRow = menu && rows[menu.id - 1];
   return <section className="log-review" aria-label="日志整理建议" id={formId} data-preserves-on-navigation>
     <p className="knowledge-muted">{result ? '可按编号或名称直接修改、保存，也可点卡片查看详情。继续对话时，这批草稿会发给 DeepSeek 作为上下文。'
@@ -214,7 +216,6 @@ export default function LogReviewPanel({ logId, date, content, formId, onSelecti
     {result && <div aria-label="日志整理结果">
       {stale && <p role="status">正文已变化，可在对话中要求重新整理。</p>}
       <p>{result.summary}</p>
-      <datalist id={panelId + '-categories'}>{categories.map((category) => <option key={category} value={category} />)}</datalist>
       <ul className="log-review-items">
         {rows.map((row, index) => {
           const item = row.suggestion;
@@ -259,7 +260,9 @@ export default function LogReviewPanel({ logId, date, content, formId, onSelecti
                   {item.kind === 'link' && <label>关联说明<input value={item.note} maxLength={300} onChange={(event) => change(index, { ...item, note: event.target.value })} /></label>}
                   {item.kind === 'entry' && <>
                     <label>词条名称<input value={item.title} maxLength={100} onChange={(event) => change(index, { ...item, title: event.target.value })} /></label>
-                    <label>词条分类<input value={item.category} list={panelId + '-categories'} maxLength={80} onChange={(event) => change(index, { ...item, category: event.target.value })} /></label>
+                    <SearchableSelect label="词条分类" placeholder="选择或填写分类" allowCustomValue maxLength={80}
+                      options={categoryOptions} value={item.category} disabled={Boolean(phase)}
+                      onChange={(category) => change(index, { ...item, category })} />
                     <label>词条草稿<textarea rows={4} value={item.content} maxLength={1200} onChange={(event) => change(index, { ...item, content: event.target.value })} /></label>
                   </>}
                 </fieldset>}

@@ -4,6 +4,7 @@ import type { GrowthDomain, SavedExercise, StudyLog } from '../../types';
 import { useGrowthStore } from '../../store/growthStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
 import { useKnowledgeStore } from '../../store/knowledgeStore';
+import { isOpenSelect } from '../../utils/selectPicker';
 import { getStorageItem, setStorageItem } from '../../utils/storage';
 import { STORAGE_PREFIX } from '../../utils/workspaceMode';
 import AssistantChat from './AssistantChat';
@@ -371,11 +372,14 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
         close();
       }}
       onKeyDown={(event) => {
-        if (!viewport.compact && event.key === 'Escape' && !event.nativeEvent.isComposing && !event.defaultPrevented
-          && event.target instanceof Element && event.target.closest('dialog') === event.currentTarget) {
-          event.preventDefault();
-          close();
+        if (viewport.compact || event.key !== 'Escape' || event.nativeEvent.isComposing || event.defaultPrevented
+          || !(event.target instanceof Element) || event.target.closest('dialog') !== event.currentTarget) return;
+        if (isOpenSelect(event.target)) {
+          event.stopPropagation();
+          return;
         }
+        event.preventDefault();
+        close();
       }}
       onClick={(event) => {
         if (viewport.compact && event.target === event.currentTarget) close();
@@ -433,7 +437,7 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
           }}>整理当前草稿</button>}
           {showPicker && <>
             <p className="knowledge-muted">告诉我日志日期，或从下面选一篇。</p>
-            <input aria-label="按日期找日志" className="workspace-input assistant-inline-filter" placeholder="按日期筛选日志"
+            <input aria-label="按日期找日志" className="workspace-input assistant-inline-filter" autoComplete="off" placeholder="按日期筛选日志"
               value={dateQuery} maxLength={40} onChange={(event) => setDateQuery(event.target.value)} />
             <AssistantReviewPicker query={dateQuery} onSelect={(log) => selectReviewLog(log.id)} />
           </>}
@@ -445,12 +449,12 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
           </div>)}
         </div>
         {tab === 'search' && <div className="assistant-tool-panel">
-          <input className="workspace-input assistant-inline-filter" aria-label="检索关键词" placeholder="也可以直接筛选结果"
+          <input className="workspace-input assistant-inline-filter" autoComplete="off" aria-label="检索关键词" placeholder="也可以直接筛选结果"
             value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
           <AssistantSearch query={searchQuery} scope={searchScope} onScope={setSearchScope} onNavigate={minimize} />
         </div>}
         <div className="assistant-tool-panel" hidden={tab !== 'practice'}>
-          <input className="workspace-input assistant-inline-filter" aria-label="查找实践" placeholder="也可以直接筛选实践"
+          <input className="workspace-input assistant-inline-filter" autoComplete="off" aria-label="查找实践" placeholder="也可以直接筛选实践"
             value={practiceQuery} onChange={(event) => setPracticeQuery(event.target.value)} />
           <AssistantPractice key={practiceRequest} query={practiceQuery} onNavigate={minimize} active={open && tab === 'practice'} />
         </div>

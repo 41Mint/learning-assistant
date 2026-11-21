@@ -182,6 +182,14 @@ test('解释选中的代码只在发送时附带片段和行号，移除后恢�
   await expect(assistant.getByText('解释 3', { exact: true })).toBeVisible();
   expect(calls[2]).toEqual({ question: 'C# 中 int 是什么？', history: [] });
   await assistant.getByRole('button', { name: '引用代码', exact: true }).click();
+  const versions = assistant.getByRole('combobox', { name: '脚本版本' });
+  if (await versions.evaluate((element) => getComputedStyle(element).appearance === 'base-select')) {
+    await versions.click();
+    await expect.poll(() => versions.evaluate((element) => element.matches(':open'))).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(assistant).toBeVisible();
+    await expect.poll(() => versions.evaluate((element) => element.matches(':open'))).toBe(false);
+  }
   await assistant.getByLabel('起始行').fill('2');
   await assistant.getByLabel('结束行').fill('3');
   await expect(assistant.getByLabel('片段预览')).toContainText('private int hits');
@@ -373,7 +381,7 @@ test('项目目录预览、批量保存、职责说明、日志回链与备份�
   const panel = page.getByRole('region', { name: '项目代码', exact: true });
   await panel.getByText('项目代码（0）', { exact: true }).click();
   await panel.getByRole('button', { name: '添加代码版本', exact: true }).click();
-  const reveal = panel.locator('.code-form-reveal');
+  const reveal = panel.locator('.inline-reveal');
   const collapse = await reveal.evaluate(async (element) => {
     await Promise.allSettled(element.getAnimations().map(({ finished }) => finished));
     const before = element.getBoundingClientRect().height;
@@ -529,7 +537,7 @@ test('编辑项目资料原位展开，取消与保存都平滑收起并归还�
   const project = page.getByRole('article', { name: 'Unity 学习演示', exact: true });
   const edit = project.getByRole('button', { name: '编辑项目资料', exact: true });
   const form = project.getByRole('form', { name: '编辑项目资料' });
-  const panel = project.locator('.code-form-reveal').filter({ has: page.locator('form[aria-label="编辑项目资料"]') });
+  const panel = project.locator('.inline-reveal').filter({ has: page.locator('form[aria-label="编辑项目资料"]') });
   await page.addStyleTag({ content: '@media (prefers-reduced-motion: no-preference) { .code-project { --app-motion-duration: 800ms; } }' });
   const isAnimating = () => panel.evaluate((element) => element.getAnimations().some(
     (animation) => animation instanceof CSSTransition && animation.transitionProperty === 'grid-template-rows',

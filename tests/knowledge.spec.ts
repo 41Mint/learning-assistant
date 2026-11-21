@@ -41,7 +41,7 @@ test('名称即可创建；别名检索、分类、Markdown 编辑及草稿在�
     await expect(input).toHaveCSS('border-top-color', accent);
   };
   await expectAccentOnFocus(page.getByLabel('搜索名称或别名', { exact: true }));
-  await expectAccentOnFocus(page.getByLabel('词条分类', { exact: true }));
+  await expectAccentOnFocus(page.getByRole('combobox', { name: '词条分类', exact: true }));
   await createEntry(page, 'PPU');
   await page.getByRole('button', { name: '编辑词条', exact: true }).click();
   const category = page.getByRole('combobox', { name: '分类（可选）', exact: true });
@@ -63,7 +63,10 @@ test('名称即可创建；别名检索、分类、Markdown 编辑及草稿在�
   await expect(page.locator('.knowledge-entry-list li')).toHaveCount(0);
   await page.getByLabel('搜索名称或别名').fill('');
   await createEntry(page, 'Sprite 切割');
-  await page.getByRole('combobox', { name: '词条分类', exact: true }).selectOption({ label: '2D 素材' });
+  const categoryFilter = page.getByRole('combobox', { name: '词条分类', exact: true });
+  await categoryFilter.fill('2D 素材');
+  await categoryFilter.press('ArrowDown');
+  await categoryFilter.press('Enter');
   await expect(page.locator('.knowledge-entry-list li')).toHaveCount(1);
   await page.locator('.knowledge-entry-list button').click();
   await page.reload();

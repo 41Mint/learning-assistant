@@ -68,7 +68,7 @@ export const useSkillTreeStore = create<SkillTreeStore>((set, get) => {
       const tree = currentTree();
       const previous = tree.topics.find((topic) => topic.id === id);
       if (id && !previous) throw new Error('找不到这个主题。');
-      const topic = { ...fields, name: fields.name.trim(), description: fields.description.trim(),
+      const topic = { ...fields, name: fields.name.trim(), description: fields.description.trim(), category: fields.category.trim(),
         id: id ?? generateId(), estimatedTime: previous?.estimatedTime ?? 0 };
       const topics = previous ? tree.topics.map((item) => item.id === id ? topic : item) : [...tree.topics, topic];
       const goal = readCurrentGoal();

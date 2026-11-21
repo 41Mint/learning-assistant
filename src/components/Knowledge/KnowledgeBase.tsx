@@ -9,6 +9,7 @@ import { entryNames, normalizedName, otherEntryId } from '../../utils/knowledge'
 import { alignTrailingLogCitation, citedLogId } from '../../utils/knowledgeLogCitation';
 import { codeVersionHref, codeVersionLabel, entryCodeIds } from '../../utils/projectCode';
 import MarkdownContent from '../common/MarkdownContent';
+import SearchableSelect from '../common/SearchableSelect';
 import WorkspaceDialog from '../common/WorkspaceDialog';
 import HighlightedText from '../common/HighlightedText';
 import { useScrollToSearchMatch } from '../common/useScrollToSearchMatch';
@@ -37,7 +38,8 @@ export default function KnowledgeBase() {
   const search = searchLocation?.page === 'knowledge' && searchLocation.id === entryId ? searchLocation : null;
   useScrollToSearchMatch(detail, search, selected?.content);
   const categories = [...new Set(store.entries.map((entry) => entry.category))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
-  const filtered = store.entries.filter((entry) => (category === null || entry.category === category)
+  const activeCategory = category !== null && categories.includes(category) ? category : null;
+  const filtered = store.entries.filter((entry) => (activeCategory === null || entry.category === activeCategory)
     && entryNames(entry).some((name) => name.includes(normalizedName(query))));
 
   const select = (entry: KnowledgeEntry) => {
@@ -78,13 +80,12 @@ export default function KnowledgeBase() {
         <p className="knowledge-muted">把反复遇到的知识逐步整理成自己的词条。</p>
         <button type="button" className="note-button" onClick={(event) => edit(event.currentTarget)} disabled={Boolean(store.error)}>新建词条</button>
         <label htmlFor="knowledge-search">搜索名称或别名</label>
-        <input id="knowledge-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="PPU / Pixels Per Unit" />
-        <label htmlFor="knowledge-category">词条分类</label>
-        <select id="knowledge-category" value={category === null ? '' : 'category:' + category}
-          onChange={(event) => setCategory(event.target.value ? event.target.value.slice('category:'.length) : null)}>
-          <option value="">全部分类</option>
-          {categories.map((item) => <option key={item} value={'category:' + item}>{item || '未分类'}</option>)}
-        </select>
+        <input id="knowledge-search" type="search" autoComplete="off" value={query}
+          onChange={(event) => setQuery(event.target.value)} placeholder="PPU / Pixels Per Unit" />
+        <SearchableSelect label="词条分类" placeholder="搜索或选择分类"
+          value={activeCategory === null ? '' : 'category:' + activeCategory}
+          onChange={(id) => setCategory(id ? id.slice('category:'.length) : null)}
+          options={[{ id: '', label: '全部分类' }, ...categories.map((item) => ({ id: 'category:' + item, label: item || '未分类' }))]} />
         <h3>词条列表（{filtered.length}）</h3>
         <KnowledgeDirectory items={filtered} categoryOf={(entry) => entry.category} selectedCategory={selected?.category}
           expandAll={Boolean(normalizedName(query))} renderEntry={(entry) => (
@@ -103,7 +104,7 @@ export default function KnowledgeBase() {
                 <span className="knowledge-muted"><HighlightedText text={selected.category || '未分类'} words={search?.words} /></span>
                 <h2 ref={detailHeading} tabIndex={-1}><HighlightedText text={selected.title} words={search?.words} /></h2>
               </div>
-              <div>
+              <div className="detail-actions">
                 <button type="button" className="note-button" onClick={(event) => edit(event.currentTarget, selected)}>编辑词条</button>
                 <RelationLink kind="entry" id={selected.id} />
                 <a className="relation-entry-link" href={knowledgeNetworkHref(selected.id)}>在知识网络中查看</a>

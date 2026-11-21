@@ -6,8 +6,9 @@ import { useCurrentGoalStore } from '../../store/currentGoalStore';
 import { useTaskStore } from '../../store/taskStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { STORAGE_KEYS } from '../../utils/storage';
-import { SKILL_TOPIC_DESCRIPTION_LIMIT, SKILL_TOPIC_NAME_LIMIT } from '../../utils/skillPathStorage';
+import { SKILL_TOPIC_DESCRIPTION_LIMIT, SKILL_TOPIC_DOMAIN_LIMIT, SKILL_TOPIC_NAME_LIMIT } from '../../utils/skillPathStorage';
 import { AssistantSlots } from '../Assistant/assistantSlots';
+import SearchableSelect from '../common/SearchableSelect';
 import WorkspaceDialog from '../common/WorkspaceDialog';
 import SkillTasks from './SkillTasks';
 
@@ -38,6 +39,7 @@ export default function SkillTree() {
 
   const linkedTask = tasks.find(({ id }) => id === topicTaskId);
   const selected = topics.find(({ id }) => id === (linkedTask?.parentSkillId ?? selection)) ?? topics[0];
+  const domains = [...new Set([...SKILL_CATEGORIES.map(({ id }) => id), ...topics.map(({ category }) => category)])];
   const topicToDelete = topics.find(({ id }) => id === deleting);
   const taskCount = topicToDelete ? tasks.filter(({ parentSkillId }) => parentSkillId === topicToDelete.id).length : 0;
   const updateEditor = (values: Partial<TopicFields>) => {
@@ -62,10 +64,10 @@ export default function SkillTree() {
       {actionError && <p role="alert">{actionError}</p>}
       {selected ? <div className="growth-topic-layout">
         <nav className="growth-topic-nav" aria-label="参考主题">
-          {SKILL_CATEGORIES.map((category) => {
-            const items = topics.filter((topic) => topic.category === category.id);
-            return items.length > 0 && <div key={category.id}>
-              <h3>{category.title}</h3>
+          {domains.map((domain) => {
+            const items = topics.filter((topic) => topic.category === domain);
+            return items.length > 0 && <div key={domain}>
+              <h3>{SKILL_CATEGORIES.find(({ id }) => id === domain)?.title ?? domain}</h3>
               {items.map((topic) => <button key={topic.id} type="button"
                 aria-pressed={selected.id === topic.id} onClick={() => select(topic.id)}>{topic.name}
                 {completedIds.includes(topic.id) && <span aria-label="已完成">✓</span>}</button>)}
@@ -116,7 +118,7 @@ export default function SkillTree() {
         </div>
       </div> : <p>暂无参考主题。</p>}
       {editor && <WorkspaceDialog title={editor.id ? '编辑主题' : '添加主题'} action="保存主题"
-        valid={Boolean(editor.fields.name.trim())} onClose={() => setEditor(undefined)}
+        valid={Boolean(editor.fields.name.trim() && editor.fields.category.trim())} onClose={() => setEditor(undefined)}
         onSave={() => {
           const id = saveTopic(editor.fields, editor.id);
           select(id);
@@ -124,10 +126,11 @@ export default function SkillTree() {
         }}>
         <label className="growth-field">主题名称<input autoFocus maxLength={SKILL_TOPIC_NAME_LIMIT}
           value={editor.fields.name} onChange={(event) => updateEditor({ name: event.target.value })} /></label>
-        <label className="growth-field">领域<select value={editor.fields.category} onChange={(event) => {
-          const category = SKILL_CATEGORIES.find(({ id }) => id === event.target.value);
-          if (category) updateEditor({ category: category.id });
-        }}>{SKILL_CATEGORIES.map(({ id }) => <option key={id} value={id}>{id}</option>)}</select></label>
+        <div className="growth-field">
+          <SearchableSelect label="领域" placeholder="选择或填写领域" allowCustomValue customValueHint="可直接填写新领域。"
+            maxLength={SKILL_TOPIC_DOMAIN_LIMIT} value={editor.fields.category} onChange={(category) => updateEditor({ category })}
+            options={domains.map((domain) => ({ id: domain, label: domain }))} />
+        </div>
         <label className="growth-field">主题说明<textarea rows={3} maxLength={SKILL_TOPIC_DESCRIPTION_LIMIT}
           value={editor.fields.description} onChange={(event) => updateEditor({ description: event.target.value })} /></label>
         {topics.some(({ id }) => id !== editor.id) && <details className="growth-topic-references">

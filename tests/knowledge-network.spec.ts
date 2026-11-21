@@ -440,7 +440,7 @@ test('全屏退出和 Shift 点画布使用细边框，键盘导航仍能辨认�
     await expect(control).toBeFocused();
     await expect(control).toHaveCSS('outline-width', '1px');
     await expect(control).toHaveCSS('outline-offset', '-1px');
-    await expect(control).toHaveCSS('box-shadow', /0px 0px 0px 2px inset/);
+    await expect(control).toHaveCSS('box-shadow', control === fullscreen ? 'none' : /0px 0px 0px 2px inset/);
   };
   await fullscreen.focus();
   await page.keyboard.press('Shift+Tab');
@@ -477,6 +477,33 @@ test('全屏退出和 Shift 点画布使用细边框，键盘导航仍能辨认�
   await page.mouse.up();
   await exitFullscreen();
   await expectFocusStyle(graph);
+});
+
+test('全屏画布内 Esc 依次关闭显示范围下拉和筛选面板', async ({ page }) => {
+  await seedNetwork(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/#network');
+  const supportsKeyboardLock = await watchKeyboardLock(page);
+  const enterFullscreen = page.getByRole('button', { name: '全屏画布', exact: true });
+  const exitFullscreen = page.getByRole('button', { name: '退出全屏', exact: true });
+  const graph = page.getByRole('group', { name: '知识网络图', exact: true });
+  await graph.getByRole('button', { name: '像素单位', exact: true }).click();
+  await enterFullscreen.click();
+  await expect(exitFullscreen).toBeVisible();
+  if (supportsKeyboardLock) await expect(page.locator('html')).toHaveAttribute('data-test-locked-keys', 'Escape');
+
+  await filterButton(page).click();
+  const scope = page.getByRole('combobox', { name: '显示范围', exact: true });
+  test.skip(await scope.evaluate((element) => getComputedStyle(element).appearance !== 'base-select'), '此浏览器使用原生选择列表。');
+  await scope.click();
+  await expect.poll(() => scope.evaluate((element) => element.matches(':open'))).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(scope).toBeVisible();
+  await expect.poll(() => scope.evaluate((element) => element.matches(':open'))).toBe(false);
+  await expect(exitFullscreen).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(scope).toBeHidden();
+  await expect(exitFullscreen).toBeVisible();
 });
 
 test('全屏保留画布操作，拖动节点可复位，空白处可新建同分类词条', async ({ page }, testInfo) => {

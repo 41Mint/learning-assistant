@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { LearningTask } from '../../types';
 import { useCurrentGoalStore } from '../../store/currentGoalStore';
 import { useTaskStore } from '../../store/taskStore';
 import { useStudyLogStore } from '../../store/studyLogStore';
 import { workspaceResourceTarget } from '../../store/workspaceStore';
 import { logLabel } from '../../utils/growth';
+import InlineReveal from '../common/InlineReveal';
 import TaskFields from './TaskFields';
 import WorkspaceDialog from '../common/WorkspaceDialog';
 
@@ -18,13 +19,14 @@ export default function SkillTasks({ skillId, focusedTaskId }: SkillTasksProps) 
   const { goal, setCurrentGoal, clearCurrentGoal } = useCurrentGoalStore();
   const logs = useStudyLogStore((state) => state.logs);
   const focusedTask = useRef<HTMLLIElement>(null);
+  const addTrigger = useRef<HTMLButtonElement>(null);
+  const editTrigger = useRef<HTMLButtonElement>(null);
+  const addFormId = useId();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState('');
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [editingTitle, setEditingTitle] = useState('');
-  const [editingDescription, setEditingDescription] = useState('');
   const [deletingId, setDeletingId] = useState<string>();
 
   const skillTasks = tasks.filter((task) => task.parentSkillId === skillId);
@@ -63,67 +65,46 @@ export default function SkillTasks({ skillId, focusedTaskId }: SkillTasksProps) 
     toggleTask(taskId);
   };
 
-  const startEditing = (task: LearningTask) => {
-    setEditingTaskId(task.id);
-    setEditingTitle(task.title);
-    setEditingDescription(task.description);
-  };
-
-  const saveEditing = () => {
-    if (!editingTaskId || !editingTitle.trim()) return;
-    updateTask(editingTaskId, editingTitle.trim(), editingDescription.trim());
-    if (goal?.type === 'task' && goal.id === editingTaskId) {
-      setCurrentGoal({ type: 'task', id: editingTaskId, label: editingTitle.trim() });
+  const saveEditing = (id: string, title: string, description: string) => {
+    updateTask(id, title, description);
+    if (goal?.type === 'task' && goal.id === id) {
+      setCurrentGoal({ type: 'task', id, label: title });
     }
     setEditingTaskId(null);
-  };
-
-  const cancelEditing = () => {
-    setEditingTaskId(null);
-    setEditingTitle('');
-    setEditingDescription('');
   };
 
   const renderTask = (task: LearningTask) => {
     const currentGoal = goal?.type === 'task' && goal.id === task.id;
     const related = logs.filter((log) => log.taskIds?.includes(task.id)).sort((a, b) => b.date.localeCompare(a.date));
     const focused = focusedTaskId === task.id;
+    const editing = editingTaskId === task.id;
+    const editFormId = `${addFormId}-edit-${task.id}`;
     return <li key={task.id} className="topic-task" data-completed={task.completed || undefined}
       ref={focused ? focusedTask : undefined} tabIndex={focused ? -1 : undefined} data-task-focus={focused || undefined}>
-      {editingTaskId === task.id ? (
-        <form className="growth-task-form topic-task-editor" data-preserves-on-navigation onSubmit={(event) => {
-          event.preventDefault();
-          saveEditing();
-        }}>
-          <TaskFields title={editingTitle} description={editingDescription} onTitle={setEditingTitle} onDescription={setEditingDescription} />
-          <div className="code-actions">
-            <button type="submit" className="note-button" disabled={!editingTitle.trim()}>保存</button>
-            <button type="button" className="workspace-button" onClick={cancelEditing}>取消</button>
-          </div>
-        </form>
-      ) : (
-        <>
-          <input type="checkbox" className="topic-task-check" checked={task.completed} onChange={() => handleToggle(task.id)}
-            aria-label={`完成任务：${task.title}`} />
-          <div className="topic-task-content">
-            <p className="topic-task-title">{task.title}</p>
-            {task.description && <p className="topic-task-description">{task.description}</p>}
-            {related.length > 0 && <details className="topic-task-logs">
-              <summary>学习日志（{related.length}）</summary>
-              <ul>{related.map((log) => {
-                const href = `#history/${log.date}`;
-                return <li key={log.id}><a href={href} {...workspaceResourceTarget(href)}>{logLabel(log)}</a></li>;
-              })}</ul>
-            </details>}
-          </div>
-          <div className="topic-task-actions">
-            {!task.completed && <button type="button" className="workspace-button" data-active={currentGoal || undefined}
-              onClick={() => setCurrentGoal({ type: 'task', id: task.id, label: task.title })}>{currentGoal ? '当前目标' : '设为目标'}</button>}
-            <button type="button" className="workspace-button" onClick={() => startEditing(task)}>编辑</button>
-            <button type="button" className="workspace-button" data-danger onClick={() => setDeletingId(task.id)}>删除</button>
-          </div>
-        </>
-      )}
+      <input type="checkbox" className="topic-task-check" checked={task.completed} disabled={editing}
+        onChange={() => handleToggle(task.id)} aria-label={`完成任务：${task.title}`} />
+      <div className="topic-task-content">
+        <p className="topic-task-title">{task.title}</p>
+        {task.description && <p className="topic-task-description">{task.description}</p>}
+        {related.length > 0 && <details className="topic-task-logs">
+          <summary>学习日志（{related.length}）</summary>
+          <ul>{related.map((log) => {
+            const href = `#history/${log.date}`;
+            return <li key={log.id}><a href={href} {...workspaceResourceTarget(href)}>{logLabel(log)}</a></li>;
+          })}</ul>
+        </details>}
+      </div>
+      <div className="topic-task-actions">
+        {!task.completed && <button type="button" className="workspace-button" data-active={currentGoal || undefined} disabled={editing}
+          onClick={() => setCurrentGoal({ type: 'task', id: task.id, label: task.title })}>{currentGoal ? '当前目标' : '设为目标'}</button>}
+        <button type="button" className="workspace-button" aria-expanded={editing} aria-controls={editing ? editFormId : undefined}
+          disabled={editing} onClick={(event) => { editTrigger.current = event.currentTarget; setEditingTaskId(task.id); }}>编辑</button>
+        <button type="button" className="workspace-button" data-danger disabled={editing} onClick={() => setDeletingId(task.id)}>删除</button>
+      </div>
+      <InlineReveal id={editFormId} open={editing} trigger={editingTaskId === null ? editTrigger : undefined}>
+        <EditTaskForm task={task} onSave={(title, description) => saveEditing(task.id, title, description)}
+          onCancel={() => setEditingTaskId(null)} />
+      </InlineReveal>
     </li>;
   };
 
@@ -131,7 +112,8 @@ export default function SkillTasks({ skillId, focusedTaskId }: SkillTasksProps) 
     <div className="growth-task-list">
       <div className="growth-heading">
         <strong>自定义任务 <small>{isLoaded && `${completedTasks.length}/${skillTasks.length} 已完成`}</small></strong>
-        {!adding && <button type="button" className="workspace-button" onClick={() => setAdding(true)}>添加任务</button>}
+        <button ref={addTrigger} type="button" className="workspace-button" aria-expanded={adding} aria-controls={adding ? addFormId : undefined}
+          disabled={!isLoaded || adding} onClick={() => setAdding(true)}>添加任务</button>
       </div>
 
       {pendingTasks.length > 0 && <div className="topic-task-section">
@@ -143,14 +125,16 @@ export default function SkillTasks({ skillId, focusedTaskId }: SkillTasksProps) 
         <ul className="topic-task-items">{completedTasks.map(renderTask)}</ul>
       </details>}
 
-      {adding && <form className="growth-task-form" data-preserves-on-navigation onSubmit={(event) => { event.preventDefault(); handleAdd(); }}>
-        <TaskFields title={title} description={description} onTitle={setTitle} onDescription={setDescription} />
-        {addError && <p role="alert">{addError}</p>}
-        <div className="code-actions">
-          <button type="submit" className="note-button" disabled={!title.trim()}>保存任务</button>
-          <button type="button" className="workspace-button" onClick={() => { setAdding(false); setAddError(''); }}>取消</button>
-        </div>
-      </form>}
+      <InlineReveal id={addFormId} open={adding} trigger={addTrigger}>
+        <form className="growth-task-form" aria-label="添加任务" data-preserves-on-navigation onSubmit={(event) => { event.preventDefault(); handleAdd(); }}>
+          <TaskFields title={title} description={description} onTitle={setTitle} onDescription={setDescription} />
+          {addError && <p role="alert">{addError}</p>}
+          <div className="code-actions">
+            <button type="submit" className="note-button" disabled={!title.trim()}>保存任务</button>
+            <button type="button" className="workspace-button" onClick={() => { setAdding(false); setAddError(''); }}>取消</button>
+          </div>
+        </form>
+      </InlineReveal>
 
       {deleting && <WorkspaceDialog title="删除任务" action="确认删除" destructive
         onClose={() => setDeletingId(undefined)} onSave={() => deleteTask(deleting.id)}>
@@ -160,4 +144,23 @@ export default function SkillTasks({ skillId, focusedTaskId }: SkillTasksProps) 
       </WorkspaceDialog>}
     </div>
   );
+}
+
+function EditTaskForm({ task, onSave, onCancel }: {
+  task: LearningTask;
+  onSave: (title: string, description: string) => void;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description);
+  return <form className="growth-task-form" aria-label="编辑任务" data-preserves-on-navigation onSubmit={(event) => {
+    event.preventDefault();
+    if (title.trim()) onSave(title.trim(), description.trim());
+  }}>
+    <TaskFields title={title} description={description} onTitle={setTitle} onDescription={setDescription} />
+    <div className="code-actions">
+      <button type="submit" className="note-button" disabled={!title.trim()}>保存</button>
+      <button type="button" className="workspace-button" onClick={onCancel}>取消</button>
+    </div>
+  </form>;
 }
