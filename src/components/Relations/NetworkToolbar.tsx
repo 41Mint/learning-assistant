@@ -61,6 +61,8 @@ export default function NetworkToolbar({ query, results, onQuery, onLocate, laye
   const allModulesVisible = visibleModules.length === categories.length;
   const moduleStatus = allModulesVisible ? '' : visibleModules.length === 1 ? visibleModules[0] || '未分类' : `${visibleModules.length} 个模块`;
   const filterStatus = [moduleStatus, crossOnly ? '仅跨模块关联' : '', hops > 0 ? `${hops} 跳` : ''].filter(Boolean).join(' · ');
+  const scopeHint = crossOnly ? '先关闭「只看跨模块关联」，再调整显示范围。'
+    : !canFocus ? '先选中图中的一个节点，再调整显示范围。' : undefined;
   const closePanel = () => {
     if (panel === 'search') onQuery('');
     setPanel(null);
@@ -97,7 +99,7 @@ export default function NetworkToolbar({ query, results, onQuery, onLocate, laye
         else setPanel('search');
       }} />
     <NetworkToolButton icon="layers" label="图层与筛选" aria-expanded={panel === 'filters'} aria-controls="network-filters"
-      disabled={Boolean(linkStep)} onClick={(event) => {
+      aria-describedby={linkStep ? 'network-link-filter-hint' : undefined} disabled={Boolean(linkStep)} onClick={(event) => {
         trigger.current = event.currentTarget;
         if (panel === 'filters') closePanel();
         else { closePanel(); setPanel('filters'); }
@@ -109,7 +111,9 @@ export default function NetworkToolbar({ query, results, onQuery, onLocate, laye
     <NetworkToolButton icon={fullscreen ? 'collapse' : 'expand'} label={fullscreen ? '退出全屏' : '全屏画布'} onClick={onFullscreen} />
     <HistoryButtons available={historyAvailable} labels={{ undo: '撤销画布操作', redo: '重做画布操作' }}
       disabled={Boolean(linkStep)} onHistory={onHistory} />
-    {linkStep ? <span className="network-tool-status" role="status">{linkStep}</span> : filterStatus && (
+    {linkStep ? <span className="network-tool-status" role="status">
+      <span>{linkStep}</span> · <span id="network-link-filter-hint">完成或取消连线后可调整显示范围</span>
+    </span> : filterStatus && (
       <span className="network-tool-status" title={filterStatus}>{filterStatus}</span>
     )}
 
@@ -157,12 +161,14 @@ export default function NetworkToolbar({ query, results, onQuery, onLocate, laye
         只看跨模块关联
       </label>
       <label>显示范围
-        <select value={hops} disabled={!canFocus || crossOnly} onChange={(event) => onHops(Number(event.target.value))}>
+        <select value={hops} disabled={Boolean(scopeHint)} aria-describedby={scopeHint ? 'network-scope-hint' : undefined}
+          onChange={(event) => onHops(Number(event.target.value))}>
           <option value={0}>全网</option>
           <option value={1}>选中节点的一跳</option>
           <option value={2}>选中节点的两跳</option>
         </select>
       </label>
+      {scopeHint && <p id="network-scope-hint" className="relation-muted network-scope-hint">{scopeHint}</p>}
     </div>}
   </div>;
 }

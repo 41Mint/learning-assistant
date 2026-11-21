@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
 const knowledgeKey = 'learning-assistant:knowledge';
@@ -36,21 +36,21 @@ test('名称即可创建；别名检索、分类、Markdown 编辑及草稿在�
     swatch.remove();
     return color;
   });
-  const expectAccentOnFocus = async (label: string) => {
-    const input = page.getByLabel(label, { exact: true });
+  const expectAccentOnFocus = async (input: Locator) => {
     await input.focus();
     await expect(input).toHaveCSS('border-top-color', accent);
   };
-  await expectAccentOnFocus('搜索名称或别名');
-  await expectAccentOnFocus('词条分类');
+  await expectAccentOnFocus(page.getByLabel('搜索名称或别名', { exact: true }));
+  await expectAccentOnFocus(page.getByLabel('词条分类', { exact: true }));
   await createEntry(page, 'PPU');
   await page.getByRole('button', { name: '编辑词条', exact: true }).click();
-  await expectAccentOnFocus('词条名称（必填）');
-  await expectAccentOnFocus('别名（用逗号分隔）');
-  await expectAccentOnFocus('分类（可选）');
-  await expectAccentOnFocus('词条正文（Markdown）');
+  const category = page.getByRole('combobox', { name: '分类（可选）', exact: true });
+  await expectAccentOnFocus(page.getByLabel('词条名称（必填）', { exact: true }));
+  await expectAccentOnFocus(page.getByLabel('别名（用逗号分隔）', { exact: true }));
+  await expectAccentOnFocus(category);
+  await expectAccentOnFocus(page.getByLabel('词条正文（Markdown）', { exact: true }));
   await page.getByLabel('别名（用逗号分隔）').fill('Pixels Per Unit，像素单位');
-  await page.getByLabel('分类（可选）').fill('2D 素材');
+  await category.fill('2D 素材');
   await page.getByLabel('词条正文（Markdown）').fill('## 我的理解\n\n16 像素 / 16 PPU = **1 个世界单位**。');
   await navigate(page, '成长记录');
   await navigate(page, '知识词条');
@@ -73,6 +73,43 @@ test('名称即可创建；别名检索、分类、Markdown 编辑及草稿在�
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('knowledge-mobile-dark.png'), fullPage: true });
+});
+
+test('词条分类可新增，旧词条打开下拉时显示全部在用分类', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto('/#knowledge');
+  const form = page.getByRole('form', { name: '词条编辑表单' });
+  const category = form.getByRole('combobox', { name: '分类（可选）' });
+  const choices = form.getByRole('listbox', { name: '分类（可选）' });
+  for (const [title, value] of [['场景空间构建', 'Godot 3D'], ['图形界面', 'Godot UI']]) {
+    await page.getByRole('button', { name: '新建词条', exact: true }).click();
+    await form.getByLabel('词条名称（必填）').fill(title);
+    await category.fill(value);
+    await expect(choices.getByText('可直接填写新分类。')).toBeVisible();
+    await category.press('Enter');
+    await form.getByRole('button', { name: '保存词条' }).click();
+    await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
+  }
+
+  await page.getByLabel('搜索名称或别名').fill('场景空间构建');
+  await page.getByRole('button', { name: /^场景空间构建/ }).click();
+  await page.getByRole('button', { name: '编辑词条' }).click();
+  await expect(category).toHaveValue('Godot 3D');
+  await category.click();
+  await expect(choices.getByRole('option', { name: 'Godot 3D', exact: true })).toBeVisible();
+  await expect(choices.getByRole('option', { name: 'Godot UI', exact: true })).toBeVisible();
+  const inputBounds = (await category.boundingBox())!;
+  const listBounds = (await choices.boundingBox())!;
+  expect(Math.abs(listBounds.x - inputBounds.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(listBounds.width - inputBounds.width)).toBeLessThanOrEqual(1);
+  expect(listBounds.y - inputBounds.y - inputBounds.height).toBeCloseTo(4);
+  await category.fill('UI');
+  await expect(choices.getByRole('option', { name: 'Godot 3D', exact: true })).toHaveCount(0);
+  await category.press('ArrowDown');
+  await category.press('Enter');
+  await expect(category).toHaveValue('Godot UI');
+  await form.getByRole('button', { name: '保存词条' }).click();
+  await expect(page.getByRole('region', { name: '词条详情' }).getByText('Godot UI', { exact: true })).toBeVisible();
 });
 
 test('词条可在正文光标处引用多条日志，解除一条关联后其余引用仍能打开原日志', async ({ page }) => {

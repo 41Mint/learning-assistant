@@ -8,6 +8,9 @@ import type { SkillTreeStorage } from '../utils/skillPathStorage';
 import { readCurrentGoal, useCurrentGoalStore } from './currentGoalStore';
 import type { CurrentGoal } from './currentGoalStore';
 import { useTaskStore } from './taskStore';
+import { useStudyLogStore } from './studyLogStore';
+import { logsWithoutTaskLinks } from '../utils/studyLogs';
+import type { StoredStudyLog } from '../utils/studyLogs';
 
 export type TopicFields = Pick<SkillNodeDefinition, 'name' | 'description' | 'category' | 'prerequisites'>;
 
@@ -22,9 +25,10 @@ interface SkillTreeStore {
   toggleCompleted: (id: string) => void;
 }
 
-function writeChanges(tree: SkillTreeStorage, goal?: CurrentGoal | null, tasks?: LearningTask[]) {
+function writeChanges(tree: SkillTreeStorage, goal?: CurrentGoal | null, tasks?: LearningTask[], logs?: StoredStudyLog[]) {
   const pairs: [string, unknown][] = [[STORAGE_KEYS.SKILL_TREE, validateSkillTree(tree)]];
   if (tasks) pairs.push([STORAGE_KEYS.TASKS, tasks]);
+  if (logs) pairs.push([STORAGE_KEYS.STUDY_LOGS, logs]);
   if (goal !== undefined) pairs.push([STORAGE_KEYS.CURRENT_GOAL, { version: 2, goal }]);
   try {
     writeStorageItems(pairs);
@@ -32,6 +36,7 @@ function writeChanges(tree: SkillTreeStorage, goal?: CurrentGoal | null, tasks?:
     throw new Error('保存参考路径失败，请重试。');
   }
   if (tasks) useTaskStore.setState({ tasks });
+  if (logs) useStudyLogStore.getState().loadLogs();
   if (goal !== undefined) useCurrentGoalStore.setState({ goal, isLoaded: true });
 }
 
@@ -84,10 +89,12 @@ export const useSkillTreeStore = create<SkillTreeStore>((set, get) => {
       }));
       const completedIds = tree.completedIds.filter((completedId) => completedId !== id);
       const remaining = tasks.filter((task) => task.parentSkillId !== id);
+      const removedTaskIds = new Set(tasks.filter((task) => task.parentSkillId === id).map((task) => task.id));
       const goal = readCurrentGoal();
       const clearGoal = (goal?.type === 'skill' && goal.id === id)
-        || (goal?.type === 'task' && tasks.some((task) => task.id === goal.id && task.parentSkillId === id));
-      writeChanges({ ...tree, topics, completedIds }, clearGoal ? null : undefined, remaining.length !== tasks.length ? remaining : undefined);
+        || (goal?.type === 'task' && removedTaskIds.has(goal.id));
+      const logs = removedTaskIds.size ? logsWithoutTaskLinks(removedTaskIds) : undefined;
+      writeChanges({ ...tree, topics, completedIds }, clearGoal ? null : undefined, removedTaskIds.size ? remaining : undefined, logs);
       set({ topics, completedIds });
     },
     toggleCompleted: (id) => {

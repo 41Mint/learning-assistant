@@ -4,6 +4,8 @@ import { useSkillTreeStore } from '../../store/skillTreeStore';
 import type { TopicFields } from '../../store/skillTreeStore';
 import { useCurrentGoalStore } from '../../store/currentGoalStore';
 import { useTaskStore } from '../../store/taskStore';
+import { useWorkspaceStore } from '../../store/workspaceStore';
+import { STORAGE_KEYS } from '../../utils/storage';
 import { SKILL_TOPIC_DESCRIPTION_LIMIT, SKILL_TOPIC_NAME_LIMIT } from '../../utils/skillPathStorage';
 import { AssistantSlots } from '../Assistant/assistantSlots';
 import WorkspaceDialog from '../common/WorkspaceDialog';
@@ -13,6 +15,7 @@ export default function SkillTree() {
   const { topics, completedIds, isLoaded, error, loadSkillTree, saveTopic, deleteTopic, toggleCompleted } = useSkillTreeStore();
   const { goal, setCurrentGoal } = useCurrentGoalStore();
   const { tasks, loadTasks, isLoaded: tasksLoaded } = useTaskStore();
+  const topicTaskId = useWorkspaceStore((state) => state.topicTaskId);
   const { askAboutGrowth } = useContext(AssistantSlots);
   const [notice, setNotice] = useState('');
   const [actionError, setActionError] = useState('');
@@ -20,12 +23,21 @@ export default function SkillTree() {
   const [editor, setEditor] = useState<{ id?: string; fields: TopicFields }>();
   const [deleting, setDeleting] = useState<string>();
 
-  useEffect(() => { loadSkillTree(); loadTasks(); }, [loadSkillTree, loadTasks]);
+  useEffect(() => {
+    loadSkillTree();
+    loadTasks();
+    const refreshTasks = (event: StorageEvent) => {
+      if (event.key === STORAGE_KEYS.TASKS || event.key === null) loadTasks();
+    };
+    window.addEventListener('storage', refreshTasks);
+    return () => window.removeEventListener('storage', refreshTasks);
+  }, [loadSkillTree, loadTasks]);
 
   if (!isLoaded) return <p>正在加载参考路径…</p>;
   if (error) return <p role="alert">{error}</p>;
 
-  const selected = topics.find(({ id }) => id === selection) ?? topics[0];
+  const linkedTask = tasks.find(({ id }) => id === topicTaskId);
+  const selected = topics.find(({ id }) => id === (linkedTask?.parentSkillId ?? selection)) ?? topics[0];
   const topicToDelete = topics.find(({ id }) => id === deleting);
   const taskCount = topicToDelete ? tasks.filter(({ parentSkillId }) => parentSkillId === topicToDelete.id).length : 0;
   const updateEditor = (values: Partial<TopicFields>) => {
@@ -35,6 +47,7 @@ export default function SkillTree() {
     setNotice('');
     setActionError('');
     setSelection(id);
+    if (topicTaskId) window.location.assign('#path/topics');
   };
 
   return (
@@ -96,7 +109,7 @@ export default function SkillTree() {
                   <button type="button" className="note-button secondary" disabled={!tasksLoaded}
                     onClick={() => askAboutGrowth({ kind: 'topic', id: topic.id })}>询问智能体</button>
                 </div>
-                <SkillTasks skillId={topic.id} />
+                <SkillTasks skillId={topic.id} focusedTaskId={linkedTask?.parentSkillId === topic.id ? linkedTask.id : undefined} />
               </article>
             );
           })}
@@ -138,6 +151,7 @@ export default function SkillTree() {
         }}>
         <p>删除「{topicToDelete.name}」{taskCount ? `及其下的 ${taskCount} 项任务` : ''}？此操作无法撤销。</p>
         <p>此主题的完成标记及其他主题对它的引用也会移除。若当前学习目标属于此主题，将一并清除。</p>
+        {taskCount > 0 && <p>同步解除这些任务与学习日志的关联。</p>}
       </WorkspaceDialog>}
     </div>
   );

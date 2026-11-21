@@ -27,6 +27,7 @@ interface SearchRecord {
   title: string;
   detail?: string;
   names?: string[];
+  tags?: string[];
   fields: string[];
   source?: string;
 }
@@ -60,7 +61,7 @@ export function SearchResults({ query, words, scope, includeSource, editingPages
     ];
     return {
       history: [...logs].sort((a, b) => b.date.localeCompare(a.date)).map((log) => searchable({
-        href: '#history/' + encodeURIComponent(log.date), title: logLabel(log), fields: logSearchFields(log),
+        href: '#history/' + encodeURIComponent(log.date), title: logLabel(log), tags: log.tags, fields: logSearchFields(log),
       })),
       knowledge: [...entries].sort((a, b) => a.title.localeCompare(b.title, 'zh-CN')).map((entry) => searchable({
         href: '#knowledge/' + encodeURIComponent(entry.id), title: entry.title, detail: entry.category, fields: entrySearchFields(entry), names: entryNames(entry),
@@ -111,9 +112,10 @@ export function SearchResults({ query, words, scope, includeSource, editingPages
           <section key={page} aria-label={label}>
             <h3>{label}（{items.length}）</h3>
             {newTab && <p className="search-muted">该页有编辑表单，结果将在新标签页打开。</p>}
-            <ul>{items.slice(0, limit ?? items.length).map(({ href, title, detail, fields, source }) => {
+            <ul>{items.slice(0, limit ?? items.length).map(({ href, title, detail, fields, source, tags }) => {
               const hit = source ? matchScriptLine(source, words) : undefined;
               const excerpt = hit?.excerpt ?? matchExcerpt(fields, words);
+              const matchedTags = tags?.filter((tag) => words.some((word) => normalizedName(tag).includes(word))) ?? [];
               const target = searchHref(href, query, Boolean(hit));
               return <li key={href}>
                 <a href={target} target={newTab ? '_blank' : undefined} rel={newTab ? 'noopener' : undefined} onClick={(event) => {
@@ -127,7 +129,8 @@ export function SearchResults({ query, words, scope, includeSource, editingPages
                   }
                 }}><HighlightedText text={title} words={words} /></a>
                 {detail && <p className="search-muted"><HighlightedText text={detail} words={words} /></p>}
-                {excerpt && <p className="search-excerpt">{hit && <span className="search-muted">第 {hit.line} 行 · </span>}<HighlightedText text={excerpt} words={words} /></p>}
+                {matchedTags.length > 0 && <p className="search-muted">匹配标签 · <HighlightedText text={matchedTags.join('、')} words={words} /></p>}
+                {excerpt && !matchedTags.includes(excerpt) && <p className="search-excerpt">{hit && <span className="search-muted">第 {hit.line} 行 · </span>}<HighlightedText text={excerpt} words={words} /></p>}
               </li>;
             })}</ul>
             {limit && items.length > limit && <p className="search-muted">显示前 {limit} 条，可补充关键词缩小范围。</p>}
@@ -169,7 +172,8 @@ export default function ResourceSearch({ triggerContent = '检索' }: { triggerC
           <h2 id="resource-search-title">检索资料</h2>
           <button type="button" onClick={close} className="note-button secondary">关闭</button>
         </header>
-        <input ref={input} className="search-input" type="search" aria-label="检索关键词" placeholder="例如 Tilemap、InputManager.cs"
+        <input ref={input} className="search-input" type="search" aria-label="检索关键词"
+          placeholder={scope === 'history' ? '搜索日志日期、标签或正文' : '例如 Tilemap、InputManager.cs'}
           value={query} onChange={(event) => setQuery(event.target.value)} />
         <div className="search-filters" role="group" aria-label="按资料类型筛选">
           <button type="button" aria-pressed={scope === 'all'} onClick={() => setScope('all')}>全部</button>
@@ -179,7 +183,7 @@ export default function ResourceSearch({ triggerContent = '检索' }: { triggerC
           <input type="checkbox" checked={includeSource} onChange={(event) => setIncludeSource(event.target.checked)} />
           搜索脚本正文（本地快照）
         </label>}
-        {words.length === 0 && <p className="search-muted">输入关键词查找日志、词条、代码或实践卡片。</p>}
+        {words.length === 0 && <p className="search-muted">{scope === 'history' ? '输入标签名可查找带该标签的日志。' : '输入关键词查找日志、词条、代码或实践卡片。'}</p>}
         {editingPages && words.length > 0 && <SearchResults query={query} words={words} scope={scope} includeSource={scope === 'code' && includeSource} editingPages={editingPages} onOpen={close} />}
       </dialog>
     </>

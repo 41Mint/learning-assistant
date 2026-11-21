@@ -42,6 +42,7 @@ function number(value: unknown): value is number { return typeof value === 'numb
 function isLog(value: unknown): value is StoredStudyLog {
   return isRecord(value) && typeof value.id === 'string' && isCalendarDate(value.date) && number(value.duration)
     && typeof value.content === 'string' && strings(value.tags) && strings(value.knowledgePoints)
+    && (value.taskIds === undefined || strings(value.taskIds) && new Set(value.taskIds).size === value.taskIds.length)
     && number(value.createdAt) && number(value.updatedAt) && (value.deletedAt === undefined || number(value.deletedAt));
 }
 function isTask(value: unknown): value is LearningTask {
@@ -76,9 +77,13 @@ export function parseBackup(value: unknown): BackupFile {
   const knowledge = value.version >= 3 ? validateKnowledge(raw.knowledge, logIds) : emptyKnowledge();
   const growth = value.version >= 4 ? validateGrowth(raw.growth) : emptyGrowth();
   const projectCode = value.version >= 5 ? validateProjectCode(raw.projectCode) : emptyProjectCode();
+  const taskIds = new Set(tasks.map((task) => task.id));
   if (new Set(studyLogs.map((log) => log.date)).size !== studyLogs.length
     || logIds.size !== allLogs.length
-    || new Set(tasks.map((task) => task.id)).size !== tasks.length) throw new Error('备份存在重复记录，无法恢复。');
+    || taskIds.size !== tasks.length) throw new Error('备份存在重复记录，无法恢复。');
+  if (allLogs.some((log) => log.taskIds?.some((id) => !taskIds.has(id)))) {
+    throw new Error('备份中的学习日志关联了不存在的任务，未修改本地数据。');
+  }
   const skillTree = raw.skillTree == null ? null : validateSkillTree(raw.skillTree);
   const currentGoal = optionalRecord(raw.currentGoal);
   if (currentGoal && !(

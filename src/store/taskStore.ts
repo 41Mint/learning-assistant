@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import type { LearningTask } from '../types';
 import { generateId, getStorageItem, setStorageItem, STORAGE_KEYS, writeStorageItems } from '../utils/storage';
 import { readCurrentGoal, useCurrentGoalStore } from './currentGoalStore';
+import { logsWithoutTaskLinks } from '../utils/studyLogs';
+import { useStudyLogStore } from './studyLogStore';
 
 interface TaskStore {
   tasks: LearningTask[];
@@ -68,6 +70,8 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     const goal = readCurrentGoal();
     const clearGoal = goal?.type === 'task' && goal.id === id;
     const writes: [string, unknown][] = [[STORAGE_KEYS.TASKS, tasks]];
+    const logs = logsWithoutTaskLinks(new Set([id]));
+    if (logs) writes.push([STORAGE_KEYS.STUDY_LOGS, logs]);
     if (clearGoal) writes.push([STORAGE_KEYS.CURRENT_GOAL, { version: 2, goal: null }]);
     try {
       writeStorageItems(writes);
@@ -75,6 +79,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       throw new Error('删除任务失败，请重试。');
     }
     set({ tasks });
+    if (logs) useStudyLogStore.getState().loadLogs();
     if (clearGoal) useCurrentGoalStore.setState({ goal: null, isLoaded: true });
   },
 }));

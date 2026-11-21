@@ -61,14 +61,17 @@ test('统一检索分组、筛选并打开日志、词条和脚本版本', async
   await expect(page.locator('#code h2 .search-match')).toHaveText('InputManager.cs');
 
   await trigger.click();
-  await dialog.getByRole('button', { name: '全部', exact: true }).click();
+  await dialog.getByRole('button', { name: '学习日志', exact: true }).click();
+  await expect(query).toHaveAttribute('placeholder', '搜索日志日期、标签或正文');
   await query.fill('2d关卡');
+  await expect(dialog.getByText('匹配标签 · 2D关卡', { exact: true })).toBeVisible();
   await dialog.getByRole('link', { name: /Day1 素材处理/ }).click();
   await expect(page.getByLabel('定位学习日期')).toHaveValue(date);
   await expect(page.getByRole('heading', { name: 'Day1 素材处理' })).toBeVisible();
   await expect(page.locator('#history .search-match')).toHaveText('2D关卡');
 
   await trigger.click();
+  await dialog.getByRole('button', { name: '全部', exact: true }).click();
   await query.fill('网格地图 自动拼接');
   await dialog.getByRole('link', { name: '瓦片地图', exact: true }).click();
   await expect(page).toHaveURL(/#knowledge\/tilemap-entry\?find=/);

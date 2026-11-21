@@ -1,7 +1,8 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import type { KnowledgeEntry } from '../../types';
 import FocusEditor from '../common/FocusEditor';
 import ReferenceChoices from '../common/ReferenceChoices';
+import SearchableSelect from '../common/SearchableSelect';
 
 export type CategoryEditorTarget = { kind: 'rename' | 'members'; category: string } | { kind: 'batch'; ids: string[] };
 
@@ -16,7 +17,6 @@ export default function NetworkCategoryEditor({ title, target, entries, categori
   const [category, setCategory] = useState(target.kind === 'rename' ? target.category : '');
   const [selection, setSelection] = useState(entries.map(({ id }) => id));
   const [error, setError] = useState('');
-  const categoryId = useId();
   const destination = category.trim();
   const changed = entries.filter((entry) => selection.includes(entry.id) && entry.category !== destination);
   const description = target.kind === 'batch' ? `已选 ${entries.length} 个词条。`
@@ -38,11 +38,9 @@ export default function NetworkCategoryEditor({ title, target, entries, categori
         selected={selection} onChange={setSelection} />
     </>}
     <div className="entry-basics network-category-basics">
-      <label>目标分类
-        <input list={categoryId} value={category} placeholder="输入分类名称，留空归入未分类"
-          onChange={(event) => { setCategory(event.target.value); setError(''); }} />
-      </label>
-      <datalist id={categoryId}>{categories.filter(Boolean).map((name) => <option key={name} value={name} />)}</datalist>
+      <SearchableSelect label="目标分类" placeholder="选择或填写分类，留空归入未分类" allowCustomValue
+        options={categories.filter(Boolean).map((name) => ({ id: name, label: name }))}
+        value={category} onChange={(next) => { setCategory(next); setError(''); }} />
       {changed.length > 0 && <p className="relation-muted">
         {merging ? `将 ${changed.length} 个词条合并到「${destination || '未分类'}」。`
           : `将 ${changed.length} 个词条移至「${destination || '未分类'}」。`}

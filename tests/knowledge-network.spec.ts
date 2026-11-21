@@ -72,6 +72,32 @@ async function setNetworkScope(page: Page, scope: string) {
   await filterButton(page).click();
 }
 
+test('显示范围解释选点、跨模块和连线模式的限制', async ({ page }) => {
+  await seedNetwork(page);
+  await page.goto('/#network');
+  const graph = page.getByRole('group', { name: '知识网络图' });
+  const range = page.getByRole('combobox', { name: '显示范围' });
+  await filterButton(page).click();
+  await expect(range).toBeDisabled();
+  await expect(range).toHaveAccessibleDescription('先选中图中的一个节点，再调整显示范围。');
+  await filterButton(page).click();
+  await graph.getByRole('button', { name: '像素单位', exact: true }).click();
+  await filterButton(page).click();
+  await expect(range).toBeEnabled();
+  const crossOnly = page.getByRole('checkbox', { name: '只看跨模块关联' });
+  await crossOnly.check();
+  await expect(range).toBeDisabled();
+  await expect(range).toHaveAccessibleDescription('先关闭「只看跨模块关联」，再调整显示范围。');
+  await crossOnly.uncheck();
+  await filterButton(page).click();
+  const linkButton = page.getByRole('button', { name: '添加连线', exact: true });
+  await linkButton.click();
+  await expect(filterButton(page)).toBeDisabled();
+  await expect(filterButton(page)).toHaveAccessibleDescription('完成或取消连线后可调整显示范围');
+  await linkButton.click();
+  await expect(filterButton(page)).toBeEnabled();
+});
+
 test('知识网络同时展示跨分类连线，搜索和编辑可沿图回到原词条', async ({ page }, testInfo) => {
   await seedNetwork(page);
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -526,7 +552,11 @@ test('全屏保留画布操作，拖动节点可复位，空白处可新建同�
   await graph.click({ button: 'right', position: { x: 12, y: 12 } });
   await page.getByRole('menuitem', { name: '新建词条' }).click();
   const dialog = page.getByRole('dialog', { name: '在画布中新建词条' });
-  await expect(dialog.getByLabel('分类（可选）')).toHaveValue('渲染');
+  const category = dialog.getByRole('combobox', { name: '分类（可选）', exact: true });
+  await expect(category).toHaveValue('渲染');
+  await category.click();
+  await expect(dialog.getByRole('option', { name: '交互', exact: true })).toBeVisible();
+  await dialog.getByRole('option', { name: '渲染', exact: true }).click();
   await dialog.getByLabel('词条名称（必填）').fill('调色板');
   await dialog.getByRole('button', { name: '保存词条', exact: true }).click();
   await expect(dialog).toBeHidden();
@@ -920,7 +950,7 @@ test('Shift 多选和框选可共同移动节点，并批量分类与撤销', as
 
   await sidebar.getByRole('button', { name: '批量改分类（2 个词条）' }).click();
   const dialog = page.getByRole('dialog', { name: '批量改分类' });
-  await dialog.getByLabel('目标分类').fill('输入与素材');
+  await dialog.getByRole('combobox', { name: '目标分类', exact: true }).fill('输入与素材');
   await page.screenshot({ path: testInfo.outputPath('network-category-editor.png') });
   await dialog.getByRole('button', { name: '保存分类' }).click();
   await expect(graph.getByRole('button', { name: '管理模块 输入与素材' })).toBeVisible();
@@ -950,7 +980,7 @@ test('模块菜单可整理成员、重命名与合并分类，撤销时保留�
   await members.getByRole('button', { name: '清空选择' }).click();
   await members.getByRole('searchbox', { name: '筛选选择要移动的词条' }).fill('PPU');
   await members.getByRole('checkbox', { name: '像素单位' }).check();
-  await members.getByLabel('目标分类').fill('交互');
+  await members.getByRole('combobox', { name: '目标分类', exact: true }).fill('交互');
   await members.getByRole('button', { name: '保存分类' }).click();
   expect((await savedKnowledge(page)).entries.find(({ id }) => id === 'ppu')?.category).toBe('交互');
   expect((await savedKnowledge(page)).entries.find(({ id }) => id === 'sprite')?.category).toBe('渲染');
@@ -959,7 +989,7 @@ test('模块菜单可整理成员、重命名与合并分类，撤销时保留�
   await header.click();
   await menu.getByRole('menuitem', { name: '重命名分类' }).click();
   const rename = page.getByRole('dialog', { name: '重命名分类' });
-  await rename.getByLabel('目标分类').fill('交互');
+  await rename.getByRole('combobox', { name: '目标分类', exact: true }).fill('交互');
   await expect(rename.getByText('将 5 个词条合并到「交互」。', { exact: true })).toBeVisible();
   await rename.getByRole('button', { name: '保存分类' }).click();
   await expect(header).toHaveCount(0);

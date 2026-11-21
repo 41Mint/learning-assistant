@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { usePomodoroStore } from '../../store/pomodoroStore';
 import { useCurrentGoalStore } from '../../store/currentGoalStore';
+import { topicTaskHref } from '../../store/workspaceStore';
 import { PRACTICE_REFERENCE_LABEL } from '../../utils/growthLabels';
 
 const formatTime = (seconds: number) =>
@@ -29,9 +30,14 @@ export default function Pomodoro() {
       <div className="timer-goal" data-has-goal={Boolean(goal) || undefined}>
         <span>{isPracticeReference ? PRACTICE_REFERENCE_LABEL : '当前学习目标'}</span>
         <strong>{goal?.label ?? '可以直接开始学习'}</strong>
-        {goal && <button type="button" className="knowledge-text-button" onClick={clearCurrentGoal}>
-          {isPracticeReference ? '移除练习参考' : '清除当前目标'}
-        </button>}
+        <div className="timer-goal-actions">
+          <a className="knowledge-text-button" href={goal?.type === 'task' ? topicTaskHref(goal.id) : '#path/topics'}>
+            {goal?.type === 'task' ? '查看任务' : '选择任务'}
+          </a>
+          {goal && <button type="button" className="knowledge-text-button" onClick={clearCurrentGoal}>
+            {isPracticeReference ? '移除练习参考' : '清除当前目标'}
+          </button>}
+        </div>
       </div>
 
       <div>

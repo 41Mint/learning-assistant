@@ -12,6 +12,7 @@ import LogContentEditor from '../StudyLog/LogContentEditor';
 import type { LogEditingProps } from '../StudyLog/LogContentEditor';
 import TrashLogButton from '../StudyLog/TrashLogButton';
 import LogMetadataField from '../StudyLog/LogMetadataField';
+import LogTaskLinks from '../StudyLog/LogTaskLinks';
 import useMarkdownImport from '../StudyLog/useMarkdownImport';
 
 interface CalendarDay {
@@ -225,6 +226,7 @@ const History = ({ draft, setDraft }: LogEditingProps) => {
               </ul>
             )}
 
+            <LogTaskLinks key={selectedLog.id + '-tasks'} log={selectedLog} />
             <KnowledgeLinks key={selectedLog.id} logId={selectedLog.id} legacyPoints={selectedLog.knowledgePoints} />
             <CodeLinksPanel key={selectedLog.id + '-code'} target={{ kind: 'log', id: selectedLog.id }} title="项目代码" />
 

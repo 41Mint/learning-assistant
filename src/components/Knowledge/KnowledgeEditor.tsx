@@ -35,7 +35,6 @@ export default function KnowledgeEditor({ entry, categories, initialCategory, sa
   const [entrySelection, setEntrySelection] = useState<string[] | null>(null);
   const [codeSelection, setCodeSelection] = useState<string[] | null>(null);
   const [error, setError] = useState('');
-  const categoriesId = useId();
   const contentId = useId();
   const editor = useRef<HTMLTextAreaElement>(null);
   const current = entries.find((item) => item.id === entry?.id);
@@ -81,10 +80,9 @@ export default function KnowledgeEditor({ entry, categories, initialCategory, sa
         <label>别名（用逗号分隔）
           <input value={aliases} onChange={(event) => setAliases(event.target.value)} />
         </label>
-        <label>分类（可选）
-          <input list={categoriesId} value={category} onChange={(event) => setCategory(event.target.value)} placeholder="例如：2D 素材" />
-        </label>
-        <datalist id={categoriesId}>{categories.filter(Boolean).map((item) => <option key={item} value={item} />)}</datalist>
+        <SearchableSelect label="分类（可选）" placeholder="选择或填写分类" allowCustomValue
+          options={categories.filter(Boolean).map((item) => ({ id: item, label: item }))}
+          value={category} onChange={setCategory} />
       </div>
       {sortedLogs.length > 0 && <div className="knowledge-citation-tools">
         <SearchableSelect label="引用学习日志" placeholder="按日期、标题、标签或正文筛选"

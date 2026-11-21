@@ -17,6 +17,7 @@ export interface StudyLog {
   duration: number; // 学习时长（分钟）
   content: string; // Markdown内容
   tags: string[]; // 标签
+  taskIds?: string[];
   knowledgePoints: string[]; // 知识点
   createdAt: number; // 时间戳
   updatedAt: number; // 时间戳

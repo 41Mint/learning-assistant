@@ -338,12 +338,12 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .timer-mode::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--app-accent); }
 .pomodoro-card[data-mode="break"] .timer-mode::before, .pomodoro-card[data-mode="break"] .timer-progress span { background: var(--app-positive); }
 .timer-goal {
-  display: grid; gap: 3px; padding: 8px 10px; border-radius: 8px; overflow-wrap: anywhere;
+  display: grid; gap: 4px; padding: 8px 10px; border: 1px solid var(--app-border); border-radius: 8px; overflow-wrap: anywhere;
   font-size: 13px; color: var(--app-muted);
 }
-.timer-goal[data-has-goal] { background: var(--app-bg); }
-.timer-goal strong { color: var(--app-text); font-weight: 600; }
-.timer-goal .knowledge-text-button { justify-self: center; }
+.timer-goal[data-has-goal] { background: var(--app-active); border-color: var(--app-accent); }
+.timer-goal strong { color: var(--app-text); font-size: 15px; font-weight: 650; }
+.timer-goal-actions { display: flex; justify-content: center; gap: 4px 12px; flex-wrap: wrap; }
 .timer-display { font-size: 56px; font-weight: 700; line-height: 1.12; font-variant-numeric: tabular-nums; }
 .timer-completed, .timer-durations { font-size: 13px; color: var(--app-muted); }
 .timer-completed { margin-top: 6px; }
@@ -567,8 +567,13 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .knowledge-entry-list span { display: block; color: var(--app-muted); font-size: 12px; margin-top: 4px; }
 .knowledge-detail-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .knowledge-entry-content { margin: 20px 0; line-height: 1.75; }
-.knowledge-sources, .knowledge-related, .knowledge-log-links { border-top: 1px solid var(--app-border); margin-top: 20px; padding-top: 12px; }
+.knowledge-sources, .knowledge-related, .knowledge-log-links, .log-task-links { border-top: 1px solid var(--app-border); margin-top: 20px; padding-top: 12px; }
 .knowledge-sources a, .knowledge-related a, .knowledge-log-links a { color: var(--app-accent); overflow-wrap: anywhere; }
+.log-task-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.log-task-heading h3 { margin: 0; font-size: 15px; }
+.log-task-list { display: grid; gap: 5px; list-style: none; padding: 0; margin: 9px 0 0; }
+.log-task-list li { display: flex; align-items: baseline; flex-wrap: wrap; gap: 3px 8px; overflow-wrap: anywhere; }
+:is(.log-task-heading, .log-task-list, .topic-task-logs) a { color: var(--app-accent-text); text-decoration: underline; }
 .knowledge-linked-list, .knowledge-source-list { list-style: none; padding: 0; }
 .knowledge-linked-list li { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
 .knowledge-source-list li { padding: 10px 0; border-bottom: 1px solid var(--app-border); }
@@ -791,11 +796,15 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 6px 10px;
   background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 8px; padding: 9px 10px;
 }
+.topic-task[data-task-focus] { border-color: var(--app-accent); scroll-margin-block-start: calc(var(--app-header-height) + 12px); }
 .topic-task-check { accent-color: var(--app-accent); width: 16px; height: 16px; margin: 8px 0 0; cursor: pointer; }
 .topic-task-content { min-width: 0; padding-top: 5px; }
 .topic-task-title { margin: 0; font-size: 14px; font-weight: 650; }
 .topic-task[data-completed] .topic-task-title { color: var(--app-muted); text-decoration: line-through; }
 .topic-task-description { margin: 3px 0 0; font-size: 13px; line-height: 1.5; color: var(--app-muted); white-space: pre-wrap; }
+.topic-task-logs { margin-top: 7px; font-size: 13px; overflow-wrap: anywhere; }
+.topic-task-logs summary { cursor: pointer; }
+.topic-task-logs ul { list-style: none; padding: 0 0 0 12px; margin: 3px 0 0; display: grid; gap: 3px; }
 .topic-task-actions { display: flex; flex-wrap: wrap; gap: 4px; }
 .topic-task-editor { grid-column: 1 / -1; margin: 0; }
 @media (max-width: 630px) {
@@ -1177,6 +1186,7 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
   padding: 6px 8px; background: var(--app-surface); color: var(--app-text); font-size: 13px;
 }
 .network-filter-panel label { display: grid; gap: 4px; margin-top: 8px; font-size: 13px; color: var(--app-muted); }
+.network-scope-hint { margin: 4px 0 0; }
 .network-filter-panel .network-filter-option { display: flex; align-items: center; gap: 7px; color: var(--app-text); cursor: pointer; }
 .network-filter-option input { margin: 0; flex-shrink: 0; accent-color: var(--app-accent); }
 .network-module-picker { min-width: 0; margin: 8px 0 0; padding: 6px; border: 1px solid var(--app-border); border-radius: 7px; }

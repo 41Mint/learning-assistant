@@ -199,6 +199,114 @@ test('旧节点和任务保留，参考基础不锁住后续节点，目标可�
   await expect(page.getByText('可以直接开始学习', { exact: true })).toBeVisible();
 });
 
+test('今日和历史日志多选关联任务，改名和完成后仍能双向打开，完整备份可恢复', async ({ page, browser }) => {
+  await seedLearning(page);
+  await page.goto('/#today');
+  const today = page.getByRole('region', { name: '今日学习', exact: true });
+  const todayLinks = today.getByRole('region', { name: '关联任务' });
+  await today.getByRole('link', { name: '查看任务' }).click();
+  const topic = page.getByRole('article', { name: 'Unity 核心工作流', exact: true });
+  await expect(topic.locator('[data-task-focus]')).toContainText('旧任务');
+  await topic.getByRole('button', { name: '添加任务', exact: true }).click();
+  await topic.getByPlaceholder('添加一个可执行任务').fill('补做镜头跟随');
+  await topic.getByRole('button', { name: '保存任务', exact: true }).click();
+  await page.getByRole('link', { name: '今日学习', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '选择关联任务' });
+  const old = dialog.getByRole('checkbox', { name: /^旧任务/ });
+  await todayLinks.getByRole('button', { name: '选择任务' }).click();
+  await old.check();
+  await dialog.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(todayLinks.getByRole('link')).toHaveCount(0);
+  await todayLinks.getByRole('button', { name: '选择任务' }).click();
+  await expect(old).not.toBeChecked();
+  await old.check();
+  await dialog.getByRole('searchbox', { name: '筛选学习任务' }).fill('镜头');
+  await expect(old).toHaveCount(0);
+  await dialog.getByRole('checkbox', { name: /^补做镜头跟随/ }).check();
+  await dialog.getByRole('button', { name: '保存关联' }).click();
+  await expect(todayLinks.getByRole('link')).toHaveCount(2);
+
+  await page.goto('/#history/' + oldDate);
+  const historyLinks = page.getByRole('region', { name: '历史回顾', exact: true }).getByRole('region', { name: '关联任务' });
+  await historyLinks.getByRole('button', { name: '选择任务' }).click();
+  await old.check();
+  await dialog.getByRole('button', { name: '保存关联' }).click();
+  await historyLinks.getByRole('link', { name: '旧任务' }).click();
+  const task = topic.locator('[data-task-focus]');
+  await task.getByRole('button', { name: '编辑', exact: true }).click();
+  await task.getByLabel('任务名称').fill('复习角色移动');
+  await task.getByRole('button', { name: '保存', exact: true }).click();
+  await task.getByRole('checkbox', { name: '完成任务：复习角色移动' }).check();
+  await task.getByText('学习日志（2）', { exact: true }).click();
+  await task.getByRole('link', { name: /角色移动笔记/ }).click();
+  await expect(page.getByLabel('定位学习日期')).toHaveValue(oldDate);
+  await expect(historyLinks.getByRole('link', { name: '复习角色移动' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '角色移动笔记' })).toBeVisible();
+
+  await page.getByRole('link', { name: '数据管理', exact: true }).click();
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: '导出完整备份' }).click();
+  const backup = JSON.parse(await readFile((await (await download).path())!, 'utf8'));
+  expect(backup.data.studyLogs.find((log: { date: string }) => log.date === oldDate).taskIds).toEqual(['task-one']);
+  const context = await browser.newContext();
+  try {
+    const restored = await context.newPage();
+    await restored.goto('/#data');
+    await restored.getByLabel('选择备份文件', { exact: true }).setInputFiles({
+      name: 'task-log-backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)),
+    });
+    await Promise.all([restored.waitForEvent('load'), restored.getByRole('button', { name: '确认恢复并刷新' }).click()]);
+    await restored.goto('/#path/topics?task=task-one');
+    const restoredTask = restored.locator('[data-task-focus]');
+    await expect(restoredTask).toContainText('复习角色移动');
+    await restoredTask.getByText('学习日志（2）', { exact: true }).click();
+    await restoredTask.getByRole('link', { name: /角色移动笔记/ }).click();
+    await expect(restored.getByLabel('定位学习日期')).toHaveValue(oldDate);
+    await expect(restored.getByRole('region', { name: '关联任务' }).getByRole('link', { name: '复习角色移动' })).toBeVisible();
+  } finally { await context.close(); }
+});
+
+test('删除任务或主题会解除日志关联，写入失败时回退', async ({ page }) => {
+  await seedLearning(page);
+  await page.goto('/#path/topics?task=task-one');
+  await expect(page.locator('[data-task-focus]')).toContainText('旧任务');
+  await page.evaluate((date) => {
+    const key = 'learning-assistant:study-logs';
+    const logs = JSON.parse(localStorage.getItem(key)!);
+    const log = logs.find((item: { date: string }) => item.date === date);
+    log.taskIds = ['task-one'];
+    localStorage.setItem(key, JSON.stringify(logs));
+  }, oldDate);
+  await page.reload();
+  const task = page.locator('[data-task-focus]');
+  const topic = page.getByRole('article', { name: 'Unity 核心工作流', exact: true });
+  await expect(task.getByText('学习日志（1）')).toBeVisible();
+  await task.getByRole('button', { name: '删除', exact: true }).click();
+  await page.evaluate(() => {
+    const set = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'learning-assistant:study-logs') {
+        Storage.prototype.setItem = set;
+        throw new Error('模拟日志写入失败');
+      }
+      return set.call(this, key, value);
+    };
+  });
+  const deletion = page.getByRole('dialog', { name: '删除任务' });
+  await deletion.getByRole('button', { name: '确认删除' }).click();
+  await expect(deletion.getByRole('alert')).toHaveText('删除任务失败，请重试。');
+  await expect(task.getByText('学习日志（1）')).toBeVisible();
+  await deletion.getByRole('button', { name: '取消', exact: true }).click();
+  await topic.getByRole('button', { name: '删除主题' }).click();
+  await page.getByRole('dialog', { name: '删除主题' }).getByRole('button', { name: '确认删除' }).click();
+  await expect(topic).toHaveCount(0);
+  await page.goto('/#history/' + oldDate);
+  await expect(page.getByRole('heading', { name: '角色移动笔记' })).toBeVisible();
+  await expect(page.getByRole('link', { name: '去参考路径添加任务' })).toBeVisible();
+  expect(await page.evaluate((date) => JSON.parse(localStorage.getItem('learning-assistant:study-logs')!)
+    .find((item: { date: string }) => item.date === date).taskIds, oldDate)).toBeUndefined();
+});
+
 test('参考主题可增改删，主题、任务、完成标记和引用可随备份恢复', async ({ page, browser }) => {
   await seedLearning(page);
   await page.goto('/#path/topics');

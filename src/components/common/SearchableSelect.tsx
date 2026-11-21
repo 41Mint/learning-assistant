@@ -1,30 +1,32 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { matchesWords, searchWords } from '../../utils/resourceSearch';
 
-export default function SearchableSelect({ label, placeholder, options, value, onChange }: {
+export default function SearchableSelect({ label, placeholder, options, value, onChange, allowCustomValue = false }: {
   label: string;
   placeholder: string;
   options: { id: string; label: string; fields?: string[] }[];
   value: string;
   onChange: (id: string) => void;
+  allowCustomValue?: boolean;
 }) {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState<string>();
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
-  const words = searchWords(query);
+  const words = searchWords(query ?? '');
   const matches = options.filter(({ label, fields = [] }) => matchesWords([label, ...fields], words));
   const selected = options.find((option) => option.id === value);
-  const choices = selected && !words.length ? [{ id: '', label: '清除选择' }, ...matches] : matches;
+  const displayedValue = selected?.label ?? (allowCustomValue ? value : '');
+  const choices = displayedValue && !words.length ? [{ id: '', label: '清除选择' }, ...matches] : matches;
   const activeIndex = choices.findIndex((option) => option.id === highlight);
   const choose = (next: string) => {
     onChange(next);
     setOpen(false);
   };
   const show = () => {
-    setQuery('');
+    setQuery(null);
     setHighlight(value || undefined);
     setOpen(true);
   };
@@ -68,15 +70,16 @@ export default function SearchableSelect({ label, placeholder, options, value, o
       <input ref={input} id={id} className="workspace-input" type="text" role="combobox" autoComplete="off"
         aria-expanded={open} aria-controls={`${id}-options`} aria-autocomplete="list"
         aria-activedescendant={open && activeIndex >= 0 ? `${id}-option-${activeIndex}` : undefined}
-        value={open ? query : selected?.label ?? ''} placeholder={placeholder}
+        value={open ? query ?? (allowCustomValue ? displayedValue : '') : displayedValue} placeholder={placeholder}
         onFocus={show} onClick={() => { if (!open) show(); }} onBlur={() => setOpen(false)}
         onChange={(event) => {
           setOpen(true);
           setHighlight(undefined);
           setQuery(event.target.value);
+          if (allowCustomValue) onChange(event.target.value);
         }}
         onKeyDown={(event) => {
-          if (event.nativeEvent.isComposing) return;
+          if (event.nativeEvent.isComposing || event.keyCode === 229) return;
           if (event.key === 'Escape' && open) {
             event.preventDefault();
             event.stopPropagation();
@@ -93,8 +96,9 @@ export default function SearchableSelect({ label, placeholder, options, value, o
             }
           } else if (event.key === 'Enter' && open) {
             event.preventDefault();
-            const match = choices[activeIndex] ?? (matches.length === 1 ? matches[0] : undefined);
+            const match = choices[activeIndex] ?? (!allowCustomValue && matches.length === 1 ? matches[0] : undefined);
             if (match) choose(match.id);
+            else if (allowCustomValue) setOpen(false);
           }
         }} />
       <span aria-hidden="true" className="searchable-select-chevron">⌄</span>
@@ -103,7 +107,8 @@ export default function SearchableSelect({ label, placeholder, options, value, o
       {choices.map((option, index) => <div role="option" key={option.id} id={`${id}-option-${index}`}
         aria-selected={option.id === value} data-highlighted={option.id === highlight || undefined}
         onMouseDown={(event) => event.preventDefault()} onClick={() => choose(option.id)}>{option.label}</div>)}
-      {matches.length === 0 && <div role="status" className="knowledge-muted">{words.length ? '没有匹配的资料。' : '暂无可选资料。'}</div>}
+      {matches.length === 0 && <div role="status" className="knowledge-muted">{allowCustomValue
+        ? '可直接填写新分类。' : words.length ? '没有匹配的资料。' : '暂无可选资料。'}</div>}
     </div>
   </div>;
 }

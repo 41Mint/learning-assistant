@@ -48,8 +48,9 @@ export function readWorkspaceHash() {
       ? { outcomeId: id, practiceId: decodedDetail } : null;
     const growthView: GrowthView = page === 'path' && (id === 'try' || (!decodedDetail && id === 'topics')) ? id
       : groupId && !id && params.get('view') === 'all' ? 'all' : 'recent';
-    return { page, id, search, relation, growthView, groupId, cardId, exerciseId, practiceTarget, recycleCategory };
-  } catch { return { page, id: '', search: null, relation: null, growthView: 'recent' as GrowthView, groupId: null, cardId: null, exerciseId: null, practiceTarget: null, recycleCategory }; }
+    const topicTaskId = growthView === 'topics' ? params.get('task') : null;
+    return { page, id, search, relation, growthView, groupId, cardId, exerciseId, practiceTarget, recycleCategory, topicTaskId };
+  } catch { return { page, id: '', search: null, relation: null, growthView: 'recent' as GrowthView, groupId: null, cardId: null, exerciseId: null, practiceTarget: null, recycleCategory, topicTaskId: null }; }
 }
 const initial = readWorkspaceHash();
 const isDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(new Date(`${value}T12:00:00`).getTime());
@@ -79,6 +80,10 @@ export function exerciseHref(id: string, groupId?: string) {
   return '#path/try/' + encodeURIComponent(id) + (groupId ? '?' + new URLSearchParams({ group: groupId }) : '');
 }
 
+export function topicTaskHref(taskId: string) {
+  return '#path/topics?' + new URLSearchParams({ task: taskId });
+}
+
 export function relationHref({ kind, id }: RelationNodeRef): string {
   return '#relations/' + kind + '/' + encodeURIComponent(id);
 }
@@ -106,6 +111,7 @@ interface WorkspaceStore {
   growthCardId: string | null;
   growthExerciseId: string | null;
   growthView: GrowthView;
+  topicTaskId: string | null;
   recycleCategory: RecycleCategory;
   search: SearchLocation | null;
   relationTarget: RelationNodeRef | null;
@@ -125,13 +131,14 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   growthCardId: initial.cardId,
   growthExerciseId: initial.exerciseId,
   growthView: initial.growthView,
+  topicTaskId: initial.topicTaskId,
   recycleCategory: initial.recycleCategory,
   search: initial.search,
   relationTarget: initial.relation,
   networkEntryRequest: initial.page === 'network' && initial.id ? { id: initial.id } : null,
   syncHash: () => {
-    const { page, id, search, relation, growthView, groupId, cardId, exerciseId, practiceTarget, recycleCategory } = readWorkspaceHash();
-    const selection: Partial<WorkspaceStore> = { search, relationTarget: relation, codeCitationRange: readCodeCitation(window.location.hash)?.range };
+    const { page, id, search, relation, growthView, groupId, cardId, exerciseId, practiceTarget, recycleCategory, topicTaskId } = readWorkspaceHash();
+    const selection: Partial<WorkspaceStore> = { search, relationTarget: relation, codeCitationRange: readCodeCitation(window.location.hash)?.range, topicTaskId };
     if (page === 'network' && id && window.history.state?.knowledgeNetworkEntry !== id) {
       // Back and Forward revisit an existing entry, while a new link requests focus.
       window.history.replaceState({ ...window.history.state, knowledgeNetworkEntry: id }, '');

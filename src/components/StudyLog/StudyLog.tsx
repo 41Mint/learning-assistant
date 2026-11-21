@@ -7,6 +7,7 @@ import RelationLink from '../Relations/RelationLink';
 import { useStudyLogStore } from '../../store/studyLogStore';
 import LogContentEditor from './LogContentEditor';
 import LogMetadataField from './LogMetadataField';
+import LogTaskLinks from './LogTaskLinks';
 import type { LogEditingProps } from './LogContentEditor';
 import TrashLogButton from './TrashLogButton';
 import { getTodayDate, STORAGE_KEYS } from '../../utils/storage';
@@ -78,6 +79,7 @@ export default function StudyLog({ draft, setDraft }: LogEditingProps) {
         } />
         {message && <p role="status">{message}</p>}
         {importNotice}
+        <LogTaskLinks key={currentLog.id + '-tasks'} log={currentLog} />
         <KnowledgeLinks logId={currentLog.id} legacyPoints={currentLog.knowledgePoints} />
         <CodeLinksPanel key={currentLog.id + '-code'} target={{ kind: 'log', id: currentLog.id }} title="项目代码" />
 

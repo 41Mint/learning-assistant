@@ -1,17 +1,23 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { LearningTask } from '../../types';
 import { useCurrentGoalStore } from '../../store/currentGoalStore';
 import { useTaskStore } from '../../store/taskStore';
+import { useStudyLogStore } from '../../store/studyLogStore';
+import { workspaceResourceTarget } from '../../store/workspaceStore';
+import { logLabel } from '../../utils/growth';
 import TaskFields from './TaskFields';
 import WorkspaceDialog from '../common/WorkspaceDialog';
 
 interface SkillTasksProps {
   skillId: string;
+  focusedTaskId?: string;
 }
 
-export default function SkillTasks({ skillId }: SkillTasksProps) {
+export default function SkillTasks({ skillId, focusedTaskId }: SkillTasksProps) {
   const { tasks, isLoaded, addTask, updateTask, toggleTask, deleteTask } = useTaskStore();
   const { goal, setCurrentGoal, clearCurrentGoal } = useCurrentGoalStore();
+  const logs = useStudyLogStore((state) => state.logs);
+  const focusedTask = useRef<HTMLLIElement>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [adding, setAdding] = useState(false);
@@ -25,6 +31,18 @@ export default function SkillTasks({ skillId }: SkillTasksProps) {
   const pendingTasks = skillTasks.filter((task) => !task.completed);
   const completedTasks = skillTasks.filter((task) => task.completed);
   const deleting = skillTasks.find(({ id }) => id === deletingId);
+  const hasCompletedFocus = completedTasks.some(({ id }) => id === focusedTaskId);
+  useEffect(() => {
+    if (!focusedTaskId) return;
+    const frame = window.requestAnimationFrame(() => {
+      const item = focusedTask.current;
+      if (item?.getClientRects().length) {
+        item.focus({ preventScroll: true });
+        item.scrollIntoView({ block: 'nearest' });
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusedTaskId, hasCompletedFocus]);
 
   const handleAdd = () => {
     if (!title.trim()) return;
@@ -68,7 +86,10 @@ export default function SkillTasks({ skillId }: SkillTasksProps) {
 
   const renderTask = (task: LearningTask) => {
     const currentGoal = goal?.type === 'task' && goal.id === task.id;
-    return <li key={task.id} className="topic-task" data-completed={task.completed || undefined}>
+    const related = logs.filter((log) => log.taskIds?.includes(task.id)).sort((a, b) => b.date.localeCompare(a.date));
+    const focused = focusedTaskId === task.id;
+    return <li key={task.id} className="topic-task" data-completed={task.completed || undefined}
+      ref={focused ? focusedTask : undefined} tabIndex={focused ? -1 : undefined} data-task-focus={focused || undefined}>
       {editingTaskId === task.id ? (
         <form className="growth-task-form topic-task-editor" data-preserves-on-navigation onSubmit={(event) => {
           event.preventDefault();
@@ -87,6 +108,13 @@ export default function SkillTasks({ skillId }: SkillTasksProps) {
           <div className="topic-task-content">
             <p className="topic-task-title">{task.title}</p>
             {task.description && <p className="topic-task-description">{task.description}</p>}
+            {related.length > 0 && <details className="topic-task-logs">
+              <summary>学习日志（{related.length}）</summary>
+              <ul>{related.map((log) => {
+                const href = `#history/${log.date}`;
+                return <li key={log.id}><a href={href} {...workspaceResourceTarget(href)}>{logLabel(log)}</a></li>;
+              })}</ul>
+            </details>}
           </div>
           <div className="topic-task-actions">
             {!task.completed && <button type="button" className="workspace-button" data-active={currentGoal || undefined}
@@ -110,7 +138,7 @@ export default function SkillTasks({ skillId }: SkillTasksProps) {
         <p>待完成（{pendingTasks.length}）</p>
         <ul className="topic-task-items">{pendingTasks.map(renderTask)}</ul>
       </div>}
-      {completedTasks.length > 0 && <details className="topic-task-section">
+      {completedTasks.length > 0 && <details className="topic-task-section" open={hasCompletedFocus || undefined}>
         <summary>已完成（{completedTasks.length}）</summary>
         <ul className="topic-task-items">{completedTasks.map(renderTask)}</ul>
       </details>}
@@ -127,6 +155,7 @@ export default function SkillTasks({ skillId }: SkillTasksProps) {
       {deleting && <WorkspaceDialog title="删除任务" action="确认删除" destructive
         onClose={() => setDeletingId(undefined)} onSave={() => deleteTask(deleting.id)}>
         <p>删除「{deleting.title}」？此操作无法恢复。</p>
+        <p>关联的学习日志会保留，任务关联会解除。</p>
         {goal?.type === 'task' && goal.id === deleting.id && <p>这项任务是当前学习目标，删除时会同时清除该目标。</p>}
       </WorkspaceDialog>}
     </div>
