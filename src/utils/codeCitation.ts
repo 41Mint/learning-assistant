@@ -1,4 +1,5 @@
 import { codeVersionHref } from './projectCode';
+import { markdownReferenceLink } from './markdownEditing';
 
 export interface CodeLineRange { startLine: number; endLine: number }
 
@@ -19,8 +20,7 @@ export function readCodeCitation(href: string) {
 }
 
 export function codeCitationMarkdown(id: string, label: string, range?: CodeLineRange) {
-  const caption = label.replace(/\s+/g, ' ').replace(/[\\[\]`*_~<>!&]/g, '\\$&');
-  return `[${caption}](<${codeVersionHref(id)}?cite=1${range ? `&lines=${range.startLine}-${range.endLine}` : ''}>)`;
+  return markdownReferenceLink(label, `${codeVersionHref(id)}?cite=1${range ? `&lines=${range.startLine}-${range.endLine}` : ''}`);
 }
 
 export function scriptMarkdown(text: string) {

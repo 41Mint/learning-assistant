@@ -52,10 +52,14 @@
 
 ## Markdown 编辑与代码显示
 
-日志和词条共用 `MarkdownFields`。插入引用的折叠区与正文标签之间留出分组间距。仅显示图标的工具按钮提供可访问名称和悬停提示。格式按钮应用到当前选区或光标所在行，预览时为禁用状态。插入学习日志或代码引用后回到源码和插入位置。格式操作在浏览器支持时进入原生撤销栈。[Markdown 编辑组件](../src/components/common/MarkdownFields.tsx) · [浏览器编辑历史](https://developer.mozilla.org/en-US/docs/Web/API/Document/execCommand)
+日志和词条共用 `MarkdownFields`。仅显示图标的工具按钮提供可访问名称和悬停提示。格式按钮应用到当前选区或光标所在行，预览时为禁用状态。插入引用后回到源码和插入位置。格式操作在浏览器支持时进入原生撤销栈。[Markdown 编辑组件](../src/components/common/MarkdownFields.tsx) · [浏览器编辑历史](https://developer.mozilla.org/en-US/docs/Web/API/Document/execCommand)
+
+今日和历史日志的源码工具栏「插入」与编辑区右键共用一个纵向面板。面板紧邻图标或右键位置，靠近视口边缘时调整位置和高度。在原面板内切换插入选项和搜索，候选复用 `SearchableSelect` 的行内列表。选中文字用作初始关键词，Esc 恢复原选区和编辑焦点。Shift 加右键可打开浏览器菜单。正文词条引用继承正文颜色并用虚线下划线标识，仍可通过 Tab 聚焦和激活。日志的知识关联由关联区单独管理。[引用选项](../src/components/StudyLog/LogReferenceChoices.tsx)
 
 H2 位于格式工具末尾。空白足够时，鼠标悬停或 Tab 聚焦可向右展开其他标题级别，鼠标移出整组后收起。桌面可直接点 H2 应用二级标题。触屏点按展开，空间不足时在原工具栏内选择 H1～H6。键盘焦点在标题组内时，Esc 收起并将焦点交还给 H2。选择级别会应用到光标所在行或选中的行，重复选择同一级别可恢复正文。横向展开沿用全局动效设置。[Markdown 工具栏](../src/components/common/MarkdownToolbar.tsx)
 
 「源码」和「预览」在同一编辑区切换，各自记住滚动位置，源码保留选区。预览图按比例限宽限高，普通图片可点击查看原图。编辑区域右下角的拖动手柄与滚动条分开，支持鼠标和触屏拖动、方向键调整以及 Enter 恢复默认高度。两种模式共用高度，宽度跟随页面布局。验收时检查长文、截图、模式切换和窄屏。[Markdown 编辑组件](../src/components/common/MarkdownFields.tsx)
 
-代码块、项目快照与正文引用预览统一使用基于 [One Monokai](https://github.com/azemoh/vscode-one-monokai) 的 Highlight.js 颜色和本地打包的 [Fira Code](https://github.com/tonsky/FiraCode) 网页字体。代码区域保持同一套配色，不改变应用明暗主题。代码引用可用鼠标或 Tab 预览，也可直接激活链接跳转。
+词条引用和代码引用共用轻量的预览浮层。鼠标悬停或 Tab 聚焦时打开，Esc 收起，激活原链接查看详情。词条预览展示标题、分类和正文摘录。浮层使用应用的主题表面，贴近链接并避开视口边缘。[引用预览](../src/components/common/CitationPreviewLink.tsx)
+
+Markdown 代码块、项目快照与代码引用预览共用语法高亮、行号和定位颜色变量。日间用浅底与深色高亮，夜间沿用基于 [One Monokai](https://github.com/azemoh/vscode-one-monokai) 的配色。两种主题共用本地打包的 [Fira Code](https://github.com/tonsky/FiraCode) 字体。验收时切换明暗主题，检查代码片段、行号与引用范围。[全局样式](../src/index.css)

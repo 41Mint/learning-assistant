@@ -11,7 +11,9 @@ import { rehypeSearchMatches } from '../../utils/rehypeSearchMatches';
 import { rehypeCodeLines } from '../../utils/rehypeCodeLines';
 import { readCodeCitation } from '../../utils/codeCitation';
 import type { CodeLineRange } from '../../utils/codeCitation';
+import { readEntryCitation } from '../../utils/entryCitation';
 import CodeCitationLink from './CodeCitationLink';
+import EntryCitationLink from './EntryCitationLink';
 import NoteImage from './NoteImage';
 
 export type MarkdownLinkRenderer = (href: string) => ReactNode;
@@ -59,6 +61,8 @@ const markdownComponents: Components = {
     if (rendered) return rendered;
     const citation = href && readCodeCitation(href);
     if (citation) return <CodeCitationLink href={href} {...citation}><InsideMarkdownLink.Provider value>{children}</InsideMarkdownLink.Provider></CodeCitationLink>;
+    const entryId = href && readEntryCitation(href);
+    if (entryId) return <EntryCitationLink href={href} id={entryId}><InsideMarkdownLink.Provider value>{children}</InsideMarkdownLink.Provider></EntryCitationLink>;
     if (href && /^https?:\/\//i.test(href)) return <a href={href} target="_blank" rel="noreferrer"><InsideMarkdownLink.Provider value>{children}</InsideMarkdownLink.Provider></a>;
     if (href?.startsWith('#')) return <a href={href}><InsideMarkdownLink.Provider value>{children}</InsideMarkdownLink.Provider></a>;
     return <span title={`本地来源 ${href ?? ''}，请在原资料目录查看`}>{children} <small>（本地资料）</small></span>;

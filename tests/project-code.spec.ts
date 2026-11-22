@@ -640,6 +640,7 @@ test('目录导入保留取消前的预览，保存前不读脚本正文，版�
 });
 
 test('日志引用固定代码版本，可预览行号、跳到整段并在新版保存后仍读旧版', async ({ page, browser }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
   await seedStudyContext(page);
   await page.goto('/#history/' + firstDate);
   const { panel, form } = await openLogCodeForm(page);
@@ -654,7 +655,8 @@ test('日志引用固定代码版本，可预览行号、跳到整段并在新�
   const body = editor.getByLabel('历史学习内容', { exact: true });
   await body.fill('看看输入设置。 ');
   await body.press('End');
-  await editor.getByText('插入代码引用', { exact: true }).click();
+  await editor.getByRole('button', { name: '插入', exact: true }).click();
+  await editor.getByRole('button', { name: '引用项目代码' }).click();
   await editor.getByRole('combobox', { name: '引用代码版本' }).fill('Day 03');
   await editor.getByRole('option', { name: /Day 03/ }).click();
   await editor.getByLabel('链接文字（可选）').fill('Update()');
@@ -663,10 +665,12 @@ test('日志引用固定代码版本，可预览行号、跳到整段并在新�
   await end.fill('999');
   await expect(editor.getByRole('button', { name: '插入到正文' })).toBeDisabled();
   await end.fill('3');
-  await editor.getByRole('button', { name: '预览', exact: true }).click();
   await editor.getByRole('button', { name: '插入到正文' }).click();
   await expect(body).toBeFocused();
   await expect(body).toHaveValue('看看输入设置。 [Update()](<' + href + '?cite=1&lines=2-3>)');
+  await editor.getByRole('button', { name: '预览', exact: true }).click();
+  await expect(editor.getByRole('link', { name: 'Update()', exact: true })).toBeVisible();
+  await expect(editor.getByRole('button', { name: '插入', exact: true })).toBeDisabled();
   await editor.getByRole('button', { name: '保存补充' }).click();
   await page.reload();
 
@@ -674,6 +678,9 @@ test('日志引用固定代码版本，可预览行号、跳到整段并在新�
   await reference.hover();
   const preview = page.getByRole('tooltip');
   await expect(preview).toContainText('Day 03 · 读取输入');
+  await expect(preview).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(preview.locator('pre')).toHaveCSS('background-color', 'rgb(244, 246, 250)');
+  await expect(preview.locator('.hljs-number')).toHaveCSS('color', 'rgb(118, 44, 161)');
   await expect(preview.locator('[data-code-line]')).toHaveCount(2);
   await expect(preview.locator('[data-code-line="2"]')).toContainText('hits = 1');
   await expect(preview.locator('code')).toHaveCSS('font-family', /Fira Code/);
@@ -687,8 +694,16 @@ test('日志引用固定代码版本，可预览行号、跳到整段并在新�
   await reference.focus();
   await expect(preview).toBeVisible();
   await reference.press('Enter');
-  await expect(page.getByRole('region', { name: '脚本快照' }).locator('[data-code-cited="true"]')).toHaveCount(2);
+  const snapshot = page.getByRole('region', { name: '脚本快照' });
+  await expect(snapshot.locator('[data-code-cited="true"]')).toHaveCount(2);
   await expect(page.locator('[data-code-line="2"]')).toContainText('hits = 1');
+  await expect(snapshot.locator('pre')).toHaveCSS('background-color', 'rgb(244, 246, 250)');
+  await expect(snapshot.locator('.hljs-number')).toHaveCSS('color', 'rgb(118, 44, 161)');
+  await expect(snapshot.locator('[data-code-line="2"]')).toHaveCSS('background-color', 'rgb(222, 235, 255)');
+  await page.getByRole('button', { name: '切换到夜间主题' }).click();
+  await expect(snapshot.locator('pre')).toHaveCSS('background-color', 'rgb(40, 44, 52)');
+  await expect(snapshot.locator('.hljs-number')).toHaveCSS('color', 'rgb(198, 120, 221)');
+  await expect(snapshot.locator('[data-code-line="2"]')).toHaveCSS('background-color', 'rgb(49, 67, 101)');
   await page.evaluate(() => {
     Object.defineProperty(navigator.clipboard, 'writeText', { configurable: true, value: async (value: string) => {
       sessionStorage.setItem('copied-code-reference', value);
@@ -704,6 +719,10 @@ test('日志引用固定代码版本，可预览行号、跳到整段并在新�
   await newer.getByRole('button', { name: '保存版本', exact: true }).click();
   await expect(page.getByRole('region', { name: '脚本快照' }).locator('code')).toContainText('hits = 2');
   await page.goto('/#history/' + firstDate);
+  await reference.hover();
+  await expect(preview).toHaveCSS('background-color', 'rgb(30, 41, 59)');
+  await expect(preview.locator('pre')).toHaveCSS('background-color', 'rgb(40, 44, 52)');
+  await expect(preview.locator('.hljs-number')).toHaveCSS('color', 'rgb(198, 120, 221)');
   await reference.click();
   await expect(page.locator('[data-code-line="2"][data-code-cited]')).toContainText('hits = 1');
   await expect(page.getByRole('region', { name: '引用记录' }).getByRole('link', { name: /学习日志/ })).toHaveCount(1);

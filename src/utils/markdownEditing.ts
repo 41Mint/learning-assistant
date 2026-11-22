@@ -108,3 +108,8 @@ export function formatMarkdown(source: string, start: number, end: number, forma
       return formatLines(source, start, end, format, headingLevel);
   }
 }
+
+export function markdownReferenceLink(label: string, href: string) {
+  const caption = label.replace(/\s+/g, ' ').replace(/[\\[\]`*_~<>!&]/g, '\\$&');
+  return `[${caption}](<${href}>)`;
+}

@@ -8,9 +8,8 @@ import { useStudyLogStore } from '../../store/studyLogStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import FocusEditor from '../common/FocusEditor';
 import MarkdownFields from '../common/MarkdownFields';
-import type { MarkdownEditorHandle } from '../common/MarkdownFields';
 import LogReviewPanel from './LogReviewPanel';
-import LogCodeCitationPicker from './LogCodeCitationPicker';
+import LogReferenceChoices from './LogReferenceChoices';
 import { AssistantSlots } from '../Assistant/assistantSlots';
 import { isEmptyLogContent } from '../../utils/studyLogs';
 import { imageMarkdown, prepareImageFile, referencedImageIds, saveWithImages } from '../../utils/imageStorage';
@@ -32,9 +31,6 @@ export default function LogContentEditor({ log, kind, creating = false, onClose 
   const [images, setImages] = useState<StoredImage[]>([]);
   const [operation, setOperation] = useState<'pasting' | 'saving'>();
   const inProgress = useRef(false);
-  const editor = useRef<MarkdownEditorHandle>(null);
-  const citationPicker = useRef<HTMLDetailsElement>(null);
-  const [citationVisited, setCitationVisited] = useState(false);
   const [review, setReview] = useState<{ selected: LogReviewSuggestion[]; sourceText: string }>();
   const updateLogContent = useStudyLogStore((state) => state.updateLogContent);
   const slots = useContext(AssistantSlots);
@@ -45,11 +41,6 @@ export default function LogContentEditor({ log, kind, creating = false, onClose 
 
   useEffect(() => { setLogDraft(kind, { id: log.id, date: log.date, text: content }); }, [kind, log.id, log.date, content, setLogDraft]);
   useEffect(() => () => setLogDraft(kind), [kind, setLogDraft]);
-
-  const insertCitation = (markdown: string) => {
-    if (inProgress.current || !editor.current?.insertAfterSelection(markdown, ' ')) return;
-    if (citationPicker.current) citationPicker.current.open = false;
-  };
 
   const pasteImages = async (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const clipboard = event.clipboardData;
@@ -114,12 +105,9 @@ export default function LogContentEditor({ log, kind, creating = false, onClose 
       <FocusEditor title={today ? '编辑今日记录' : '编辑历史记录'} description={log.date + ' · 支持 Markdown 和直接粘贴截图。'}
         formLabel={today ? '今日记录编辑表单' : '历史记录编辑表单'} saveLabel={today ? '保存记录' : '保存补充'}
         saveDisabled={emptyDraft || operation === 'pasting'} busy={operation === 'saving'} error={error} onSave={() => void save()} onCancel={() => onClose(false)}>
-        <details ref={citationPicker} className="log-code-citation" onToggle={(event) => { if (event.currentTarget.open) setCitationVisited(true); }}>
-          <summary>插入代码引用</summary>
-          {citationVisited && <LogCodeCitationPicker onInsert={insertCitation} />}
-        </details>
-        <MarkdownFields editorRef={editor} id={today ? 'study-log-content' : 'history-content'} label={today ? '学习内容（Markdown）' : '历史学习内容'}
+        <MarkdownFields id={today ? 'study-log-content' : 'history-content'} label={today ? '学习内容（Markdown）' : '历史学习内容'}
           previewLabel={today ? '学习内容预览' : '历史学习内容预览'} value={content} onChange={setContent}
+          InsertOptions={LogReferenceChoices}
           placeholder="记录这次学习的内容、疑问或尝试。" images={images} readOnly={Boolean(operation)} onPaste={(event) => void pasteImages(event)} />
         {operation === 'pasting' && <p className="knowledge-muted" role="status">正在读取截图…</p>}
         {!!review?.selected.length && <p className="knowledge-muted">

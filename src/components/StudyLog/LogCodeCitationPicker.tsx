@@ -5,7 +5,7 @@ import { codeCitationMarkdown, parseCodeLines } from '../../utils/codeCitation';
 import { codeVersionLabel } from '../../utils/projectCode';
 import SearchableSelect from '../common/SearchableSelect';
 
-export default function LogCodeCitationPicker({ onInsert }: { onInsert: (markdown: string) => void }) {
+export default function LogCodeCitationPicker({ initialQuery, onInsert }: { initialQuery: string; onInsert: (markdown: string) => void }) {
   const { data, isLoaded, error, load } = useProjectCodeStore();
   const [id, setId] = useState('');
   const [start, setStart] = useState('');
@@ -19,7 +19,7 @@ export default function LogCodeCitationPicker({ onInsert }: { onInsert: (markdow
   return <div className="code-form">
     {error && <p role="alert">{error}</p>}
     {isLoaded && !error && data.versions.length === 0 && <p>请先在项目代码中保存一个版本。</p>}
-    <SearchableSelect label="引用代码版本" placeholder="按文件、项目或版本说明筛选" value={id}
+    <SearchableSelect inline={{ initialQuery }} label="引用代码版本" placeholder="按文件、项目或版本说明筛选" value={id}
       options={data.versions.map((item) => ({ id: item.id, label: codeVersionLabel(item, data.projects.find((project) => project.id === item.projectId)?.name) }))}
       onChange={(next) => { setId(next); setStart(''); setEnd(''); }} />
     {version && <label>链接文字（可选）<input value={label} maxLength={120} onChange={(event) => setLabel(event.target.value)} placeholder="例如 Update()" /></label>}

@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { HeadingLevel, MarkdownFormat } from '../../utils/markdownEditing';
 import SegmentedControl from './SegmentedControl';
 
@@ -15,11 +16,12 @@ interface MarkdownToolbarProps {
   previewId?: string;
   mode: 'source' | 'preview';
   readOnly?: boolean;
+  sourceTools?: ReactNode;
   onModeChange: (mode: 'source' | 'preview') => void;
   onFormat: (command: MarkdownFormat, headingLevel?: HeadingLevel) => void;
 }
 
-export default function MarkdownToolbar({ sourceId, previewId, mode, readOnly, onModeChange, onFormat }: MarkdownToolbarProps) {
+export default function MarkdownToolbar({ sourceId, previewId, mode, readOnly, sourceTools, onModeChange, onFormat }: MarkdownToolbarProps) {
   const [hasRoom, setHasRoom] = useState(false);
   const [openedBy, setOpenedBy] = useState<'automatic' | 'press'>();
   const slot = useRef<HTMLDivElement>(null);
@@ -92,7 +94,7 @@ export default function MarkdownToolbar({ sourceId, previewId, mode, readOnly, o
 
   return <div className="markdown-editor-bar">
     <div className="markdown-formatting" role="group" aria-label="Markdown 格式" data-choosing-heading={compactOpen || undefined}>
-      {formatGroups.map((tools) => <div className="markdown-format-group" key={tools[0][0]} inert={compactOpen}>
+      {formatGroups.map((tools, index) => <div className="markdown-format-group" key={tools[0][0]} inert={compactOpen}>
         {tools.map(([command, name, symbol]) => <button key={command} type="button" className="markdown-format-button"
           data-format={command} aria-label={name} title={name} disabled={disabled}
           onMouseDown={(event) => event.preventDefault()} onClick={() => onFormat(command)}>{symbol ?? (
@@ -100,6 +102,7 @@ export default function MarkdownToolbar({ sourceId, previewId, mode, readOnly, o
               <path d="M10 13.5a4 4 0 0 0 5.7 0l3.4-3.4a4 4 0 0 0-5.7-5.7l-1.7 1.7m2.3 4.4a4 4 0 0 0-5.7 0l-3.4 3.4a4 4 0 0 0 5.7 5.7l1.7-1.7" />
             </svg>
           )}</button>)}
+        {index === 0 && sourceTools}
       </div>)}
       <div className="markdown-heading-slot" ref={slot}>
         <div className="markdown-heading-picker" ref={picker} data-compact={compactOpen || undefined}

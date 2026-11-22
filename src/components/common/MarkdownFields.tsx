@@ -1,5 +1,5 @@
 import { useCallback, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { ClipboardEventHandler, Ref } from 'react';
+import type { ClipboardEventHandler, ComponentType, Ref } from 'react';
 import type { StoredImage } from '../../utils/imageStorage';
 import { formatMarkdown } from '../../utils/markdownEditing';
 import type { HeadingLevel, MarkdownEdit, MarkdownFormat } from '../../utils/markdownEditing';
@@ -23,11 +23,20 @@ interface MarkdownFieldsProps {
   onPaste?: ClipboardEventHandler<HTMLTextAreaElement>;
   editorRef?: Ref<MarkdownEditorHandle>;
   renderLink?: MarkdownLinkRenderer;
+  InsertOptions?: ComponentType<{ selectedText: string; insert: (text: string, afterSelectionSeparator?: string) => void }>;
 }
 
 type PreviewDraft = Pick<MarkdownFieldsProps, 'value' | 'images' | 'renderLink'>;
+interface Insertion {
+  start: number;
+  end: number;
+  direction: HTMLTextAreaElement['selectionDirection'];
+  value: string;
+  source: HTMLElement;
+  point?: { x: number; y: number };
+}
 
-export default function MarkdownFields({ id, label, previewLabel, value, onChange, placeholder, images, readOnly, onPaste, editorRef, renderLink }: MarkdownFieldsProps) {
+export default function MarkdownFields({ id, label, previewLabel, value, onChange, placeholder, images, readOnly, onPaste, editorRef, renderLink, InsertOptions }: MarkdownFieldsProps) {
   const [mode, setMode] = useState<'source' | 'preview'>('source');
   const [previewDraft, setPreviewDraft] = useState<PreviewDraft>();
   const [height, setHeight] = useState<number>();
@@ -35,7 +44,10 @@ export default function MarkdownFields({ id, label, previewLabel, value, onChang
   const area = useRef<HTMLDivElement>(null);
   const resizing = useRef<{ pointerId: number; y: number; height: number }>(undefined);
   const pending = useRef<MarkdownEdit>(undefined);
+  const panel = useRef<HTMLDivElement>(null);
+  const [insertion, setInsertion] = useState<Insertion>();
   const isPreview = mode === 'preview';
+  const insertId = `${id}-insert`;
   const previewId = `${id}-preview`;
   const preview = isPreview ? { value, images, renderLink } : previewDraft;
   const { value: previewText, images: previewImages, renderLink: previewLink } = preview ?? {};
@@ -44,6 +56,7 @@ export default function MarkdownFields({ id, label, previewLabel, value, onChang
 
   const switchMode = (next: typeof mode) => {
     if (next === mode) return;
+    setInsertion(undefined);
     setPreviewDraft({ value, images, renderLink });
     setMode(next);
   };
@@ -64,6 +77,54 @@ export default function MarkdownFields({ id, label, previewLabel, value, onChang
     }
     field.setSelectionRange(edit.selectionStart, edit.selectionEnd);
   }, [onChange]);
+
+  useLayoutEffect(() => {
+    const element = panel.current;
+    if (!element) return;
+    if (!insertion || readOnly) {
+      element.hidePopover();
+      return;
+    }
+    const position = () => {
+      const rect = insertion.source.getBoundingClientRect();
+      const { innerWidth, innerHeight } = window;
+      const left = insertion.point?.x ?? rect.left;
+      const below = Math.max(8, Math.min(innerHeight - 8, (insertion.point?.y ?? rect.bottom) + 6));
+      const above = Math.max(8, Math.min(innerHeight - 8, (insertion.point?.y ?? rect.top) - 6));
+      const opensAbove = innerHeight - below < 280 && above > innerHeight - below;
+      element.style.left = `${Math.max(8, Math.min(left, innerWidth - element.offsetWidth - 8))}px`;
+      element.style.top = opensAbove ? 'auto' : `${below}px`;
+      element.style.bottom = opensAbove ? `${innerHeight - above}px` : 'auto';
+      element.style.maxHeight = `${(opensAbove ? above : innerHeight - below) - 8}px`;
+    };
+    element.showPopover({ source: insertion.source });
+    position();
+    element.querySelector('button')?.focus({ preventScroll: true });
+    window.addEventListener('resize', position);
+    return () => window.removeEventListener('resize', position);
+  }, [insertion, readOnly]);
+
+  const openInsertion = (source: HTMLElement, point?: Insertion['point']) => {
+    const field = textarea.current;
+    if (!field || field.readOnly || isPreview) return;
+    setInsertion({ start: field.selectionStart, end: field.selectionEnd, direction: field.selectionDirection, value: field.value, source, point });
+  };
+
+  const closeInsertion = () => {
+    panel.current?.hidePopover();
+    setInsertion(undefined);
+  };
+
+  const insert = (text: string, afterSelectionSeparator?: string) => {
+    if (!insertion || textarea.current?.value !== insertion.value || readOnly) return;
+    const { start, end } = insertion;
+    const afterSelection = afterSelectionSeparator !== undefined;
+    const editStart = afterSelection ? end : start;
+    const replacement = (afterSelection && start !== end ? afterSelectionSeparator : '') + text;
+    const caret = editStart + replacement.length;
+    closeInsertion();
+    applyEdit({ start: editStart, end, text: replacement, selectionStart: caret, selectionEnd: caret });
+  };
 
   useImperativeHandle(editorRef, () => ({
     insertAfterSelection(text, separatorWhenSelected = '') {
@@ -98,10 +159,41 @@ export default function MarkdownFields({ id, label, previewLabel, value, onChang
       <label className="markdown-editor-label" htmlFor={id}>{label}</label>
       <div className="markdown-editor-shell">
         <MarkdownToolbar sourceId={id} previewId={preview ? previewId : undefined} mode={mode} readOnly={readOnly}
-          onModeChange={switchMode} onFormat={format} />
+          onModeChange={switchMode} onFormat={format} sourceTools={InsertOptions && (
+            <button type="button" className="markdown-format-button" aria-label="插入" title="插入"
+              aria-controls={insertId} aria-expanded={Boolean(insertion) && !readOnly} disabled={isPreview || readOnly}
+              onClick={(event) => { if (insertion) closeInsertion(); else openInsertion(event.currentTarget); }}>
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <path d="M3 8h10M8 3v10" />
+              </svg>
+            </button>
+          )} />
+        {InsertOptions && <div ref={panel} id={insertId} popover="auto" className="workspace-context-menu markdown-insert-panel"
+          role="group" aria-label="插入到 Markdown" onToggle={(event) => {
+            if (!event.currentTarget.matches(':popover-open')) setInsertion(undefined);
+          }} onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+            if (event.key === 'Enter' && event.target instanceof HTMLInputElement) event.preventDefault();
+            if (event.key !== 'Escape' || !insertion) return;
+            event.preventDefault();
+            event.stopPropagation();
+            closeInsertion();
+            const field = textarea.current;
+            field?.focus({ preventScroll: true });
+            field?.setSelectionRange(insertion.start, insertion.end, insertion.direction);
+          }}>
+          {insertion && <InsertOptions selectedText={insertion.value.slice(insertion.start, insertion.end)} insert={insert} />}
+        </div>}
         <div ref={area} className="markdown-editor-area" data-mode={mode} style={{ height }}>
           <textarea ref={textarea} id={id} className="markdown-editor-view" inert={isPreview} value={value}
-            onChange={(event) => onChange(event.target.value)} placeholder={placeholder} readOnly={readOnly} onPaste={onPaste} />
+            onChange={(event) => onChange(event.target.value)} placeholder={placeholder} readOnly={readOnly} onPaste={onPaste}
+            onContextMenu={InsertOptions ? (event) => {
+              if (event.shiftKey || readOnly) return;
+              event.preventDefault();
+              const rect = event.currentTarget.getBoundingClientRect();
+              openInsertion(event.currentTarget, event.clientX || event.clientY
+                ? { x: event.clientX, y: event.clientY } : { x: rect.left, y: rect.top });
+            } : undefined} />
           {preview && <div id={previewId} className="markdown-preview markdown-editor-view" role="region" aria-label={previewLabel}
             tabIndex={0} inert={!isPreview}>
             {previewContent}

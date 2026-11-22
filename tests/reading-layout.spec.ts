@@ -1,21 +1,95 @@
 import { expect, test } from '@playwright/test';
 
-test('插入代码引用收起时保留动画内容，结束后退出键盘焦点顺序', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'no-preference' });
+test('日志从工具栏或右键原位引用词条，保留选区且不创建知识关联', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.emulateMedia({ colorScheme: 'light' });
   await page.goto('/#today');
+  const id = await page.evaluate(async () => {
+    const { useKnowledgeStore } = await import('/src/store/knowledgeStore.ts');
+    const store = useKnowledgeStore.getState();
+    store.loadKnowledge();
+    return store.saveEntry({ title: 'PPU', aliases: ['Pixels Per Unit'], category: '2D 素材', content: '像素与**世界单位**的换算。' });
+  });
   await page.getByRole('button', { name: '编辑', exact: true }).click();
-  const summary = page.getByText('插入代码引用', { exact: true });
-  const label = page.locator('label[for="study-log-content"]');
-  const foldBounds = (await summary.boundingBox())!;
-  expect((await label.boundingBox())!.y - foldBounds.y - foldBounds.height).toBeGreaterThanOrEqual(10);
-  await summary.click();
-  const picker = page.getByRole('combobox', { name: '引用代码版本', exact: true });
-  await expect(picker).toBeVisible();
-  await summary.click();
-  const details = page.locator('details').filter({ has: summary });
-  await expect(details.locator('input[role="combobox"]')).toHaveCount(1);
-  await expect(details.locator('input[role="combobox"]')).toBeHidden();
-  await expect(summary).toBeFocused();
+  const body = page.getByLabel('学习内容（Markdown）', { exact: true });
+  const text = '回顾 Pixels Per Unit 的设置。';
+  await body.fill(text);
+  await body.evaluate((field: HTMLTextAreaElement) => field.setSelectionRange(3, 18, 'backward'));
+  const trigger = page.getByRole('button', { name: '插入', exact: true });
+  const panel = page.getByRole('group', { name: '插入到 Markdown' });
+  const type = panel.getByRole('button', { name: '引用词条', exact: true });
+  const search = panel.getByRole('combobox', { name: '引用词条', exact: true });
+  await trigger.press('Enter');
+  await expect(type).toBeFocused();
+  await type.press('Enter');
+  await expect(search).toBeFocused();
+  await expect(search).toHaveValue('Pixels Per Unit');
+  await expect(panel.getByRole('option', { name: 'PPU' })).toBeVisible();
+  await search.press('Escape');
+  await expect(panel).toBeHidden();
+  await expect(body).toBeFocused();
+  expect(await body.evaluate((field: HTMLTextAreaElement) => [field.selectionStart, field.selectionEnd, field.selectionDirection]))
+    .toEqual([3, 18, 'backward']);
+
+  await body.click({ button: 'right', position: { x: 72, y: 24 } });
+  await type.click();
+  await expect(search).toHaveValue('Pixels Per Unit');
+  const bounds = (await panel.boundingBox())!;
+  expect(bounds.x).toBeGreaterThanOrEqual(0);
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(390);
+  expect(bounds.y + bounds.height).toBeLessThanOrEqual(800);
+  await search.press('ArrowDown');
+  await search.press('Enter');
+  await panel.getByRole('button', { name: '插入到正文' }).click();
+  await expect(body).toBeFocused();
+  const href = '#knowledge/' + id + '?cite=1';
+  const next = '回顾 [Pixels Per Unit](<' + href + '>) 的设置。';
+  await expect(body).toHaveValue(next);
+
+  await page.getByRole('button', { name: '预览', exact: true }).click();
+  const link = page.getByRole('link', { name: 'Pixels Per Unit', exact: true });
+  await expect(link).toHaveCSS('text-decoration-style', 'dashed');
+  expect(await link.evaluate((node) => getComputedStyle(node).color)).toBe(await link.evaluate((node) => getComputedStyle(node.parentElement!).color));
+  await link.focus();
+  const preview = page.getByRole('tooltip');
+  await expect(preview).toContainText('像素与世界单位的换算。');
+  await expect(preview).toContainText('2D 素材');
+  await expect(preview).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await link.press('Escape');
+  await expect(preview).toHaveCount(0);
+  await expect(link).toBeFocused();
+  await link.click();
+  await expect(page).toHaveURL(new RegExp('#knowledge/' + id));
+  await expect(page.getByRole('heading', { name: 'PPU', exact: true })).toBeVisible();
+  await page.goBack();
+  await page.getByRole('button', { name: '源码', exact: true }).click();
+  await expect(body).toHaveValue(next);
+  await page.getByRole('button', { name: '保存记录', exact: true }).click();
+  await page.reload();
+  await expect(link).toHaveAttribute('href', href);
+  const result = await page.evaluate(async (id) => {
+    const { useKnowledgeStore } = await import('/src/store/knowledgeStore.ts');
+    const store = useKnowledgeStore.getState();
+    const associations = store.logLinks.length + store.relations.length;
+    const entry = store.entries.find((item) => item.id === id)!;
+    store.saveEntry({ ...entry, title: '像素单位' }, { id });
+    return associations;
+  }, id);
+  expect(result).toBe(0);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await link.hover();
+  await expect(preview).toContainText('像素单位');
+  await expect(preview).toHaveCSS('background-color', 'rgb(30, 41, 59)');
+  const previewBounds = (await preview.boundingBox())!;
+  expect(previewBounds.x).toBeGreaterThanOrEqual(8);
+  expect(previewBounds.x + previewBounds.width).toBeLessThanOrEqual(382);
+  await page.evaluate(async (id) => {
+    const { useKnowledgeStore } = await import('/src/store/knowledgeStore.ts');
+    useKnowledgeStore.getState().trashEntry(id);
+  }, id);
+  await expect(link).toHaveCount(0);
+  await expect(preview).toHaveCount(0);
+  await expect(page.getByRole('region', { name: '今日学习', exact: true }).getByText(text, { exact: true })).toBeVisible();
 });
 
 test('今日日志的标签与知识点可用键盘或按钮添加并分别移除', async ({ page }) => {
@@ -129,7 +203,7 @@ test('紧凑下拉随选项适当加宽，长名称在窄屏内换行', async ({
     && CSS.supports('width', 'anchor-size(width)') && CSS.supports('selector(select::picker(select))'));
   test.skip(!themedPicker, '此浏览器使用原生选择列表。');
   const board = page.getByRole('region', { name: '实践记录', exact: true });
-  const groups = board.getByRole('combobox', { name: '卡组', exact: true });
+  const groups = board.getByRole('combobox', { name: '打开卡组', exact: true });
   const domains = board.getByRole('combobox', { name: '按领域筛选', exact: true });
   for (const [theme, width, height, surface] of [
     ['dark', 1440, 900, 'rgb(30, 41, 59)'],

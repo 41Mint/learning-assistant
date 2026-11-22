@@ -2,7 +2,7 @@ import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { matchesWords, searchWords } from '../../utils/resourceSearch';
 
 export default function SearchableSelect({ label, placeholder, options, value, onChange, allowCustomValue = false,
-  customValueHint = '可直接填写新分类。', disabled = false, maxLength }: {
+  customValueHint = '可直接填写新分类。', disabled = false, maxLength, inline }: {
   label: string;
   placeholder: string;
   options: { id: string; label: string; fields?: string[] }[];
@@ -12,9 +12,10 @@ export default function SearchableSelect({ label, placeholder, options, value, o
   customValueHint?: string;
   disabled?: boolean;
   maxLength?: number;
+  inline?: { initialQuery: string };
 }) {
-  const [query, setQuery] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState<string | null>(inline?.initialQuery ?? null);
+  const [open, setOpen] = useState(Boolean(inline));
   const [highlight, setHighlight] = useState<string>();
   if (disabled && open) setOpen(false);
   const id = useId();
@@ -40,7 +41,7 @@ export default function SearchableSelect({ label, placeholder, options, value, o
   useLayoutEffect(() => {
     const menu = list.current;
     const field = input.current;
-    if (!menu || !field || !open) return;
+    if (inline || !menu || !field || !open) return;
     const position = () => {
       const rect = field.getBoundingClientRect();
       if (!rect.width || !rect.height) return setOpen(false);
@@ -62,7 +63,7 @@ export default function SearchableSelect({ label, placeholder, options, value, o
       window.removeEventListener('resize', position);
       window.removeEventListener('scroll', position, true);
     };
-  }, [open]);
+  }, [open, inline]);
 
   useLayoutEffect(() => {
     if (open && activeIndex >= 0) {
@@ -70,7 +71,7 @@ export default function SearchableSelect({ label, placeholder, options, value, o
     }
   }, [activeIndex, open]);
 
-  return <div className="searchable-select">
+  return <div className="searchable-select" data-inline={inline ? '' : undefined}>
     <label htmlFor={id}>{label}</label>
     <div className="searchable-select-field">
       <input ref={input} id={id} className="workspace-input" type="text" role="combobox" autoComplete="off"
@@ -78,7 +79,7 @@ export default function SearchableSelect({ label, placeholder, options, value, o
         aria-expanded={open} aria-controls={`${id}-options`} aria-autocomplete="list"
         aria-activedescendant={open && activeIndex >= 0 ? `${id}-option-${activeIndex}` : undefined}
         value={open ? query ?? (allowCustomValue ? displayedValue : '') : displayedValue} placeholder={placeholder}
-        onFocus={show} onClick={() => { if (!open) show(); }} onBlur={() => setOpen(false)}
+        onFocus={() => { if (!inline || !open) show(); }} onClick={() => { if (!open) show(); }} onBlur={() => { if (!inline) setOpen(false); }}
         onChange={(event) => {
           setOpen(true);
           setHighlight(undefined);
@@ -87,7 +88,7 @@ export default function SearchableSelect({ label, placeholder, options, value, o
         }}
         onKeyDown={(event) => {
           if (event.nativeEvent.isComposing || event.keyCode === 229) return;
-          if (event.key === 'Escape' && open) {
+          if (event.key === 'Escape' && open && !inline) {
             event.preventDefault();
             event.stopPropagation();
             setOpen(false);
@@ -108,9 +109,10 @@ export default function SearchableSelect({ label, placeholder, options, value, o
             else if (allowCustomValue) setOpen(false);
           }
         }} />
-      <span aria-hidden="true" className="searchable-select-chevron">⌄</span>
+      {!inline && <span aria-hidden="true" className="searchable-select-chevron">⌄</span>}
     </div>
-    <div ref={list} popover="manual" className="searchable-select-options" id={`${id}-options`} role="listbox" aria-label={label}>
+    <div ref={list} popover={inline ? undefined : 'manual'} hidden={Boolean(inline) && !open}
+      className="searchable-select-options" id={`${id}-options`} role="listbox" aria-label={label}>
       {choices.map((option, index) => <div role="option" key={option.id} id={`${id}-option-${index}`}
         aria-selected={option.id === value} data-highlighted={option.id === highlight || undefined}
         onMouseDown={(event) => event.preventDefault()} onClick={() => choose(option.id)}>{option.label}</div>)}

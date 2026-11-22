@@ -43,7 +43,8 @@ test('Day 03 实际日志保留截图，在 Input Direction 旁预览并定位 U
   const position = imageLine!.index + imageLine![0].length;
   await body.fill(text.slice(0, position) + '\n\n' + text.slice(position));
   await body.evaluate((node: HTMLTextAreaElement, offset) => node.setSelectionRange(offset, offset), position + 2);
-  await editor.getByText('插入代码引用', { exact: true }).click();
+  await editor.getByRole('button', { name: '插入', exact: true }).click();
+  await editor.getByRole('button', { name: '引用项目代码' }).click();
   await editor.getByRole('combobox', { name: '引用代码版本' }).fill('PlayerController');
   await editor.getByRole('option', { name: /PlayerController\.cs/ }).click();
   await editor.getByLabel('链接文字（可选）').fill('查看 Update()');
