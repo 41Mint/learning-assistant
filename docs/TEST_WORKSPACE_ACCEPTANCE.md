@@ -15,19 +15,13 @@ npm run dev -- --port 5185 --strictPort
 
 ### 启动时自动更新
 
-Windows 和 macOS 都可以使用同一个启动命令。安装 Git 和 Node.js 24 后，首次在终端执行以下命令。
+1. 安装 Git 和 Node.js 24。从 GitHub 下载最新版 ZIP 并解压。已有 Git 克隆的组员更新一次即可在原项目目录找到启动文件。
+2. Windows 双击 `start.bat`。macOS 在 Finder 双击 `start.command`。如果 macOS 提示确认打开下载的文件，请核对文件来自本仓库。[Apple 的打开说明](https://support.apple.com/en-us/102445)
+3. 脚本会检查 `origin/master` 的更新，需要时安装依赖，再启动服务并用默认浏览器打开 `http://localhost:5185`。保留打开的终端窗口即可继续使用。继续在原来的浏览器访问即可查看原有记录。
 
-```bash
-git clone --branch master https://github.com/41Mint/learning-assistant.git
-cd learning-assistant
-npm run dev:latest
-```
+从 ZIP 启动时，脚本第一次会在解压目录内建立 `learning-assistant-local` 更新副本。以后双击原来的启动文件即可。使用 DeepSeek 时，在这个更新副本中配置 `.env.local`。
 
-已克隆旧版的组员可以先关闭服务，在现有项目的 `master` 分支运行一次 `git pull --ff-only origin master`，取得启动脚本。
-
-以后关闭原来的开发服务，在这个项目目录运行 `npm run dev:latest` 即可。脚本会检查 `origin/master` 的更新，需要时安装依赖，再启动服务并用默认浏览器打开 `http://localhost:5185`。继续用原来的浏览器访问即可查看原有记录。
-
-如果本地有代码修改、提交分叉或下载失败，终端会提示并停止。需要直接启动本地版本时，可沿用上面的本地启动命令。
+更新前先关闭原来的开发服务。项目有本地代码修改、提交分叉或下载失败时，启动窗口会保留错误信息。也可以在项目目录运行 `npm run dev:latest` 使用同一流程。
 
 ## 验收顺序
 

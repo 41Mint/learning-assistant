@@ -4,18 +4,11 @@
 
 ## 本地启动
 
-安装 Node.js 24 后，在项目根目录运行以下命令。
-
-```bash
-npm ci
-npm run dev -- --port 5185 --strictPort
-```
+安装 Git 和 Node.js 24 后，从 GitHub 下载最新版 ZIP 并解压。Windows 双击项目目录中的 `start.bat`，macOS 双击 `start.command`。脚本会检查更新、启动服务并打开浏览器。已有 Git 克隆的组员更新一次后，可直接双击原目录中的启动文件。[双击启动及手动启动步骤](./docs/TEST_WORKSPACE_ACCEPTANCE.md#启动)
 
 保持终端运行，打开 [本地学习助手](http://localhost:5185)。组员试用时，从右下角「开发者工具」进入测试工作区。这里有预填样例，可以恢复示例数据。使用真实模型时，先配置本机 DeepSeek。[测试工作区验收](./docs/TEST_WORKSPACE_ACCEPTANCE.md) · [DeepSeek 配置](./docs/LOG_REVIEW_ACCEPTANCE.md#配置-deepseek)
 
 个人数据保存在当前浏览器与端口下。换设备、浏览器或端口前，可以从「数据管理」导出完整备份。
-
-组员可以用 Git 克隆一次项目，以后通过 `npm run dev:latest` 同步更新并打开本地学习助手。Windows 和 macOS 使用同一命令。[自动更新启动步骤](./docs/TEST_WORKSPACE_ACCEPTANCE.md#启动时自动更新)
 
 ## 文档入口
 

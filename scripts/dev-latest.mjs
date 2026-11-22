@@ -7,12 +7,13 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const port = 5185;
 const branch = 'master';
+const repository = 'https://github.com/41Mint/learning-assistant.git';
 const remoteRef = `refs/remotes/origin/${branch}`;
 const npm = process.env.npm_execpath;
 
-function run(command, args, capture = false) {
+function run(command, args, capture = false, cwd = root) {
   const result = spawnSync(command, args, {
-    cwd: root,
+    cwd,
     encoding: 'utf8',
     stdio: capture ? ['ignore', 'pipe', 'inherit'] : 'inherit',
   });
@@ -35,9 +36,26 @@ function reservePort() {
 }
 
 let portGuard;
-try {
+
+function startFromArchive() {
+  const checkout = join(root, 'learning-assistant-local');
+  if (!existsSync(checkout)) {
+    console.log('正在建立可自动更新的项目副本…');
+    run('git', ['clone', '--branch', branch, '--single-branch', repository, checkout]);
+  }
+  if (!existsSync(join(checkout, '.git')) ||
+      run('git', ['config', '--get', 'remote.origin.url'], true, checkout) !== repository) {
+    throw new Error('已有的 learning-assistant-local 不是本项目的更新副本，请从新的解压目录运行。');
+  }
+  run(process.execPath, [npm, 'run', 'dev:latest'], false, checkout);
+}
+
+async function start() {
   if (!npm) throw new Error('请通过 npm run dev:latest 启动。');
-  if (!existsSync(join(root, '.git'))) throw new Error('请先用 Git 克隆这个项目，再使用自动更新启动。');
+  if (!existsSync(join(root, '.git'))) {
+    startFromArchive();
+    return;
+  }
   if (run('git', ['branch', '--show-current'], true) !== branch) throw new Error(`请在 ${branch} 分支运行自动更新。`);
   if (run('git', ['status', '--porcelain', '--untracked-files=no'], true)) {
     throw new Error('项目有未提交的修改，请先处理这些修改再更新。');
@@ -65,6 +83,10 @@ try {
   await new Promise((resolve) => portGuard.close(resolve));
   console.log(`当前版本 ${latest.slice(0, 7)}，正在启动 http://localhost:${port}…`);
   run(process.execPath, [npm, 'run', 'dev', '--', '--port', String(port), '--strictPort', '--open']);
+}
+
+try {
+  await start();
 } catch (error) {
   const message = error.code === 'ENOENT' && error.path === 'git' ? '请先安装 Git。' : error.message;
   console.error(`启动失败。 ${message}`);
