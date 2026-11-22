@@ -13,6 +13,22 @@ npm run dev -- --port 5185 --strictPort
 
 同一个浏览器会保留自己做过的测试修改。用开发者工具中的「恢复示例数据」可以重新开始。如果此前使用过知识网络演示，也可用这个操作加载新版样例。确认前可以取消。
 
+### 启动时自动更新
+
+Windows 和 macOS 都可以使用同一个启动命令。安装 Git 和 Node.js 24 后，首次在终端执行以下命令。
+
+```bash
+git clone --branch master https://github.com/41Mint/learning-assistant.git
+cd learning-assistant
+npm run dev:latest
+```
+
+已克隆旧版的组员可以先关闭服务，在现有项目的 `master` 分支运行一次 `git pull --ff-only origin master`，取得启动脚本。
+
+以后关闭原来的开发服务，在这个项目目录运行 `npm run dev:latest` 即可。脚本会检查 `origin/master` 的更新，需要时安装依赖，再启动服务并用默认浏览器打开 `http://localhost:5185`。继续用原来的浏览器访问即可查看原有记录。
+
+如果本地有代码修改、提交分叉或下载失败，终端会提示并停止。需要直接启动本地版本时，可沿用上面的本地启动命令。
+
 ## 验收顺序
 
 | 功能 | 验收操作 | 预期结果 |

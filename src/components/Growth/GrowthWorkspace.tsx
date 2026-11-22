@@ -211,9 +211,10 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
   const boxSelection = useGrowthBoxSelection(active && canOpenForm && !openFolder && !activeOutcome &&
     !activeExerciseDetails && activeView !== 'topics', applyBoxSelection);
   const stacks = showStacks ? groups.flatMap((item) => {
-    const members = item.cardIds.flatMap((id) => stackMembers.get(id) ?? []).filter(({ complete, domains }) =>
+    const members = item.cardIds.flatMap((id) => stackMembers.get(id) ?? []);
+    const matchesView = members.some(({ complete, domains }) =>
       complete === (activeView === 'recent') && (!selectedDomain || hasGrowthDomain(domains, selectedDomain)));
-    return members.length ? [{ group: item, members }] : [];
+    return matchesView ? [{ group: item, members }] : [];
   }) : [];
   const editExercise = (trigger: HTMLElement, exercise?: SavedExercise, groupId?: string) => {
     exerciseTrigger.current = trigger;
@@ -688,7 +689,7 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
               {activeExerciseDetails.action && <p className="growth-note">{activeExerciseDetails.action}</p>}
               {activeExerciseDetails.done && <p className="growth-note"><strong>{PRACTICE_VERIFICATION_LABEL}</strong> {activeExerciseDetails.done}</p>}
               <PracticeSources practice={activeExerciseDetails.sources} />
-            </article> : <GrowthCardGrid pending canReorder={canOpenForm} onReorder={(source, anchor, side) => reorder(source, anchor, side, 'try')}>
+            </article> : <GrowthCardGrid canReorder={canOpenForm} onReorder={(source, anchor, side) => reorder(source, anchor, side, 'try')}>
               {boardTiles('try')}
             </GrowthCardGrid>}
           </div>
@@ -734,7 +735,7 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
         </>}
         {folderExercises.length > 0 && <>
           {mixedFolder && <h3>{PRACTICE_IDEAS_LABEL}</h3>}
-          <GrowthCardGrid pending canReorder={canOpenForm} onReorder={reorder}>{folderExercises.map((item) => renderExercise(item, boardView))}</GrowthCardGrid>
+          <GrowthCardGrid canReorder={canOpenForm} onReorder={reorder}>{folderExercises.map((item) => renderExercise(item, boardView))}</GrowthCardGrid>
         </>}
         {folderOutcomes.length === 0 && folderExercises.length === 0 && <p className="growth-muted">
           {folderDomain ? '当前领域下没有卡片。' : '这个卡组暂无可显示的卡片。'}

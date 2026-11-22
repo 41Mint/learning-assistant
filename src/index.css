@@ -761,7 +761,10 @@ textarea.markdown-editor-view { font: 13px/1.65 'Fira Code', Consolas, monospace
 @media (forced-colors: active) { .workspace-segment-indicator { border: 1px solid Highlight; } }
 .growth-board-toolbar .growth-filter { margin: 0; font-size: 13px; color: var(--app-muted); }
 .growth-board-toolbar select { max-inline-size: min(18rem, 100%); }
-.growth-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 16.5rem), 1fr)); gap: 14px; align-items: start; }
+.growth-card-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 16.5rem), 1fr));
+  grid-auto-rows: 1fr; gap: 14px;
+}
 .growth-card-grid:has(> .growth-card-slot) { padding-bottom: 24px; }
 .growth-board { min-height: calc(100dvh - 148px); }
 .growth-group-stack {
@@ -779,15 +782,17 @@ textarea.markdown-editor-view { font: 13px/1.65 'Fira Code', Consolas, monospace
   flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px;
   border-radius: inherit; padding: 14px; color: var(--app-text); text-decoration: none; cursor: inherit;
 }
-.growth-stack-header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-inline-end: 36px; overflow-wrap: anywhere; }
+.growth-stack-header {
+  display: flex; justify-content: space-between; align-items: center;
+  min-height: var(--growth-card-menu-height); gap: 8px; padding-inline-end: 36px;
+}
 .growth-stack-header small { flex: none; color: var(--app-muted); }
-.growth-stack-menu { position: absolute; inset-block-start: 9px; inset-inline-end: 10px; }
+.growth-stack-menu { position: absolute; inset-block-start: 14px; inset-inline-end: 10px; }
 .growth-stack-open .growth-card-meta { margin: 0; }
 .growth-stack-open .growth-card-summary {
   margin: 0; color: var(--app-muted); font-size: 14px; overflow: hidden; overflow-wrap: anywhere;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
 }
-.growth-pending-grid .growth-stack-header { min-height: 44.8px; }
 .growth-folder {
   width: min(850px, calc(100% - 30px)); max-width: none; max-height: min(76dvh, 680px); padding: 0;
   border: 1px solid var(--app-border); border-radius: 16px; background: var(--app-bg); color: var(--app-text);
@@ -818,7 +823,7 @@ textarea.markdown-editor-view { font: 13px/1.65 'Fira Code', Consolas, monospace
 }
 .growth-card-menu button[data-danger] { color: var(--color-red-500, #e34f5c); }
 .growth-summary[draggable="true"] { cursor: grab; }
-.growth-card-slot { min-width: 0; }
+.growth-card-slot { --growth-card-menu-height: 30px; min-width: 0; }
 .growth-card-slot[data-insertion-side] { position: relative; }
 .growth-card-slot[data-insertion-side]::after {
   content: ''; position: absolute; inset-block: 10px; width: 3px; border-radius: 2px;
@@ -826,8 +831,8 @@ textarea.markdown-editor-view { font: 13px/1.65 'Fira Code', Consolas, monospace
 }
 .growth-card-slot[data-insertion-side="before"]::after { inset-inline-start: -8px; }
 .growth-card-slot[data-insertion-side="after"]::after { inset-inline-end: -8px; }
-.growth-pending-grid > .growth-card-slot { display: flex; }
-.growth-pending-grid > .growth-card-slot > article { width: 100%; }
+.growth-card-grid > .growth-card-slot { display: flex; }
+.growth-card-grid > .growth-card-slot > :is(.growth-summary, .growth-group-stack) { width: 100%; }
 .growth-drag-image { position: fixed; inset: 0 auto auto 0; width: 1px; height: 1px; pointer-events: none; }
 :is(.growth-card.growth-summary, .growth-group-stack)[data-drag-motion] {
   position: fixed; inset: 0 auto auto 0; margin: 0; max-width: none; max-height: none; overflow: visible;
@@ -840,33 +845,32 @@ textarea.markdown-editor-view { font: 13px/1.65 'Fira Code', Consolas, monospace
 }
 .growth-summary[data-drop-intent="group"]::after { content: '新建卡组'; }
 .growth-summary[data-drop-intent="move"]::after { content: '移入卡组'; }
-.growth-pending-grid { align-items: stretch; }
-.growth-pending-grid .growth-card-heading h3 {
-  overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
-}
-.growth-pending-grid .growth-summary .growth-card-summary { min-height: 3.2em; line-height: 1.6; -webkit-line-clamp: 2; }
-.growth-pending-grid .growth-card-heading { min-height: 44.8px; }
-.growth-pending-grid .growth-card-meta { min-height: 22px; }
 .growth-card.growth-summary { display: flex; flex-direction: column; gap: 6px; background: var(--app-surface); }
 .growth-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .growth-card-heading h3 { font-size: 16px; line-height: 1.4; }
 .growth-card-heading h3 a { color: var(--app-text); text-decoration: none; }
 .growth-card-heading h3 a:hover { color: var(--app-accent); text-decoration: underline; }
+.growth-card-grid .growth-card-heading { align-items: center; }
+.growth-card-grid .growth-card-heading h3 { flex: 1; min-width: 0; }
+.growth-card-grid :is(.growth-card-heading h3 a, .growth-stack-header strong) {
+  display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .growth-card-menu-button {
-  flex: none; min-width: 34px; min-height: 30px; padding: 0; border: 0; border-radius: 5px;
+  flex: none; min-width: 34px; min-height: var(--growth-card-menu-height); padding: 0; border: 0; border-radius: 5px;
   color: var(--app-muted); background: transparent; cursor: pointer;
 }
 .workspace-context-menu.growth-card-menu { position: fixed; inset: auto; width: 176px; margin: 0; }
 .workspace-context-menu.growth-add-exercise { position: fixed; inset: auto; width: 160px; max-width: calc(100dvw - 16px); margin: 0; }
 .workspace-context-menu.growth-add-exercise[data-side="right"] {
   width: max-content; min-width: 0; padding-block: 0; white-space: nowrap;
+  box-shadow: none;
   clip-path: inset(0 100% 0 0); pointer-events: none;
   transition: clip-path var(--app-motion-duration) var(--app-motion-ease),
     display var(--app-motion-duration) allow-discrete, overlay var(--app-motion-duration) allow-discrete;
 }
 .growth-add-exercise[data-side="right"] > button { width: auto; padding-block: var(--growth-action-padding-block); }
 .workspace-context-menu.growth-add-exercise[data-side="right"]:popover-open {
-  display: flex; clip-path: inset(-8px); pointer-events: auto;
+  display: flex; clip-path: inset(0); pointer-events: auto;
 }
 @starting-style {
   .workspace-context-menu.growth-add-exercise[data-side="right"]:popover-open { clip-path: inset(0 100% 0 0); }
@@ -876,6 +880,8 @@ textarea.markdown-editor-view { font: 13px/1.65 'Fira Code', Consolas, monospace
   margin: 0; color: var(--app-muted); font-size: 14px; overflow: hidden;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
 }
+.growth-card-grid .growth-card-meta:empty { display: none; }
+.growth-card-grid .growth-card-summary { line-height: 1.6; -webkit-line-clamp: 2; }
 .growth-summary > small { margin-top: auto; }
 .growth-current { color: var(--app-accent); }
 .growth-detail { max-width: 800px; margin-inline: auto; }

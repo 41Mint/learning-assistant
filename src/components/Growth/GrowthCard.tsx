@@ -128,7 +128,7 @@ export default function GrowthCard({ id, card, recordLabel, onRecord, onAsk, bat
     showMenu(event.clientX || box?.left || 0, event.clientY || box?.bottom || 0, event.button !== 2);
   }}>
     <div className="growth-card-heading">
-      <h3>{href ? <a href={href} draggable={false} onClick={onOpen}>{card.title}</a> : card.title}</h3>
+      <h3>{href ? <a href={href} title={card.title} draggable={false} onClick={onOpen}>{card.title}</a> : card.title}</h3>
       <button ref={trigger} type="button" className="growth-card-menu-button" aria-label="卡片操作" title="卡片操作" aria-expanded={menuOpen}
         onClick={(event) => {
           const box = event.currentTarget.getBoundingClientRect();

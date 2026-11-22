@@ -1,6 +1,42 @@
 import { expect, test } from '@playwright/test';
 import type { GrowthSuggestionRequest } from '../src/types/growthSuggestions';
 
+test('较长的卡面标题和说明截断，跨行卡片等高且详情保留全文', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/?workspace=knowledge-demo#path/try');
+  const board = page.getByRole('region', { name: '想尝试', exact: true });
+  const card = board.getByRole('article', { name: '让角色在待机和移动动作间切换' });
+  await card.getByRole('button', { name: '卡片操作' }).click();
+  await card.getByRole('button', { name: '编辑卡片' }).click();
+
+  const title = '记录角色在不同输入和不同场景下的移动与待机动作'.repeat(3);
+  const description = '运行场景，分别记录三种输入下的动画状态，并比较预制体实例中的差异。'.repeat(8);
+  const form = page.getByRole('form', { name: '练习卡片表单' });
+  await form.getByLabel('卡片名称').fill(title);
+  await form.getByLabel('卡片说明（可选）').fill(description);
+  await form.getByRole('button', { name: '保存卡片' }).click();
+  await expect(board.getByRole('heading', { name: title, exact: true })).toBeVisible();
+  await expect(board.getByText(description, { exact: true })).toBeVisible();
+  await board.getByRole('link', { name: '返回卡片' }).click();
+
+  const grid = board.locator('.growth-card-grid');
+  const longCard = grid.getByRole('article', { name: title, exact: true });
+  const link = longCard.getByRole('link', { name: title, exact: true });
+  for (const width of [1440, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(link).toHaveAttribute('title', title);
+    expect(await link.evaluate((element) => element.scrollWidth > element.clientWidth &&
+      getComputedStyle(element).textOverflow === 'ellipsis')).toBe(true);
+    const synopsis = longCard.locator('.growth-card-summary');
+    expect(await synopsis.evaluate((element) => element.scrollHeight > element.clientHeight &&
+      getComputedStyle(element).webkitLineClamp === '2')).toBe(true);
+    const heights = await grid.locator('.growth-card-slot > :is(article, .growth-group-stack)')
+      .evaluateAll((cards) => cards.map((item) => item.getBoundingClientRect().height));
+    expect(heights.length).toBeGreaterThan(4);
+    expect(Math.max(...heights) - Math.min(...heights)).toBeLessThan(1);
+  }
+});
+
 test('组内筛选和建卡从同一弹窗操作，详情返回保留卡组范围', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -54,6 +90,7 @@ test('卡组内添加练习向右展开，智能体推荐可归入当前卡组',
     ] } });
   });
   await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ colorScheme: 'light' });
   await page.goto('/?workspace=knowledge-demo#path/try?group=demo-prefab-group');
   const group = page.getByRole('dialog', { name: '预制体与场景复用', exact: true });
   await group.getByText('组内操作', { exact: true }).click();
@@ -64,6 +101,7 @@ test('卡组内添加练习向右展开，智能体推荐可归入当前卡组',
 
   await trigger.hover();
   await expect(options).toBeVisible();
+  await expect(options).toHaveCSS('box-shadow', 'none');
   const triggerBox = (await trigger.boundingBox())!;
   const optionsBox = (await options.boundingBox())!;
   expect(optionsBox.x).toBeGreaterThan(triggerBox.x);

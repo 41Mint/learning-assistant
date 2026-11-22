@@ -37,8 +37,8 @@ export default function GrowthGroupStack({ group, href, count, domains, canDrag,
       <a href={href} className="growth-stack-open" draggable={false}
         aria-label={`打开卡组 ${group.name}，${count} 张卡片`} aria-haspopup="dialog" onClick={onOpen}>
         <div className="growth-stack-header">
-          <strong>{group.name}</strong>
-          <small>{count} 张</small>
+          <strong title={group.name}>{group.name}</strong>
+          <small>共 {count} 张</small>
         </div>
         <div className="growth-card-meta">{domains.map((domain) => <span key={domain} className="growth-domain" data-domain={domain}>{domain}</span>)}</div>
         {group.description && <p className="growth-card-summary">{group.description}</p>}

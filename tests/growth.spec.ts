@@ -869,12 +869,14 @@ test('卡组可混合状态、改名和检索定位，备份保留成员', async
 
   for (const view of ['/#path/try', '/#path']) {
     await page.goto(view);
-    await page.getByRole('link', { name: '打开卡组 角色控制，1 张卡片' }).click();
+    const cover = page.getByRole('link', { name: '打开卡组 角色控制，2 张卡片' });
+    await expect(cover.getByText('共 2 张', { exact: true })).toBeVisible();
+    await cover.click();
     await expect(group.getByRole('article')).toHaveCount(2);
     await page.keyboard.press('Escape');
     await expect(group).toHaveCount(0);
   }
-  await page.getByRole('link', { name: '打开卡组 角色控制，1 张卡片' }).click({ button: 'right' });
+  await page.getByRole('link', { name: '打开卡组 角色控制，2 张卡片' }).click({ button: 'right' });
   await page.getByRole('group', { name: '卡组操作' }).getByRole('button', { name: '询问智能体' }).click();
   await expect(assistant.getByText('引用 卡组「角色控制」')).toBeVisible();
   await expect(assistant.getByRole('button', { name: '组内卡片的分类合适吗？' })).toBeVisible();

@@ -14,6 +14,7 @@ export function startCardDragMotion(card: HTMLElement, event: Pick<DragEvent, 'c
 
   slot.style.minHeight = `${slot.offsetHeight}px`;
   card.style.width = `${bounds.width}px`;
+  card.style.height = `${bounds.height}px`;
   card.style.translate = `${bounds.left}px ${bounds.top}px`;
   card.dataset.dragMotion = 'moving';
   card.setAttribute('popover', 'manual');
@@ -47,6 +48,7 @@ export function startCardDragMotion(card: HTMLElement, event: Pick<DragEvent, 'c
     card.removeAttribute('popover');
     delete card.dataset.dragMotion;
     card.style.removeProperty('width');
+    card.style.removeProperty('height');
     card.style.removeProperty('translate');
     slot.style.removeProperty('min-height');
   };

@@ -30,8 +30,7 @@ function clearInsertion(grid: HTMLElement) {
   grid.querySelector('[data-insertion-side]')?.removeAttribute('data-insertion-side');
 }
 
-export default function GrowthCardGrid({ pending, canReorder, onReorder, children }: {
-  pending?: boolean;
+export default function GrowthCardGrid({ canReorder, onReorder, children }: {
   canReorder: boolean;
   onReorder: (source: string, anchor: string, side: Side) => void;
   children: ReactNode;
@@ -51,7 +50,7 @@ export default function GrowthCardGrid({ pending, canReorder, onReorder, childre
     return { ...insertion, source };
   };
 
-  return <div className={pending ? 'growth-card-grid growth-pending-grid' : 'growth-card-grid'}
+  return <div className="growth-card-grid"
     onDragOverCapture={(event) => {
       const insertion = handleInsertion(event);
       if (insertion) {

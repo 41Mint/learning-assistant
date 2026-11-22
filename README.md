@@ -15,6 +15,8 @@ npm run dev -- --port 5185 --strictPort
 
 个人数据保存在当前浏览器与端口下。换设备、浏览器或端口前，可以从「数据管理」导出完整备份。
 
+组员可以用 Git 克隆一次项目，以后通过 `npm run dev:latest` 同步更新并打开本地学习助手。Windows 和 macOS 使用同一命令。[自动更新启动步骤](./docs/TEST_WORKSPACE_ACCEPTANCE.md#启动时自动更新)
+
 ## 文档入口
 
 | 想做什么 | 查看 |
