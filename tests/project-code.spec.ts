@@ -160,6 +160,7 @@ test('解释选中的代码只在发送时附带片段和行号，移除后恢�
     element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: left + 90, clientY: top + 8 }));
   });
   const askMenu = page.getByRole('group', { name: '询问智能体', exact: true });
+  await expect(askMenu.getByText('询问智能体', { exact: true })).toHaveCount(0);
   await expect(askMenu.getByRole('button', { name: '询问脚本用途', exact: true })).toBeVisible();
   await askMenu.getByRole('button', { name: '询问所选代码', exact: true }).click();
   const assistant = page.getByRole('dialog', { name: '学习智能体' });
@@ -641,11 +642,12 @@ test('目录导入保留取消前的预览，保存前不读脚本正文，版�
 
 test('日志引用固定代码版本，可预览行号、跳到整段并在新版保存后仍读旧版', async ({ page, browser }) => {
   await page.emulateMedia({ colorScheme: 'light' });
+  const firstScript = firstContent.replace('\n}\n', '\n  public int Samples => hits;\n}\n');
   await seedStudyContext(page);
   await page.goto('/#history/' + firstDate);
   const { panel, form } = await openLogCodeForm(page);
   await form.getByLabel('项目名称').fill('输入练习');
-  await form.getByLabel('本地 .cs 文件').setInputFiles({ name: 'InputManager.cs', mimeType: 'text/plain', buffer: Buffer.from(firstContent) });
+  await form.getByLabel('本地 .cs 文件').setInputFiles({ name: 'InputManager.cs', mimeType: 'text/plain', buffer: Buffer.from(firstScript) });
   await form.getByLabel('版本说明（可选）').fill('Day 03 · 读取输入');
   await form.getByRole('button', { name: '保存版本', exact: true }).click();
   const source = panel.getByRole('link', { name: 'InputManager.cs', exact: true });
@@ -679,8 +681,9 @@ test('日志引用固定代码版本，可预览行号、跳到整段并在新�
   const preview = page.getByRole('tooltip');
   await expect(preview).toContainText('Day 03 · 读取输入');
   await expect(preview).toHaveCSS('background-color', 'rgb(255, 255, 255)');
-  await expect(preview.locator('pre')).toHaveCSS('background-color', 'rgb(244, 246, 250)');
-  await expect(preview.locator('.hljs-number')).toHaveCSS('color', 'rgb(118, 44, 161)');
+  await expect(preview.locator('pre')).toHaveCSS('background-color', 'rgb(247, 249, 252)');
+  await expect(preview.locator('.hljs-number')).toHaveCSS('color', 'rgb(156, 57, 214)');
+  await expect(preview.locator('[data-code-line="3"] .hljs-property.csharp_')).toHaveText('Samples');
   await expect(preview.locator('[data-code-line]')).toHaveCount(2);
   await expect(preview.locator('[data-code-line="2"]')).toContainText('hits = 1');
   await expect(preview.locator('code')).toHaveCSS('font-family', /Fira Code/);
@@ -697,12 +700,15 @@ test('日志引用固定代码版本，可预览行号、跳到整段并在新�
   const snapshot = page.getByRole('region', { name: '脚本快照' });
   await expect(snapshot.locator('[data-code-cited="true"]')).toHaveCount(2);
   await expect(page.locator('[data-code-line="2"]')).toContainText('hits = 1');
-  await expect(snapshot.locator('pre')).toHaveCSS('background-color', 'rgb(244, 246, 250)');
-  await expect(snapshot.locator('.hljs-number')).toHaveCSS('color', 'rgb(118, 44, 161)');
-  await expect(snapshot.locator('[data-code-line="2"]')).toHaveCSS('background-color', 'rgb(222, 235, 255)');
+  await expect(snapshot.locator('pre')).toHaveCSS('background-color', 'rgb(247, 249, 252)');
+  await expect(snapshot.locator('.hljs-keyword').filter({ hasText: 'private' })).toHaveCSS('color', 'rgb(206, 32, 96)');
+  await expect(snapshot.locator('.hljs-number')).toHaveCSS('color', 'rgb(156, 57, 214)');
+  await expect(snapshot.locator('[data-code-line="3"] .hljs-property.csharp_')).toHaveText('Samples');
+  await expect(snapshot.locator('[data-code-line="2"]')).toHaveCSS('background-color', 'rgb(233, 242, 255)');
   await page.getByRole('button', { name: '切换到夜间主题' }).click();
   await expect(snapshot.locator('pre')).toHaveCSS('background-color', 'rgb(40, 44, 52)');
   await expect(snapshot.locator('.hljs-number')).toHaveCSS('color', 'rgb(198, 120, 221)');
+  await expect(snapshot.locator('[data-code-line="3"] .hljs-operator.csharp_')).toHaveText('=>');
   await expect(snapshot.locator('[data-code-line="2"]')).toHaveCSS('background-color', 'rgb(49, 67, 101)');
   await page.evaluate(() => {
     Object.defineProperty(navigator.clipboard, 'writeText', { configurable: true, value: async (value: string) => {

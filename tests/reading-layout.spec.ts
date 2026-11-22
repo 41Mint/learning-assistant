@@ -342,16 +342,58 @@ test('原位辅助按钮聚焦时填色，详情操作按钮与关系链接等�
 
 test('Markdown 源码和预览共用编辑区，切换保留各自的滚动位置', async ({ page }, testInfo) => {
   await page.goto('/');
-  await page.evaluate(async () => {
+  const example = [
+    '# Day1 学习记录',
+    '',
+    '配置 **像素单位**、`node_modules/` 和 [学习资料](https://example.test/notes)。',
+    '',
+    '```csharp',
+    'using UnityEngine;',
+    'public class Player {',
+    '    public int Samples => 2;',
+    '    public Vector2 Direction { get; set; }',
+    '    private PlayerInputControl input;',
+    '    private void Awake() => input = new PlayerInputControl();',
+    '    private void Update() => input.Gameplay.Move.ReadValue<Vector2>();',
+    '    // input.Gameplay.Enable();',
+    '    private string sample = "input.Gameplay.Enable()";',
+    '}',
+    '```',
+    '',
+    '- [ ] 检查素材',
+    '',
+    '长段落用于核对滚动与换行。Unity Prefab 和中文字符混合，`Assets/Scripts/Controller.cs`，'.repeat(8),
+    '',
+  ].join('\n');
+  await page.evaluate(async (content) => {
     const { useStudyLogStore } = await import('/src/store/studyLogStore.ts');
-    useStudyLogStore.getState().updateContent('# Day1 学习记录\n\n' + 'PPU 素材设置和学习观察。\n\n'.repeat(40));
-  });
+    useStudyLogStore.getState().updateContent(content + '\n' + 'PPU 素材设置和学习观察。\n\n'.repeat(40));
+  }, example);
   await page.locator('.study-log-card').getByRole('button', { name: '编辑', exact: true }).click();
   const editor = page.locator('#study-log-content');
+  const highlight = page.locator('.markdown-source-highlight');
   const modes = page.getByRole('group', { name: 'Markdown 视图' });
   const preview = page.getByRole('region', { name: '学习内容预览' });
+  await expect(highlight).toHaveAttribute('aria-hidden', 'true');
+  await expect(highlight.locator('.markdown-source-heading')).toHaveText('# Day1 学习记录');
+  await expect(highlight.locator('.markdown-source-link')).toContainText('https://example.test/notes');
+  await expect(highlight.locator('.markdown-source-emphasis')).toHaveText('**像素单位**');
+  await expect(highlight.locator('.hljs-title.class_').filter({ hasText: 'UnityEngine' })).toHaveText('UnityEngine');
+  await expect(highlight.locator('.hljs-title').filter({ hasText: /^Player$/ })).not.toHaveClass(/csharp_/);
+  await expect(highlight.locator('.hljs-title.function_')).toHaveText('ReadValue');
+  await expect(highlight.locator('.hljs-property.csharp_')).toHaveText(['Samples', 'Direction', 'Gameplay', 'Move']);
+  await expect(highlight.locator('.hljs-comment')).toContainText('input.Gameplay.Enable()');
+  await expect(highlight.locator('.hljs-string')).toContainText('input.Gameplay.Enable()');
+  expect((await highlight.textContent())?.replace(/\u200b$/, '')).toBe(await editor.inputValue());
   for (const theme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
+    const numberColor = theme === 'light' ? 'rgb(156, 57, 214)' : 'rgb(198, 120, 221)';
+    const propertyColor = theme === 'light' ? 'rgb(172, 83, 28)' : 'rgb(209, 154, 102)';
+    await expect(highlight.locator('.markdown-source-heading')).toHaveCSS('color', theme === 'light' ? 'rgb(46, 102, 251)' : 'rgb(147, 197, 253)');
+    await expect(highlight.locator('.markdown-source-emphasis')).toHaveCSS('color', numberColor);
+    await expect(highlight.locator('.markdown-source-code').filter({ hasText: 'node_modules/' })).toHaveCSS('color', theme === 'light' ? 'rgb(1, 119, 139)' : 'rgb(86, 182, 194)');
+    await expect(highlight.locator('.hljs-number')).toHaveCSS('color', numberColor);
+    await expect(highlight.locator('.hljs-property.csharp_').filter({ hasText: 'Samples' })).toHaveCSS('color', propertyColor);
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
       const before = await editor.evaluate((element: HTMLTextAreaElement) => {
@@ -360,8 +402,15 @@ test('Markdown 源码和预览共用编辑区，切换保留各自的滚动位�
         return element.scrollTop;
       });
       const sourceBounds = (await editor.boundingBox())!;
+      const sourceMetrics = await editor.evaluate((element) => [element.clientWidth, element.scrollHeight, element.scrollTop]);
+      await expect.poll(() => highlight.evaluate((element) => [element.clientWidth, element.scrollHeight, element.scrollTop])).toEqual(sourceMetrics);
       await modes.getByRole('button', { name: '预览', exact: true }).click();
       await expect(editor).toBeHidden();
+      await expect(highlight).toBeHidden();
+      await expect(preview.locator('.hljs-property.csharp_').filter({ hasText: 'Samples' })).toHaveCSS('color', propertyColor);
+      const inline = preview.locator('p code').first();
+      await expect(inline).toHaveCSS('background-color', theme === 'light' ? 'rgb(241, 243, 245)' : 'rgb(41, 52, 68)');
+      expect(await inline.evaluate((element) => getComputedStyle(element).color)).toBe(await inline.evaluate((element) => getComputedStyle(element.parentElement!).color));
       expect(await preview.boundingBox()).toEqual(sourceBounds);
       expect(await preview.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -379,10 +428,24 @@ test('Markdown 源码和预览共用编辑区，切换保留各自的滚动位�
       await modes.getByRole('button', { name: '源码', exact: true }).click();
     }
   }
+  await editor.dispatchEvent('compositionstart', { data: '' });
+  await expect(highlight).toBeHidden();
+  await expect(editor).toHaveCSS('color', 'rgb(226, 232, 240)');
+  await editor.dispatchEvent('compositionend', { data: '中文' });
+  await expect(highlight).toBeVisible();
+  await page.emulateMedia({ forcedColors: 'active' });
+  await expect(highlight).toBeHidden();
+  await page.emulateMedia({ forcedColors: 'none' });
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.locator('.markdown-editor').screenshot({ path: testInfo.outputPath('markdown-source-dark.png') });
-  await modes.getByRole('button', { name: '预览', exact: true }).click();
-  await page.locator('.markdown-editor').screenshot({ path: testInfo.outputPath('markdown-preview-dark.png') });
+  for (const theme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: theme });
+    await editor.evaluate((element) => { element.scrollTop = 0; });
+    await page.locator('.markdown-editor').screenshot({ path: testInfo.outputPath(`markdown-source-${theme}.png`) });
+    await modes.getByRole('button', { name: '预览', exact: true }).click();
+    await preview.evaluate((element) => { element.scrollTop = 0; });
+    await page.locator('.markdown-editor').screenshot({ path: testInfo.outputPath(`markdown-preview-${theme}.png`) });
+    await modes.getByRole('button', { name: '源码', exact: true }).click();
+  }
 });
 
 test('Markdown 编辑区支持拖动和键盘调整高度，源码和预览共用新高度', async ({ page }) => {

@@ -123,20 +123,21 @@ body {
   font-family: 'Fira Code', Consolas, monospace;
 }
 .hljs-comment, .hljs-quote { color: var(--app-code-muted); }
-.hljs-keyword, .hljs-selector-tag, .hljs-meta, .hljs-deletion { color: var(--app-code-keyword); }
+.hljs-keyword, .hljs-selector-tag, .hljs-meta, .hljs-deletion, .hljs-operator.csharp_ { color: var(--app-code-keyword); }
 .hljs-string, .hljs-regexp, .hljs-attr { color: var(--app-code-string); }
 .hljs-number, .hljs-symbol { color: var(--app-code-number); }
 .hljs-type, .hljs-built_in, .hljs-literal, .hljs-property { color: var(--app-code-type); }
 .hljs-title, .hljs-function > .hljs-title, .hljs-selector-class, .hljs-addition { color: var(--app-code-title); }
 .hljs-title.class_, .hljs-variable, .hljs-attribute { color: var(--app-code-identifier); }
-.hljs-params { color: var(--app-code-parameter); }
+.hljs-params, .hljs-property.csharp_ { color: var(--app-code-parameter); }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: bold; }
 
 .markdown-preview :not(pre) > code {
   background: var(--app-inline-code-bg);
+  border: 1px solid var(--app-border);
   border-radius: 0.25rem;
-  color: var(--app-inline-code-text);
+  color: inherit;
   font-size: 0.875em;
   padding: 0.125rem 0.25rem;
 }
@@ -155,20 +156,20 @@ body {
   --app-accent-text: #1d4ed8;
   --app-danger: #b91c1c;
   --app-positive: #047857;
-  --app-inline-code-bg: #e5e7eb;
-  --app-inline-code-text: #be123c;
-  --app-code-bg: #f4f6fa;
-  --app-code-text: #243247;
-  --app-code-muted: #576477;
-  --app-code-keyword: #a41b4b;
-  --app-code-string: #7d4b07;
-  --app-code-number: #762ca1;
-  --app-code-type: #116474;
-  --app-code-title: #35631d;
-  --app-code-identifier: #174c95;
-  --app-code-parameter: #8a4317;
-  --app-code-active-line: #e4ebf4;
-  --app-code-cited-line: #deebff;
+  --app-inline-code-bg: #f1f3f5;
+  --app-markdown-accent: #2e66fb;
+  --app-code-bg: #f7f9fc;
+  --app-code-text: #1f2d40;
+  --app-code-muted: #5b687b;
+  --app-code-keyword: #ce2060;
+  --app-code-string: #9b5f0e;
+  --app-code-number: #9c39d6;
+  --app-code-type: #01778b;
+  --app-code-title: #3d7a1b;
+  --app-code-identifier: #2169c9;
+  --app-code-parameter: #ac531c;
+  --app-code-active-line: #edf3fa;
+  --app-code-cited-line: #e9f2ff;
   --app-code-line-marker: var(--app-accent);
   --app-code-emphasized-number: var(--app-code-text);
   --app-search-match-bg: #fde68a;
@@ -185,7 +186,8 @@ body {
   --app-bg: #111827; --app-surface: #1e293b; --app-text: #e2e8f0; --app-muted: #a5b4c7;
   --app-border: #334155; --app-accent: #3b82f6; --app-active: #172554;
   --app-accent-text: #93c5fd; --app-danger: #fca5a5; --app-positive: #6ee7b7;
-  --app-inline-code-bg: #374151; --app-inline-code-text: #fda4af; --app-search-match-bg: #eab3084d;
+  --app-inline-code-bg: #293444; --app-search-match-bg: #eab3084d;
+  --app-markdown-accent: var(--app-accent-text);
   /* One Monokai palette adapted to highlight.js token classes. */
   --app-code-bg: #282c34;
   --app-code-text: #abb2bf;
@@ -476,7 +478,30 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
   background: var(--app-surface); color: var(--app-text);
   animation: markdown-view-in var(--app-motion-duration) var(--app-motion-ease);
 }
-textarea.markdown-editor-view { font: 13px/1.65 'Fira Code', Consolas, monospace; }
+textarea.markdown-editor-view, .markdown-source-highlight {
+  font: 13px/1.65 'Fira Code', Consolas, monospace;
+  font-variant-ligatures: none; font-kerning: none; tab-size: 4;
+  white-space: pre-wrap; overflow-wrap: break-word; word-break: normal;
+}
+.markdown-source-highlight {
+  grid-area: 1 / 1; place-self: start; min-width: 0; min-height: 0; max-width: 100%; max-height: 100%;
+  margin: 1px; padding: 12px; overflow: hidden; visibility: hidden; pointer-events: none; user-select: none;
+  color: var(--app-text);
+}
+.markdown-source-highlight span { font: inherit; font-variant-ligatures: none; font-kerning: none; }
+.markdown-source-heading, .markdown-source-link { color: var(--app-markdown-accent); }
+.markdown-source-emphasis { color: var(--app-code-number); }
+.markdown-source-code { color: var(--app-code-type); }
+.markdown-source-marker { color: var(--app-code-muted); }
+@media (forced-colors: none) {
+  .markdown-editor-area[data-source-highlight] > .markdown-source-highlight { visibility: visible; }
+  .markdown-editor-area[data-source-highlight] > textarea {
+    background: transparent; color: transparent; caret-color: var(--app-text);
+  }
+  .markdown-editor-area[data-source-highlight] > textarea::selection {
+    color: transparent; background: color-mix(in srgb, var(--app-accent) 25%, transparent);
+  }
+}
 .markdown-editor-area[data-mode="preview"] > textarea,
 .markdown-editor-area[data-mode="source"] > .markdown-preview { visibility: hidden; animation: none; }
 .markdown-editor-view.markdown-preview img { max-inline-size: min(100%, 24rem); max-block-size: 180px; border-radius: 6px; }
@@ -1408,6 +1433,7 @@ textarea.markdown-editor-view { font: 13px/1.65 'Fira Code', Consolas, monospace
   padding: 6px; overflow: auto; overscroll-behavior: contain; box-shadow: var(--app-picker-shadow);
 }
 .markdown-insert-panel .code-form { margin: 4px 4px 2px; }
+.markdown-insert-table-size { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .network-context-menu { max-width: calc(100% - 8px); max-height: calc(100% - 8px); overflow: auto; }
 .network-context-menu button:disabled { color: var(--app-muted); opacity: 0.55; cursor: default; }
 .network-menu-check { display: inline-block; width: 1.15em; color: var(--app-accent-text); }

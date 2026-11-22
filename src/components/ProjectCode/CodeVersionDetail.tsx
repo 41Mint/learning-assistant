@@ -232,7 +232,6 @@ function ScriptPreview({ content, version, search, cited }: { content: string; v
         : <div ref={popup} className="workspace-context-menu script-ask-menu" role="group" aria-label="询问智能体"
           onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setAction(undefined); }}
           style={{ left: action.x, top: action.y }}>
-          <div className="workspace-context-menu-title" aria-hidden="true">询问智能体</div>
           {action.excerpt && <button type="button" onClick={() => ask(action.excerpt)}>
             {action.kind === 'selection' ? '询问所选代码' : '询问当前行'}
           </button>}

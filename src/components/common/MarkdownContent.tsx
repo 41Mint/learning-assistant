@@ -5,6 +5,7 @@ import type { Components } from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import type { PluggableList } from 'unified';
+import { codeHighlightOptions } from '../../utils/codeHighlight';
 import { getImage, IMAGE_PREFIX } from '../../utils/imageStorage';
 import type { StoredImage } from '../../utils/imageStorage';
 import { rehypeSearchMatches } from '../../utils/rehypeSearchMatches';
@@ -75,7 +76,7 @@ export default function MarkdownContent({ content, images, searchWords, codeLine
   firstCodeLine?: number; highlightedCode?: CodeLineRange;
 }) {
   const options = useMemo(() => ({ images, activeCodeLine, highlightedCode, onExpandImage, renderLink }), [images, activeCodeLine, highlightedCode, onExpandImage, renderLink]);
-  const plugins: PluggableList = [[rehypeHighlight, { ignoreMissing: true }]];
+  const plugins: PluggableList = [[rehypeHighlight, codeHighlightOptions]];
   if (searchWords?.length) plugins.push([rehypeSearchMatches, searchWords]);
   if (codeLines) plugins.push([rehypeCodeLines, firstCodeLine]);
   return (

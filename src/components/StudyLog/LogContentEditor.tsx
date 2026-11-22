@@ -9,11 +9,12 @@ import { useWorkspaceStore } from '../../store/workspaceStore';
 import FocusEditor from '../common/FocusEditor';
 import MarkdownFields from '../common/MarkdownFields';
 import LogReviewPanel from './LogReviewPanel';
-import LogReferenceChoices from './LogReferenceChoices';
+import LogInsertOptions from './LogInsertOptions';
 import { AssistantSlots } from '../Assistant/assistantSlots';
 import { isEmptyLogContent } from '../../utils/studyLogs';
 import { imageMarkdown, prepareImageFile, referencedImageIds, saveWithImages } from '../../utils/imageStorage';
 import type { StoredImage } from '../../utils/imageStorage';
+import { insertMarkdownBlock } from '../../utils/markdownEditing';
 
 export interface LogEditingProps {
   draft: StudyLog | null;
@@ -56,19 +57,16 @@ export default function LogContentEditor({ log, kind, creating = false, onClose 
     setOperation('pasting');
     setError('');
     const editor = event.currentTarget;
-    const before = editor.value.slice(0, editor.selectionStart);
-    const after = editor.value.slice(editor.selectionEnd);
+    const { value, selectionStart, selectionEnd } = editor;
     try {
       const prepared = await Promise.all(imageFiles.map(prepareImageFile));
       const markdown = prepared.map(({ id }, index) => imageMarkdown(id, prepared.length === 1 ? '截图' : `截图 ${index + 1}`)).join('\n\n');
-      const leadingBreaks = before.match(/\n{0,2}$/)?.[0].length ?? 0;
-      const trailingBreaks = after.match(/^\n{0,2}/)?.[0].length ?? 0;
-      const prefix = before + (before ? '\n'.repeat(2 - leadingBreaks) : '') + markdown;
-      const next = prefix + '\n'.repeat(2 - trailingBreaks) + after;
+      const edit = insertMarkdownBlock(value, selectionStart, selectionEnd, markdown);
+      const next = value.slice(0, edit.start) + edit.text + value.slice(edit.end);
       setImages((draftImages) => [...draftImages, ...prepared]);
       setContent(next);
       window.requestAnimationFrame(() => {
-        if (document.activeElement === editor && editor.value === next) editor.setSelectionRange(prefix.length + 2, prefix.length + 2);
+        if (document.activeElement === editor && editor.value === next) editor.setSelectionRange(edit.selectionStart, edit.selectionEnd);
       });
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : '无法粘贴这张图片，请重试。');
@@ -107,7 +105,7 @@ export default function LogContentEditor({ log, kind, creating = false, onClose 
         saveDisabled={emptyDraft || operation === 'pasting'} busy={operation === 'saving'} error={error} onSave={() => void save()} onCancel={() => onClose(false)}>
         <MarkdownFields id={today ? 'study-log-content' : 'history-content'} label={today ? '学习内容（Markdown）' : '历史学习内容'}
           previewLabel={today ? '学习内容预览' : '历史学习内容预览'} value={content} onChange={setContent}
-          InsertOptions={LogReferenceChoices}
+          InsertOptions={LogInsertOptions} onInsertImages={(prepared) => setImages((draft) => [...draft, ...prepared])}
           placeholder="记录这次学习的内容、疑问或尝试。" images={images} readOnly={Boolean(operation)} onPaste={(event) => void pasteImages(event)} />
         {operation === 'pasting' && <p className="knowledge-muted" role="status">正在读取截图…</p>}
         {!!review?.selected.length && <p className="knowledge-muted">

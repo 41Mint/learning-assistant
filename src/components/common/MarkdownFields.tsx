@@ -1,14 +1,21 @@
-import { useCallback, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ClipboardEventHandler, ComponentType, Ref } from 'react';
 import type { StoredImage } from '../../utils/imageStorage';
-import { formatMarkdown } from '../../utils/markdownEditing';
+import { formatMarkdown, insertMarkdownBlock } from '../../utils/markdownEditing';
 import type { HeadingLevel, MarkdownEdit, MarkdownFormat } from '../../utils/markdownEditing';
 import MarkdownContent from './MarkdownContent';
 import type { MarkdownLinkRenderer } from './MarkdownContent';
 import MarkdownToolbar from './MarkdownToolbar';
+import { highlightMarkdownSource } from './MarkdownSourceHighlight';
 
 export interface MarkdownEditorHandle {
   insertAfterSelection: (text: string, separatorWhenSelected?: string) => boolean;
+}
+
+export interface MarkdownInsertOptionsProps {
+  selectedText: string;
+  insert: (text: string, afterSelectionSeparator?: string) => void;
+  insertBlock: (text: string, options?: { selection?: [number, number]; images?: StoredImage[] }) => void;
 }
 
 interface MarkdownFieldsProps {
@@ -23,7 +30,8 @@ interface MarkdownFieldsProps {
   onPaste?: ClipboardEventHandler<HTMLTextAreaElement>;
   editorRef?: Ref<MarkdownEditorHandle>;
   renderLink?: MarkdownLinkRenderer;
-  InsertOptions?: ComponentType<{ selectedText: string; insert: (text: string, afterSelectionSeparator?: string) => void }>;
+  InsertOptions?: ComponentType<MarkdownInsertOptionsProps>;
+  onInsertImages?: (images: StoredImage[]) => void;
 }
 
 type PreviewDraft = Pick<MarkdownFieldsProps, 'value' | 'images' | 'renderLink'>;
@@ -36,17 +44,22 @@ interface Insertion {
   point?: { x: number; y: number };
 }
 
-export default function MarkdownFields({ id, label, previewLabel, value, onChange, placeholder, images, readOnly, onPaste, editorRef, renderLink, InsertOptions }: MarkdownFieldsProps) {
+export default function MarkdownFields({ id, label, previewLabel, value, onChange, placeholder, images, readOnly, onPaste, editorRef, renderLink, InsertOptions, onInsertImages }: MarkdownFieldsProps) {
   const [mode, setMode] = useState<'source' | 'preview'>('source');
   const [previewDraft, setPreviewDraft] = useState<PreviewDraft>();
   const [height, setHeight] = useState<number>();
+  const [composing, setComposing] = useState(false);
   const textarea = useRef<HTMLTextAreaElement>(null);
+  const sourceMirror = useRef<HTMLPreElement>(null);
   const area = useRef<HTMLDivElement>(null);
   const resizing = useRef<{ pointerId: number; y: number; height: number }>(undefined);
   const pending = useRef<MarkdownEdit>(undefined);
   const panel = useRef<HTMLDivElement>(null);
   const [insertion, setInsertion] = useState<Insertion>();
   const isPreview = mode === 'preview';
+  const deferredSource = useDeferredValue(isPreview || composing ? '' : value);
+  const highlightedSource = useMemo(() => highlightMarkdownSource(deferredSource), [deferredSource]);
+  const showSourceHighlight = !isPreview && !composing && deferredSource === value && highlightedSource !== null;
   const insertId = `${id}-insert`;
   const previewId = `${id}-preview`;
   const preview = isPreview ? { value, images, renderLink } : previewDraft;
@@ -61,6 +74,26 @@ export default function MarkdownFields({ id, label, previewLabel, value, onChang
     setMode(next);
   };
   const resize = (next: number) => setHeight(Math.round(Math.max(200, Math.min(window.innerHeight * 0.85, next))));
+
+  const syncSourceScroll = useCallback(() => {
+    const field = textarea.current;
+    const mirror = sourceMirror.current;
+    if (!field || !mirror) return;
+    mirror.style.width = `${field.clientWidth}px`;
+    mirror.style.height = `${field.clientHeight}px`;
+    mirror.scrollTop = field.scrollTop;
+    mirror.scrollLeft = field.scrollLeft;
+  }, []);
+
+  useLayoutEffect(() => {
+    const field = textarea.current;
+    if (!field) return;
+    const observer = new ResizeObserver(syncSourceScroll);
+    observer.observe(field);
+    return () => observer.disconnect();
+  }, [syncSourceScroll]);
+
+  useLayoutEffect(syncSourceScroll, [showSourceHighlight, highlightedSource, syncSourceScroll]);
 
   const applyEdit = useCallback((edit: MarkdownEdit) => {
     const field = textarea.current;
@@ -115,15 +148,28 @@ export default function MarkdownFields({ id, label, previewLabel, value, onChang
     setInsertion(undefined);
   };
 
-  const insert = (text: string, afterSelectionSeparator?: string) => {
-    if (!insertion || textarea.current?.value !== insertion.value || readOnly) return;
+  const commitInsertion = (edit: MarkdownEdit) => {
+    const field = textarea.current;
+    if (!insertion || !field || field.readOnly || field.inert || field.value !== insertion.value || !panel.current?.matches(':popover-open')) return false;
+    closeInsertion();
+    applyEdit(edit);
+    return true;
+  };
+
+  const insert: MarkdownInsertOptionsProps['insert'] = (text, afterSelectionSeparator) => {
+    if (!insertion) return;
     const { start, end } = insertion;
     const afterSelection = afterSelectionSeparator !== undefined;
     const editStart = afterSelection ? end : start;
     const replacement = (afterSelection && start !== end ? afterSelectionSeparator : '') + text;
     const caret = editStart + replacement.length;
-    closeInsertion();
-    applyEdit({ start: editStart, end, text: replacement, selectionStart: caret, selectionEnd: caret });
+    commitInsertion({ start: editStart, end, text: replacement, selectionStart: caret, selectionEnd: caret });
+  };
+
+  const insertBlock: MarkdownInsertOptionsProps['insertBlock'] = (text, options) => {
+    if (!insertion || (options?.images?.length && !onInsertImages)) return;
+    const edit = insertMarkdownBlock(insertion.value, insertion.end, insertion.end, text, options?.selection);
+    if (commitInsertion(edit) && options?.images?.length) onInsertImages?.(options.images);
   };
 
   useImperativeHandle(editorRef, () => ({
@@ -173,7 +219,7 @@ export default function MarkdownFields({ id, label, previewLabel, value, onChang
             if (!event.currentTarget.matches(':popover-open')) setInsertion(undefined);
           }} onKeyDown={(event) => {
             if (event.nativeEvent.isComposing || event.keyCode === 229) return;
-            if (event.key === 'Enter' && event.target instanceof HTMLInputElement) event.preventDefault();
+            if (event.key === 'Enter' && event.target instanceof HTMLInputElement && event.target.type !== 'file') event.preventDefault();
             if (event.key !== 'Escape' || !insertion) return;
             event.preventDefault();
             event.stopPropagation();
@@ -182,11 +228,15 @@ export default function MarkdownFields({ id, label, previewLabel, value, onChang
             field?.focus({ preventScroll: true });
             field?.setSelectionRange(insertion.start, insertion.end, insertion.direction);
           }}>
-          {insertion && <InsertOptions selectedText={insertion.value.slice(insertion.start, insertion.end)} insert={insert} />}
+          {insertion && <InsertOptions selectedText={insertion.value.slice(insertion.start, insertion.end)} insert={insert} insertBlock={insertBlock} />}
         </div>}
-        <div ref={area} className="markdown-editor-area" data-mode={mode} style={{ height }}>
+        <div ref={area} className="markdown-editor-area" data-mode={mode} data-source-highlight={showSourceHighlight || undefined} style={{ height }}>
+          <pre ref={sourceMirror} className="markdown-source-highlight" aria-hidden="true">
+            {highlightedSource}{deferredSource.endsWith('\n') ? '\u200b' : null}
+          </pre>
           <textarea ref={textarea} id={id} className="markdown-editor-view" inert={isPreview} value={value}
             onChange={(event) => onChange(event.target.value)} placeholder={placeholder} readOnly={readOnly} onPaste={onPaste}
+            onScroll={syncSourceScroll} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)}
             onContextMenu={InsertOptions ? (event) => {
               if (event.shiftKey || readOnly) return;
               event.preventDefault();

@@ -44,6 +44,109 @@ function savedImageIds(page: Page) {
   });
 }
 
+test('日志插入菜单可选择多张本地图片，确认后预览并随日志保存', async ({ page }) => {
+  await page.goto('/#today');
+  const today = page.getByRole('region', { name: '今日学习', exact: true });
+  await today.getByRole('button', { name: '编辑', exact: true }).click();
+  const editor = today.getByLabel('学习内容（Markdown）');
+  await editor.fill('图片前图片后');
+  await editor.evaluate((element: HTMLTextAreaElement) => element.setSelectionRange(0, 3));
+  const panel = today.getByRole('group', { name: '插入到 Markdown' });
+  const trigger = today.getByRole('button', { name: '插入', exact: true });
+  const file = panel.getByLabel('本地图片（可多选）');
+  const insert = panel.getByRole('button', { name: '插入到正文' });
+  await trigger.click();
+  await panel.getByRole('button', { name: '插入图片', exact: true }).click();
+  await expect(file).toBeFocused();
+  await file.setInputFiles({ name: '伪装图片.png', mimeType: 'image/png', buffer: Buffer.from('invalid') });
+  await expect(panel.getByRole('alert')).toContainText('不是支持的');
+  await expect(insert).toBeDisabled();
+  const images = ['场景.png', 'Inspector.png'].map((name) => ({ name, mimeType: 'image/png', buffer: png }));
+  await file.setInputFiles(images);
+  await expect(insert).toBeEnabled();
+  await page.keyboard.press('Escape');
+  await expect(panel).toBeHidden();
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveValue('图片前图片后');
+  expect(await savedImageIds(page)).toEqual([]);
+
+  await trigger.click();
+  await panel.getByRole('button', { name: '插入图片', exact: true }).click();
+  const chooser = page.waitForEvent('filechooser');
+  await file.click();
+  await (await chooser).setFiles(images);
+  await insert.click();
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveValue(/^图片前\n\n!\[场景\]\(learning-image:[\w-]+\)\n\n!\[Inspector\]\(learning-image:[\w-]+\)\n\n图片后$/);
+  await today.getByRole('button', { name: '预览', exact: true }).click();
+  const preview = today.getByRole('region', { name: '学习内容预览' });
+  await expect(preview.getByRole('img', { name: '场景', exact: true })).toBeVisible();
+  await expect(preview.getByRole('img', { name: 'Inspector', exact: true })).toBeVisible();
+  expect(await savedImageIds(page)).toEqual([]);
+  await today.getByRole('button', { name: '保存记录' }).click();
+  await expect(today.getByRole('img', { name: '场景', exact: true })).toBeVisible();
+  expect(await savedImageIds(page)).toHaveLength(2);
+  await page.reload();
+  for (const name of ['场景', 'Inspector']) {
+    await expect.poll(() => today.getByRole('img', { name, exact: true }).evaluate((element: HTMLImageElement) => element.naturalWidth)).toBe(1);
+  }
+});
+
+test('历史日志右键插入表格并就地填表，分隔线保留独立块和撤销', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto('/#today');
+  await page.evaluate(async (date) => {
+    const { useStudyLogStore } = await import('/src/store/studyLogStore.ts');
+    useStudyLogStore.getState().appendToDate(date, '表格前表格后');
+  }, day);
+  await page.goto('/#history/' + day);
+  await page.getByRole('button', { name: '编辑 / 补充记录' }).click();
+  const form = page.getByRole('form', { name: '历史记录编辑表单' });
+  const editor = form.getByRole('textbox', { name: '历史学习内容', exact: true });
+  await editor.fill('表格前表格后');
+  await editor.evaluate((field: HTMLTextAreaElement) => field.setSelectionRange(0, 3));
+  await editor.click({ button: 'right', position: { x: 28, y: 24 } });
+  const panel = form.getByRole('group', { name: '插入到 Markdown' });
+  await panel.getByRole('button', { name: '插入表格', exact: true }).click();
+  const rows = panel.getByRole('combobox', { name: '正文行数', exact: true });
+  await expect(rows).toBeFocused();
+  await rows.selectOption('3');
+  await panel.getByRole('combobox', { name: '列数', exact: true }).selectOption('4');
+  await panel.getByRole('button', { name: '插入到正文' }).click();
+  await expect(editor).toBeFocused();
+  expect(await editor.evaluate((field: HTMLTextAreaElement) => field.value.slice(field.selectionStart, field.selectionEnd))).toBe('列 1');
+  await page.keyboard.insertText('指标');
+  const tableOnly = await editor.inputValue();
+  expect(tableOnly).toMatch(/^表格前\n\n\| 指标 \| 列 2 \| 列 3 \| 列 4 \|/);
+  expect(tableOnly).toMatch(/\n\n表格后$/);
+
+  await editor.evaluate((field: HTMLTextAreaElement) => {
+    const offset = field.value.lastIndexOf('表格后');
+    field.setSelectionRange(offset, offset);
+  });
+  const trigger = form.getByRole('button', { name: '插入', exact: true });
+  await trigger.click();
+  const divider = panel.getByRole('button', { name: '插入分隔线', exact: true });
+  await divider.click();
+  const withDivider = tableOnly.replace(/表格后$/, '---\n\n表格后');
+  await expect(editor).toHaveValue(withDivider);
+  await editor.press('Control+z');
+  await expect(editor).toHaveValue(tableOnly);
+  await trigger.click();
+  await divider.click();
+  await form.getByRole('button', { name: '预览', exact: true }).click();
+  const preview = form.getByRole('region', { name: '历史学习内容预览' });
+  const table = preview.getByRole('table');
+  await expect(table.getByRole('row')).toHaveCount(4);
+  await expect(table.getByRole('columnheader')).toHaveText(['指标', '列 2', '列 3', '列 4']);
+  await expect(preview.getByRole('separator')).toBeVisible();
+  await form.getByRole('button', { name: '保存补充' }).click();
+  await page.reload();
+  const reading = page.locator('#study-history .markdown-preview:visible');
+  await expect(reading.getByRole('table')).toBeVisible();
+  await expect(reading.getByRole('separator')).toBeVisible();
+});
+
 test('今日编辑可粘贴截图和替换选区，仅保存仍引用的图片且能从备份恢复', async ({ page, browser }) => {
   await page.goto('/#today');
   const today = page.getByRole('region', { name: '今日学习', exact: true });

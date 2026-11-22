@@ -27,6 +27,17 @@ function wrap(start: number, end: number, text: string, prefix: string, suffix: 
   return replace(start, end, prefix + text + suffix, prefix.length, prefix.length + text.length);
 }
 
+export function insertMarkdownBlock(source: string, start: number, end: number, block: string, selection?: [number, number]): MarkdownEdit {
+  const before = source.slice(0, start);
+  const after = source.slice(end);
+  const leadingBreaks = before.match(/\n{0,2}$/)?.[0].length ?? 0;
+  const trailingBreaks = after.match(/^\n{0,2}/)?.[0].length ?? 0;
+  const prefix = before ? '\n'.repeat(2 - leadingBreaks) : '';
+  const suffix = '\n'.repeat(2 - trailingBreaks);
+  const [from, to] = selection ?? [block.length + 2, block.length + 2];
+  return replace(start, end, prefix + block + suffix, prefix.length + from, prefix.length + to);
+}
+
 function formatLines(source: string, start: number, end: number, format: LineFormat, headingLevel: HeadingLevel): MarkdownEdit {
   const first = source.lastIndexOf('\n', start - 1) + 1;
   const from = start === 0 ? 0 : first;
