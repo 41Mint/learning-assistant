@@ -1,6 +1,6 @@
-# 项目代码 v1 验收指南
+# 项目代码验收
 
-在 [本地学习助手](http://localhost:5185/) 验收。以 Whack-a-Mole 的 `Assets/Scripts/InputManager.cs` 为例，也可以换成另一份 UTF-8 的 `.cs` 文件。单个脚本可保存至 512 KB。
+在 [本地学习助手](http://localhost:5185/) 验收。以 Whack-a-Mole 的 `Assets/Scripts/InputManager.cs` 为例，也可以换成另一份 UTF-8 的 `.cs` 文件。单个脚本可保存至 512 KB。[代码与备份用例](../tests/project-code.spec.ts) · [真实日志与代码引用用例](../tests/day03-code.spec.ts)
 
 1. **保存本地快照。** 在“今日学习”或一篇已有的历史日志展开“项目代码”，点“添加代码版本”。新项目填 `Whack-a-Mole`，选中 Unity 项目内的 `InputManager.cs`，项目内路径填 `Assets/Scripts/InputManager.cs`，说明填“本地快照”。保存后打开脚本链接，确认代码高亮显示，并能从“引用记录”回到这篇日志。
 2. **在原项目保存 GitHub 版本。** 在已登录的 GitHub 文件页选定一个提交，按 `y` 后复制地址。回到日志再次点“添加代码版本”，选择原项目，粘贴“GitHub 固定链接”，说明填“已提交版本”，文件留空。保存后应在同一项目下看到两个版本。先试一个带分支名的文件地址，可以看到需要固定提交链接的提示。
@@ -12,7 +12,7 @@
 
 已有代码关联会在编辑实践时预选。可取消勾选后点“取消”检查原关联，再重复操作并保存，确认代码链接已从该次实践移除。编辑时其他成长卡片收起，滚动表单仍可找到底部操作区。
 
-## 项目目录导入 v1
+## 项目目录导入
 
 1. 打开[项目代码](http://localhost:5185/#code)，点“导入项目目录”。选择 Whack-a-Mole 的项目根目录 `D:\UnityProject\Whack a Mole`。浏览器枚举大目录时可能需要等待。预览应显示 `Assets`、`Packages` 和 `ProjectSettings`，跳过顶层 `Library`、`Builds` 等缓存或构建目录和 `.meta` 文件。
 2. 展开 `Assets/Scripts`，勾选 `InputManager.cs` 和 `GameManager.cs`，选择新建项目或已有的 Whack-a-Mole 项目，点“保存目录快照”。可以只保存目录，之后通过“更新目录快照”再补选脚本。

@@ -2,26 +2,9 @@
 
 ## 启动
 
-安装 Node.js 24，从 GitHub 克隆仓库或下载并解压源码。在项目目录打开终端，依次运行以下命令。
+先按环境指南 [启动应用](./SETUP.md#启动) 并 [进入测试工作区](./SETUP.md#进入测试工作区)。验收真实智能体生成时再 [配置 DeepSeek](./SETUP.md#配置-deepseek)。
 
-```bash
-npm ci
-npm run dev -- --port 5185 --strictPort
-```
-
-保持终端运行，浏览器打开 [本地学习助手](http://localhost:5185)，点右下角「开发者工具」→「进入测试工作区」。新标签页从「今日学习」打开，页首显示「测试工作区」。组员可以直接验收本地功能。真实智能体生成需要单独完成 [DeepSeek 配置](./LOG_REVIEW_ACCEPTANCE.md#配置-deepseek)。
-
-同一个浏览器会保留自己做过的测试修改。用开发者工具中的「恢复示例数据」可以重新开始。如果此前使用过知识网络演示，也可用这个操作加载新版样例。确认前可以取消。
-
-### 启动时自动更新
-
-1. 安装 Git 和 Node.js 24。从 GitHub 下载最新版 ZIP 并解压。已有 Git 克隆的组员更新一次即可在原项目目录找到启动文件。
-2. Windows 双击 `start.bat`。macOS 在 Finder 双击 `start.command`。如果 macOS 提示确认打开下载的文件，请核对文件来自本仓库。[Apple 的打开说明](https://support.apple.com/en-us/102445)
-3. 脚本会检查 `origin/master` 的更新，需要时安装依赖，再启动服务并用默认浏览器打开 `http://localhost:5185`。保留打开的终端窗口即可继续使用。继续在原来的浏览器访问即可查看原有记录。
-
-从 ZIP 启动时，脚本第一次会在解压目录内建立 `learning-assistant-local` 更新副本。以后双击原来的启动文件即可。使用 DeepSeek 时，在这个更新副本中配置 `.env.local`。
-
-更新前先关闭原来的开发服务。项目有本地代码修改、提交分叉或下载失败时，启动窗口会保留错误信息。也可以在项目目录运行 `npm run dev:latest` 使用同一流程。
+样例与隔离的自动回归见 [测试工作区用例](../tests/test-workspace.spec.ts)，更细的流程见 [各功能验收指南](../README.md#文档入口)。
 
 ## 验收顺序
 
