@@ -168,6 +168,18 @@ test('测试工作区提供关联样例，窄屏重置可以恢复样例任务�
   expect(pickerBox.x).toBeGreaterThan(filterBox.x + filterBox.width);
   expect(createBox.x).toBeGreaterThan(pickerBox.x + pickerBox.width);
   expect(pickerBox.height).toBeCloseTo(createBox.height, 1);
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    await picker.focus();
+    await expect(picker).toHaveCSS('box-shadow', 'none');
+    await expect(picker).toHaveCSS('outline-width', '1px');
+    if (colorScheme === 'light') await picker.click();
+    else await picker.press('Space');
+    await expect.poll(() => picker.evaluate((element) => element.matches(':open'))).toBe(true);
+    await expect(picker).toHaveCSS('box-shadow', 'none');
+    await expect(picker).toHaveCSS('outline-width', '1px');
+    await page.keyboard.press('Escape');
+  }
   await picker.selectOption({ label: '预制体与场景复用' });
   await expect(folder.getByRole('article')).toHaveCount(2);
   await folder.getByRole('button', { name: '关闭卡组' }).click();
