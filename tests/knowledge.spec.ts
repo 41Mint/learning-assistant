@@ -78,6 +78,85 @@ test('名称即可创建；别名检索、分类、Markdown 编辑及草稿在�
   await page.screenshot({ path: testInfo.outputPath('knowledge-mobile-dark.png'), fullPage: true });
 });
 
+test('词条共用 Markdown 插入面板，图片跟随正文保存并能在写入失败后重试', async ({ page }) => {
+  await page.goto('/#knowledge');
+  await createEntry(page, '像素素材');
+  await page.evaluate(async () => {
+    const { useProjectCodeStore } = await import('/src/store/projectCodeStore.ts');
+    await useProjectCodeStore.getState().saveVersion({
+      project: { name: '插入面板示例', repositoryUrl: '', tutorialUrl: '' },
+      path: 'Assets/Reader.cs', content: 'class Reader {}', githubUrl: '', note: '',
+    });
+  });
+  await page.getByRole('button', { name: '新建词条', exact: true }).click();
+  const form = page.getByRole('form', { name: '词条编辑表单' });
+  const menu = form.getByRole('group', { name: '插入到 Markdown' });
+  const insert = form.getByRole('button', { name: '插入', exact: true });
+  const confirm = menu.getByRole('button', { name: '插入到正文', exact: true });
+  const source = form.getByRole('textbox', { name: '词条正文（Markdown）', exact: true });
+  await form.getByLabel('词条名称（必填）').fill('素材处理手册');
+  await source.fill('相关资料 ');
+  await source.click({ button: 'right', position: { x: 70, y: 24 } });
+  await menu.getByRole('button', { name: '引用词条', exact: true }).click();
+  await menu.getByRole('option', { name: '像素素材', exact: true }).click();
+  await confirm.click();
+  await source.press('Control+End');
+  await source.press('End');
+  await page.keyboard.insertText(' ');
+  await insert.click();
+  await menu.getByRole('button', { name: '引用项目代码', exact: true }).click();
+  await menu.getByRole('option', { name: /Reader\.cs/ }).click();
+  await confirm.click();
+  await insert.click();
+  await menu.getByRole('button', { name: '插入表格', exact: true }).click();
+  await confirm.click();
+  await source.press('Control+End');
+  await insert.click();
+  await menu.getByRole('button', { name: '插入分隔线', exact: true }).click();
+  await insert.click();
+  await menu.getByRole('button', { name: '插入图片', exact: true }).click();
+  await menu.getByLabel('本地图片（可多选）').setInputFiles({
+    name: '素材示意.png', mimeType: 'image/png',
+    buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jfeoAAAAASUVORK5CYII=', 'base64'),
+  });
+  await confirm.click();
+
+  await form.getByRole('button', { name: '预览', exact: true }).click();
+  const preview = form.getByRole('region', { name: '词条正文预览' });
+  await expect(preview.getByRole('link', { name: '像素素材', exact: true })).toBeVisible();
+  await expect(preview.getByRole('link', { name: 'Reader.cs', exact: true })).toBeVisible();
+  await expect(preview.getByRole('table')).toBeVisible();
+  await expect(preview.getByRole('separator')).toBeVisible();
+  await expect(preview.getByRole('img', { name: '素材示意' })).toBeVisible();
+  const savedImages = () => page.evaluate(async () => (await (await import('/src/utils/imageStorage.ts')).getImages()).length);
+  expect(await savedImages()).toBe(0);
+
+  await page.evaluate((key) => {
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (name, value) {
+      if (name === key) {
+        Storage.prototype.setItem = setItem;
+        throw new Error('模拟词条写入失败');
+      }
+      setItem.call(this, name, value);
+    };
+  }, knowledgeKey);
+  const save = form.getByRole('button', { name: '保存词条', exact: true });
+  await save.click();
+  await expect(form.getByRole('alert')).toHaveText('模拟词条写入失败');
+  expect(await savedImages()).toBe(0);
+  await expect(preview.getByRole('img', { name: '素材示意' })).toBeVisible();
+  await save.click();
+  const detail = page.getByRole('region', { name: '词条详情' });
+  await expect(detail.getByRole('heading', { name: '素材处理手册' })).toBeVisible();
+  expect(await savedImages()).toBe(1);
+  await page.reload();
+  await expect(detail.getByRole('img', { name: '素材示意' })).toBeVisible();
+  const data = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), knowledgeKey);
+  expect(data.relations).toEqual([]);
+  expect(data.entries.find((entry: { title: string }) => entry.title === '素材处理手册').codeVersionIds).toBeUndefined();
+});
+
 test('词条分类可新增，旧词条打开下拉时显示全部在用分类', async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 900 });
   await page.goto('/#knowledge');

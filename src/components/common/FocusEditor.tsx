@@ -26,7 +26,7 @@ export default function FocusEditor({
   }, []);
 
   return (
-    <form className="focus-editor" aria-label={formLabel} onSubmit={(event) => {
+    <form className="focus-editor" aria-label={formLabel} aria-busy={busy || undefined} onSubmit={(event) => {
       event.preventDefault();
       if (!saveDisabled && !busy) onSave();
     }}>

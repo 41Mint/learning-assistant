@@ -575,7 +575,9 @@ export default function KnowledgeNetwork({ active }: { active: boolean }) {
         </div>
       </>}
       <dialog ref={editor} className="network-entry-editor" data-category-editor={editorTarget && editorTarget.kind !== 'entry' || undefined}
-        aria-label={editorLabel} onClose={() => setEditorTarget(null)}>
+        aria-label={editorLabel} onCancel={(event) => {
+          if (event.currentTarget.querySelector('form[aria-busy="true"]')) event.preventDefault();
+        }} onClose={() => setEditorTarget(null)}>
         {editorTarget?.kind === 'entry' && (editorTarget.id && !editorEntry
           ? <><p role="alert">这个词条已不存在。</p><button type="button" className="note-button secondary" onClick={closeEditor}>关闭</button></>
           : <KnowledgeEditor key={editorTarget.id ?? 'new'} entry={editorEntry} categories={categories}

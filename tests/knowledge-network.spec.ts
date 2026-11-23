@@ -1057,6 +1057,8 @@ test('图内编辑保留视角，可撤销词条内容及关联并保护其他�
   const dialog = page.getByRole('dialog', { name: '在画布中编辑词条' });
   await dialog.getByLabel('词条名称（必填）').fill('像素单位与场景比例');
   await dialog.getByLabel('词条正文（Markdown）').fill('## 实验\n\n16 个像素对应 1 个世界单位。');
+  await dialog.getByRole('button', { name: '插入', exact: true }).click();
+  await dialog.getByRole('button', { name: '插入分隔线', exact: true }).click();
   await dialog.getByText('关联学习日志（1）', { exact: true }).click();
   await dialog.getByRole('checkbox', { name: /导入精灵素材/ }).uncheck();
   await dialog.getByText('关联其他词条（1）', { exact: true }).click();
@@ -1072,6 +1074,7 @@ test('图内编辑保留视角，可撤销词条内容及关联并保护其他�
   const changed = await savedKnowledge(page);
   expect(changed.logLinks).toEqual([]);
   expect(changed.relations).toContainEqual(expect.objectContaining({ sourceId: 'ppu', targetId: 'tilemap' }));
+  expect(changed.entries.find(({ id }) => id === 'ppu')?.content).toContain('世界单位。\n\n---');
   expect(changed.entries.find(({ id }) => id === 'ppu')?.codeVersionIds).toEqual([]);
 
   const editOutsideCanvas = (id: string, content: string) => page.evaluate(async ({ id, content }) => {

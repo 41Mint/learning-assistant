@@ -3,9 +3,9 @@ import { useKnowledgeStore } from '../../store/knowledgeStore';
 import { entryCitationMarkdown } from '../../utils/entryCitation';
 import { imageMarkdown, prepareImageFile } from '../../utils/imageStorage';
 import type { StoredImage } from '../../utils/imageStorage';
-import type { MarkdownInsertOptionsProps } from '../common/MarkdownFields';
-import SearchableSelect from '../common/SearchableSelect';
-import LogCodeCitationPicker from './LogCodeCitationPicker';
+import type { MarkdownInsertOptionsProps } from './MarkdownFields';
+import SearchableSelect from './SearchableSelect';
+import CodeCitationPicker from './CodeCitationPicker';
 
 function EntryCitationPicker({ initialQuery, onInsert }: { initialQuery: string; onInsert: (id: string, title: string) => void }) {
   const { entries, isLoaded, error, loadKnowledge } = useKnowledgeStore();
@@ -77,7 +77,7 @@ function TableInsertOptions({ insertBlock }: Pick<MarkdownInsertOptionsProps, 'i
   </div>;
 }
 
-export default function LogInsertOptions({ selectedText, insert, insertBlock }: MarkdownInsertOptionsProps) {
+export default function MarkdownInsertOptions({ selectedText, insert, insertBlock }: MarkdownInsertOptionsProps) {
   const [kind, setKind] = useState<'entry' | 'code' | 'image' | 'table'>();
   const choices = useRef<HTMLDivElement>(null);
   const initialQuery = selectedText.trim().split('\n', 1)[0];
@@ -94,7 +94,7 @@ export default function LogInsertOptions({ selectedText, insert, insertBlock }: 
     }
   };
   const panels = {
-    code: <LogCodeCitationPicker initialQuery={initialQuery} onInsert={(markdown) => insert(markdown, ' ')} />,
+    code: <CodeCitationPicker initialQuery={initialQuery} onInsert={(markdown) => insert(markdown, ' ')} />,
     entry: <EntryCitationPicker initialQuery={initialQuery} onInsert={insertEntry} />,
     image: <ImageInsertOptions insertBlock={insertBlock} />,
     table: <TableInsertOptions insertBlock={insertBlock} />,

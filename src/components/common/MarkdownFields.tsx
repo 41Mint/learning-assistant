@@ -1,10 +1,11 @@
 import { useCallback, useDeferredValue, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { ClipboardEventHandler, ComponentType, Ref } from 'react';
+import type { ClipboardEventHandler, Ref } from 'react';
 import type { StoredImage } from '../../utils/imageStorage';
 import { formatMarkdown, insertMarkdownBlock } from '../../utils/markdownEditing';
 import type { HeadingLevel, MarkdownEdit, MarkdownFormat } from '../../utils/markdownEditing';
 import MarkdownContent from './MarkdownContent';
 import type { MarkdownLinkRenderer } from './MarkdownContent';
+import MarkdownInsertOptions from './MarkdownInsertOptions';
 import MarkdownToolbar from './MarkdownToolbar';
 import { highlightMarkdownSource } from './MarkdownSourceHighlight';
 
@@ -30,8 +31,7 @@ interface MarkdownFieldsProps {
   onPaste?: ClipboardEventHandler<HTMLTextAreaElement>;
   editorRef?: Ref<MarkdownEditorHandle>;
   renderLink?: MarkdownLinkRenderer;
-  InsertOptions?: ComponentType<MarkdownInsertOptionsProps>;
-  onInsertImages?: (images: StoredImage[]) => void;
+  onInsertImages: (images: StoredImage[]) => void;
 }
 
 type PreviewDraft = Pick<MarkdownFieldsProps, 'value' | 'images' | 'renderLink'>;
@@ -44,7 +44,7 @@ interface Insertion {
   point?: { x: number; y: number };
 }
 
-export default function MarkdownFields({ id, label, previewLabel, value, onChange, placeholder, images, readOnly, onPaste, editorRef, renderLink, InsertOptions, onInsertImages }: MarkdownFieldsProps) {
+export default function MarkdownFields({ id, label, previewLabel, value, onChange, placeholder, images, readOnly, onPaste, editorRef, renderLink, onInsertImages }: MarkdownFieldsProps) {
   const [mode, setMode] = useState<'source' | 'preview'>('source');
   const [previewDraft, setPreviewDraft] = useState<PreviewDraft>();
   const [height, setHeight] = useState<number>();
@@ -167,9 +167,9 @@ export default function MarkdownFields({ id, label, previewLabel, value, onChang
   };
 
   const insertBlock: MarkdownInsertOptionsProps['insertBlock'] = (text, options) => {
-    if (!insertion || (options?.images?.length && !onInsertImages)) return;
+    if (!insertion) return;
     const edit = insertMarkdownBlock(insertion.value, insertion.end, insertion.end, text, options?.selection);
-    if (commitInsertion(edit) && options?.images?.length) onInsertImages?.(options.images);
+    if (commitInsertion(edit) && options?.images?.length) onInsertImages(options.images);
   };
 
   useImperativeHandle(editorRef, () => ({
@@ -205,7 +205,7 @@ export default function MarkdownFields({ id, label, previewLabel, value, onChang
       <label className="markdown-editor-label" htmlFor={id}>{label}</label>
       <div className="markdown-editor-shell">
         <MarkdownToolbar sourceId={id} previewId={preview ? previewId : undefined} mode={mode} readOnly={readOnly}
-          onModeChange={switchMode} onFormat={format} sourceTools={InsertOptions && (
+          onModeChange={switchMode} onFormat={format} sourceTools={(
             <button type="button" className="markdown-format-button" aria-label="插入" title="插入"
               aria-controls={insertId} aria-expanded={Boolean(insertion) && !readOnly} disabled={isPreview || readOnly}
               onClick={(event) => { if (insertion) closeInsertion(); else openInsertion(event.currentTarget); }}>
@@ -214,7 +214,7 @@ export default function MarkdownFields({ id, label, previewLabel, value, onChang
               </svg>
             </button>
           )} />
-        {InsertOptions && <div ref={panel} id={insertId} popover="auto" className="workspace-context-menu markdown-insert-panel"
+        <div ref={panel} id={insertId} popover="auto" className="workspace-context-menu markdown-insert-panel"
           role="group" aria-label="插入到 Markdown" onToggle={(event) => {
             if (!event.currentTarget.matches(':popover-open')) setInsertion(undefined);
           }} onKeyDown={(event) => {
@@ -228,8 +228,8 @@ export default function MarkdownFields({ id, label, previewLabel, value, onChang
             field?.focus({ preventScroll: true });
             field?.setSelectionRange(insertion.start, insertion.end, insertion.direction);
           }}>
-          {insertion && <InsertOptions selectedText={insertion.value.slice(insertion.start, insertion.end)} insert={insert} insertBlock={insertBlock} />}
-        </div>}
+          {insertion && <MarkdownInsertOptions selectedText={insertion.value.slice(insertion.start, insertion.end)} insert={insert} insertBlock={insertBlock} />}
+        </div>
         <div ref={area} className="markdown-editor-area" data-mode={mode} data-source-highlight={showSourceHighlight || undefined} style={{ height }}>
           <pre ref={sourceMirror} className="markdown-source-highlight" aria-hidden="true">
             {highlightedSource}{deferredSource.endsWith('\n') ? '\u200b' : null}
@@ -237,13 +237,13 @@ export default function MarkdownFields({ id, label, previewLabel, value, onChang
           <textarea ref={textarea} id={id} className="markdown-editor-view" inert={isPreview} value={value}
             onChange={(event) => onChange(event.target.value)} placeholder={placeholder} readOnly={readOnly} onPaste={onPaste}
             onScroll={syncSourceScroll} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)}
-            onContextMenu={InsertOptions ? (event) => {
+            onContextMenu={(event) => {
               if (event.shiftKey || readOnly) return;
               event.preventDefault();
               const rect = event.currentTarget.getBoundingClientRect();
               openInsertion(event.currentTarget, event.clientX || event.clientY
                 ? { x: event.clientX, y: event.clientY } : { x: rect.left, y: rect.top });
-            } : undefined} />
+            }} />
           {preview && <div id={previewId} className="markdown-preview markdown-editor-view" role="region" aria-label={previewLabel}
             tabIndex={0} inert={!isPreview}>
             {previewContent}

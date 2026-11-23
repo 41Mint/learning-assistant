@@ -3,9 +3,9 @@ import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { scriptLines } from '../../utils/assistantCode';
 import { codeCitationMarkdown, parseCodeLines } from '../../utils/codeCitation';
 import { codeVersionLabel } from '../../utils/projectCode';
-import SearchableSelect from '../common/SearchableSelect';
+import SearchableSelect from './SearchableSelect';
 
-export default function LogCodeCitationPicker({ initialQuery, onInsert }: { initialQuery: string; onInsert: (markdown: string) => void }) {
+export default function CodeCitationPicker({ initialQuery, onInsert }: { initialQuery: string; onInsert: (markdown: string) => void }) {
   const { data, isLoaded, error, load } = useProjectCodeStore();
   const [id, setId] = useState('');
   const [start, setStart] = useState('');

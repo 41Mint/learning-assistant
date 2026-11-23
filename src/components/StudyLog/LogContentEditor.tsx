@@ -9,7 +9,6 @@ import { useWorkspaceStore } from '../../store/workspaceStore';
 import FocusEditor from '../common/FocusEditor';
 import MarkdownFields from '../common/MarkdownFields';
 import LogReviewPanel from './LogReviewPanel';
-import LogInsertOptions from './LogInsertOptions';
 import { AssistantSlots } from '../Assistant/assistantSlots';
 import { isEmptyLogContent } from '../../utils/studyLogs';
 import { imageMarkdown, prepareImageFile, referencedImageIds, saveWithImages } from '../../utils/imageStorage';
@@ -105,7 +104,7 @@ export default function LogContentEditor({ log, kind, creating = false, onClose 
         saveDisabled={emptyDraft || operation === 'pasting'} busy={operation === 'saving'} error={error} onSave={() => void save()} onCancel={() => onClose(false)}>
         <MarkdownFields id={today ? 'study-log-content' : 'history-content'} label={today ? '学习内容（Markdown）' : '历史学习内容'}
           previewLabel={today ? '学习内容预览' : '历史学习内容预览'} value={content} onChange={setContent}
-          InsertOptions={LogInsertOptions} onInsertImages={(prepared) => setImages((draft) => [...draft, ...prepared])}
+          onInsertImages={(prepared) => setImages((draft) => [...draft, ...prepared])}
           placeholder="记录这次学习的内容、疑问或尝试。" images={images} readOnly={Boolean(operation)} onPaste={(event) => void pasteImages(event)} />
         {operation === 'pasting' && <p className="knowledge-muted" role="status">正在读取截图…</p>}
         {!!review?.selected.length && <p className="knowledge-muted">

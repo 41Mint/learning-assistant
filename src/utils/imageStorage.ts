@@ -76,14 +76,14 @@ function deleteImages(ids: string[]): Promise<void> {
   });
 }
 
-export async function saveWithImages(images: StoredImage[], save: () => void): Promise<void> {
+export async function saveWithImages<T>(images: StoredImage[], save: () => T): Promise<T> {
   if (images.length) await writeImages(images);
   try {
-    save();
+    return await save();
   } catch (error) {
     if (images.length) {
       try { await deleteImages(images.map(({ id }) => id)); }
-      catch { throw new Error('学习记录未保存，暂存图片清理失败，请重试。', { cause: error }); }
+      catch { throw new Error('保存失败，暂存图片清理失败，请重试。', { cause: error }); }
     }
     throw error;
   }
