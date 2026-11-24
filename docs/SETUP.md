@@ -4,7 +4,9 @@
 
 安装 Git 和 Node.js 24，从 GitHub 克隆项目，或下载最新 ZIP 并解压。在项目目录中双击 Windows 的 `start.bat` 或 macOS 的 `start.command`。启动器会检查 `origin/master`、按需安装依赖，并打开 [本地学习助手](http://localhost:5185)。使用时保持终端窗口运行。若 macOS 提示确认打开下载的文件，可核对来源后按系统提示操作。[Apple 的打开说明](https://support.apple.com/en-us/102445)
 
-组员从最新已推送的 ZIP 启动时，启动器在解压目录内建立 `learning-assistant-local` 作为运行和更新副本，以后仍可双击原目录的启动文件。直接从 Git 克隆目录启动时，运行和更新在该目录内进行。在终端中可用 `npm run dev:latest` 运行同样的流程。
+从 ZIP 启动时，启动器优先沿用解压目录里已有的 `learning-assistant-local` Git 副本及其配置。新建的副本放在用户数据目录，实际路径显示在启动窗口。Windows 使用 `%LOCALAPPDATA%\learning-assistant\test-checkout`，macOS 使用 `~/Library/Application Support/learning-assistant/test-checkout`。以后继续双击解压目录中的启动文件即可。本次变更已在 Windows 验收，macOS 待有试用需求时验证。
+
+从 Git 克隆目录启动时，运行和更新在该目录内进行。在终端中可用 `npm run dev:latest` 运行同样的流程。
 
 更新前先退出旧的开发服务。启动器遇到已跟踪文件的本地修改、分支分叉或网络错误时会提示原因。开发本地改动或需要手动启动时，在要运行的项目目录执行以下命令。依赖已安装且锁文件未变化时可直接启动。
 

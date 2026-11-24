@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -37,16 +38,28 @@ function reservePort() {
 
 let portGuard;
 
+function userDataDirectory() {
+  const home = homedir();
+  if (process.platform === 'win32') return process.env.LOCALAPPDATA || join(home, 'AppData', 'Local');
+  if (process.platform === 'darwin') return join(home, 'Library', 'Application Support');
+  return process.env.XDG_DATA_HOME || join(home, '.local', 'share');
+}
+
 function startFromArchive() {
-  const checkout = join(root, 'learning-assistant-local');
+  const existingCheckout = join(root, 'learning-assistant-local');
+  const checkout = existsSync(join(existingCheckout, '.git'))
+    ? existingCheckout
+    : join(userDataDirectory(), 'learning-assistant', 'test-checkout');
   if (!existsSync(checkout)) {
-    console.log('正在建立可自动更新的项目副本…');
+    console.log(`正在建立可自动更新的项目副本 ${checkout}…`);
+    mkdirSync(dirname(checkout), { recursive: true });
     run('git', ['clone', '--branch', branch, '--single-branch', repository, checkout]);
   }
   if (!existsSync(join(checkout, '.git')) ||
       run('git', ['config', '--get', 'remote.origin.url'], true, checkout) !== repository) {
-    throw new Error('已有的 learning-assistant-local 不是本项目的更新副本，请从新的解压目录运行。');
+    throw new Error(`无法识别启动目录中的项目副本。请检查 ${checkout}。`);
   }
+  console.log(`正在使用项目目录 ${checkout}`);
   run(process.execPath, [npm, 'run', 'dev:latest'], false, checkout);
 }
 

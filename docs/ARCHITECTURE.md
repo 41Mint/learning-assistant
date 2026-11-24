@@ -4,6 +4,8 @@
 
 这是一个本地运行的 React 单页应用。功能组件调用 Zustand store 处理状态和写入，学习资料保存在浏览器。学习智能体通过本机 Vite 中间件调用 DeepSeek，模型结果先成为可核对的建议，由使用者确认后进入原有保存流程。
 
+ZIP 启动器负责定位运行和更新所用的 Git 副本。新副本使用系统用户数据目录，旧 ZIP 中已有的副本及配置继续沿用。应用数据由浏览器按站点保存，继续访问同一个本地地址即可使用原有资料。[启动路径与配置](./SETUP.md#启动)
+
 | 目录 | 职责 |
 | --- | --- |
 | [`src/App.tsx`](../src/App.tsx) 与 [`src/main.tsx`](../src/main.tsx) | 应用入口、工作区初始化、导航和页面装配 |
@@ -12,6 +14,7 @@
 | [`src/types/`](../src/types) 与 [`src/utils/`](../src/utils) | 资料类型、客户端与服务端共用的请求契约，以及校验、检索、Markdown 和存储等逻辑 |
 | [`src/data/`](../src/data) | 参考主题、练习和测试工作区样例 |
 | [`server/logReview.ts`](../server/logReview.ts) | 学习智能体三个接口的 Vite 中间件 |
+| [`scripts/dev-latest.mjs`](../scripts/dev-latest.mjs) | 定位运行副本、检查更新并启动本地服务 |
 | [`tests/`](../tests) | Playwright 浏览器回归。各功能验收指南链接到对应的用例 |
 
 ## 核心模块

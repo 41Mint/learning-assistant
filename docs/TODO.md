@@ -20,12 +20,9 @@
 - [ ] 用真实学习记录评估提醒、音效、自定义番茄时间、长休息与番茄钟统计。
 - [ ] 用真实学习反馈调整预设路径，评估复习提醒、主动推荐、成就与资源收藏。
 
-## 待验证的本地改动
-
-- [ ] ZIP 首次启动将更新副本移到用户数据目录。Windows 使用 `%LOCALAPPDATA%\learning-assistant\test-checkout`，macOS 使用 `~/Library/Application Support/learning-assistant/test-checkout`。已有 `learning-assistant-local` 的解压目录沿用旧副本和 `.env.local`。两端验证首次启动、再次更新和旧副本配置后，再同步 [启动说明](./SETUP.md#启动) 与更新日志。
-
 ## 以后再评估
 
+- 恢复 macOS 试用时，验证 ZIP 首次启动、再次更新及沿用旧副本配置的流程。
 - 更密集的数据规模下的可访问性、加载和滚动表现。
 - 跨设备在线日志读写。原型和部署说明保存在 `codex/online-logs`。
 - 学习路径可视化、社交和云端同步。
