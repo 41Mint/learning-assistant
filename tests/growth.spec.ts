@@ -712,6 +712,10 @@ test('窄屏成长视图独立切换，智能推荐换一批并预填实际引�
   const nearby = candidates.getByRole('article', { name: '让角色跳起并落回地面', exact: true });
   const originalSize = await nearby.boundingBox();
   expect(originalSize).not.toBeNull();
+  const boardOrder = () => candidates.locator('.growth-card-grid > .growth-card-slot').evaluateAll((slots) =>
+    slots.map((slot) => slot.getAttribute('data-growth-tile')));
+  const beforeDrop = await boardOrder();
+  const appended = [...beforeDrop, 'card:recommended:为输入增加边界检查'];
   await page.getByRole('button', { name: '恢复学习智能体' }).click();
   const bounds = (await card.boundingBox())!;
   await page.mouse.move(bounds.x + 20, bounds.y + 20);
@@ -722,6 +726,12 @@ test('窄屏成长视图独立切换，智能推荐换一批并预填实际引�
   await page.mouse.move(dropBox.x - 22, dropBox.y + dropBox.height - 26);
   await page.mouse.up();
   await expect(candidates.getByRole('article', { name: '为输入增加边界检查' })).toBeVisible();
+  await expect.poll(boardOrder).toEqual(appended);
+  await expect(candidates.getByRole('status')).toContainText('已添加到「想尝试」末尾');
+  await candidates.getByRole('button', { name: '撤销整理' }).click();
+  await expect.poll(boardOrder).toEqual(beforeDrop);
+  await candidates.getByRole('button', { name: '重做整理' }).click();
+  await expect.poll(boardOrder).toEqual(appended);
   await candidates.getByRole('button', { name: '撤销整理' }).click();
   await expect(candidates.getByRole('article', { name: '为输入增加边界检查' })).toHaveCount(0);
   await page.getByRole('link', { name: '实践记录', exact: true }).click();
@@ -768,6 +778,7 @@ test('窄屏成长视图独立切换，智能推荐换一批并预填实际引�
   await page.reload();
   const saved = candidates.getByRole('article', { name: '为输入增加边界检查' });
   await expect(saved).toContainText('添加一次边界检查。');
+  await expect.poll(async () => (await boardOrder()).at(-1)).toBe('card:recommended:为输入增加边界检查');
   await saved.getByRole('link', { name: '为输入增加边界检查', exact: true }).click();
   await expect(saved).toContainText('输入超出范围时返回失败。');
   await expect(saved.getByRole('link', { name: '输入处理', exact: true })).toHaveAttribute('href', '#knowledge/entry-one');

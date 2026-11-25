@@ -9,7 +9,7 @@ import { useStudyLogStore } from '../../store/studyLogStore';
 import { exerciseHref, growthBoardHref, growthOutcomeHref, GROWTH_VIEWS, practiceHref, readWorkspaceHash, useWorkspaceStore, workspaceResourceTarget } from '../../store/workspaceStore';
 import type { GrowthBoardView, GrowthGroup, GrowthOutcome, GrowthPractice, SavedExercise } from '../../types';
 import { CHAT_GROUP_CARD_LIMIT, CHAT_GROUP_DESCRIPTION_LIMIT } from '../../types/assistantChat';
-import { growthExercises, logLabel, orderGrowthCards } from '../../utils/growth';
+import { growthBoardTileOrder, growthExercises, logLabel, orderGrowthCards } from '../../utils/growth';
 import { growthDomainOptions, hasGrowthDomain } from '../../utils/growthDomains';
 import { ADD_EXERCISE_LABEL, PRACTICE_IDEAS_LABEL, PRACTICE_RECORDS_LABEL, PRACTICE_VERIFICATION_LABEL } from '../../utils/growthLabels';
 import { codeVersionHref, codeVersionLabel, practiceCodeIds } from '../../utils/projectCode';
@@ -325,7 +325,7 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
           begin({ outcome: { id: exercise.id, title: exercise.title, domains: exercise.domains, description: exercise.action },
             preset: false, suggestedSources: exercise.sources, exercise });
         } else if (saveExercise(exercise, targetGroup)) {
-          setFeedback({ text: targetGroup ? `已收藏到卡组的「${PRACTICE_IDEAS_LABEL}」。` : `已加入「${PRACTICE_IDEAS_LABEL}」。` });
+          setFeedback({ text: targetGroup ? `已收藏到卡组的「${PRACTICE_IDEAS_LABEL}」。` : `已添加到「${PRACTICE_IDEAS_LABEL}」末尾。` });
         }
       } else if (targetGroup) {
         moveCards([transfer.cardId], targetGroup);
@@ -352,12 +352,7 @@ export default function GrowthWorkspace({ active, draft, setDraft, exerciseDraft
     try {
       if (view && showStacks && activeView === view) {
         const cards = view === 'recent' ? orderedOutcomes : allPending;
-        const tiles = [
-          ...groups.filter((item) => item.cardIds.some((id) => stackMembers.get(id)?.complete === (view === 'recent')))
-            .map(({ id }) => ({ id: `group:${id}` })),
-          ...cards.filter(({ id }) => !cardOwners.has(id)).map(({ id }) => ({ id: `card:${id}` })),
-        ];
-        reorderBoard(view, orderGrowthCards(tiles, boardOrder?.[view]).map(({ id }) => id), source, anchor, side);
+        reorderBoard(view, growthBoardTileOrder(cards, groups, boardOrder?.[view]), source, anchor, side);
       } else {
         const targetId = anchor.slice('card:'.length);
         const cards = completedIds.has(targetId) ? orderedOutcomes : allPending;

@@ -22,6 +22,16 @@ export function orderGrowthCards<T extends { id: string }>(cards: T[], order: st
   return cards.map((card) => placedIds.has(card.id) ? placed[next++] : card);
 }
 
+export function growthBoardTileOrder(cards: { id: string }[], groups: GrowthGroup[], order: string[] | undefined): string[] {
+  const cardIds = new Set(cards.map(({ id }) => id));
+  const grouped = new Set(groups.flatMap(({ cardIds }) => cardIds));
+  const tiles = [
+    ...groups.filter((group) => group.cardIds.some((id) => cardIds.has(id))).map(({ id }) => ({ id: `group:${id}` })),
+    ...cards.filter(({ id }) => !grouped.has(id)).map(({ id }) => ({ id: `card:${id}` })),
+  ];
+  return orderGrowthCards(tiles, order).map(({ id }) => id);
+}
+
 export function logLabel(log: StudyLog) {
   const title = log.content.match(/^#{1,6}\s+(.+)$/m)?.[1];
   return title && title.trim() !== log.date ? `${log.date} · ${title}` : log.date;

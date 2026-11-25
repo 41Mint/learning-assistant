@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { GROWTH_PRESETS } from '../data/growthPresets';
 import type { GrowthBoardView, GrowthData, GrowthGroup, GrowthOutcome, GrowthPractice, SavedExercise } from '../types';
-import { emptyGrowth, growthExercises, validateGrowth } from '../utils/growth';
+import { emptyGrowth, growthBoardTileOrder, growthExercises, orderGrowthCards, validateGrowth } from '../utils/growth';
 import { PRACTICE_IDEAS_LABEL } from '../utils/growthLabels';
 import { normalizedName } from '../utils/knowledge';
 import { generateId, getTodayDate, STORAGE_KEYS } from '../utils/storage';
@@ -112,11 +112,20 @@ export const useGrowthStore = create<GrowthStore>((set, get) => {
     },
     saveExercise: (exercise, groupId) => {
       const data = get();
-      const existing = [...data.outcomes, ...growthExercises(data)].find(({ id, title }) =>
+      const available = growthExercises(data);
+      const existing = [...data.outcomes, ...available].find(({ id, title }) =>
         id === exercise.id || normalizedName(title) === normalizedName(exercise.title));
       if (existing) return false;
-      arrange({ exercises: [...data.exercises, exercise],
-        groups: groupId ? placeCards(data.groups, [exercise.id], groupId) : data.groups });
+      const exercises = [...data.exercises, exercise];
+      if (groupId) {
+        arrange({ exercises, groups: placeCards(data.groups, [exercise.id], groupId) });
+      } else {
+        checkCurrent(data);
+        const completed = new Set(data.outcomes.map(({ id }) => id));
+        const pending = orderGrowthCards(available.filter(({ id }) => !completed.has(id)), data.cardOrder);
+        const order = growthBoardTileOrder(pending, data.groups, data.boardOrder?.try);
+        arrange({ exercises, boardOrder: { ...data.boardOrder, try: [...order, `card:${exercise.id}`] } });
+      }
       return true;
     },
     editExercise: (exercise, groupId) => {
