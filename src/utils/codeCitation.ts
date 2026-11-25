@@ -19,8 +19,12 @@ export function readCodeCitation(href: string) {
   } catch { return; }
 }
 
+export function codeCitationHref(id: string, range?: CodeLineRange) {
+  return `${codeVersionHref(id)}?cite=1${range ? `&lines=${range.startLine}-${range.endLine}` : ''}`;
+}
+
 export function codeCitationMarkdown(id: string, label: string, range?: CodeLineRange) {
-  return markdownReferenceLink(label, `${codeVersionHref(id)}?cite=1${range ? `&lines=${range.startLine}-${range.endLine}` : ''}`);
+  return markdownReferenceLink(label, codeCitationHref(id, range));
 }
 
 export function scriptMarkdown(text: string) {

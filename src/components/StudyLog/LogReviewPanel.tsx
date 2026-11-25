@@ -67,7 +67,7 @@ export default function LogReviewPanel({ logId, date, content, formId, onSelecti
   const [status, setStatus] = useState('');
   const [undo, setUndo] = useState<Change[]>([]);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
-  const [manual, setManual] = useState(false);
+  const [managing, setManaging] = useState(false);
   const [menu, setMenu] = useState<ReviewMenuAnchor>();
   const pendingSave = useRef<{ rows: ReviewRow[]; ids: number[] } | undefined>(undefined);
   const panelId = useId();
@@ -201,6 +201,9 @@ export default function LogReviewPanel({ logId, date, content, formId, onSelecti
 
   const drafts = rows.filter(({ checked, saved }) => checked && !saved);
   const available = rows.filter(({ suggestion, saved }) => !saved && (suggestion.kind !== 'link' || entries.some(({ id }) => id === suggestion.entryId)));
+  const canManage = available.length > 0 || drafts.length > 0;
+  const canOnlyClear = stale || available.length === 0;
+  const allChecked = !canOnlyClear && available.every(({ checked }) => checked);
   const change = (index: number, suggestion: LogReviewSuggestion) =>
     updateRows(rows.map((row, position) => position === index ? { ...row, suggestion } : row));
   const categoryOptions = [...new Set(entries.map(({ category }) => category).filter(Boolean))]
@@ -210,22 +213,47 @@ export default function LogReviewPanel({ logId, date, content, formId, onSelecti
     <p className="knowledge-muted">{result ? '可按编号或名称直接修改、保存，也可点卡片查看详情。继续对话时，这批草稿会发给 DeepSeek 作为上下文。'
       : '可以直接说「从这篇日志提炼词条」。整理时会将日志文字和相关资料名称发给 DeepSeek。'}</p>
     {content.length > LOG_REVIEW_MAX_TEXT && <p className="knowledge-muted">整理时最多读取前 {LOG_REVIEW_MAX_TEXT} 个字符。</p>}
-    {phase && <p role="status">{phase}… <button type="button" className="knowledge-text-button" onClick={() => request.current?.abort()}>停止</button></p>}
+    {phase && <p role="status">{phase}…</p>}
     {error && <p role="alert">{error}</p>}
     {status && <p role="status">{status}</p>}
+    <div className="code-actions">
+      {phase ? <button type="button" className="note-button secondary" onClick={() => request.current?.abort()}>停止</button>
+        : <button type="button" className={available.length ? 'note-button secondary' : 'note-button'} onClick={() => startGeneration()}>
+          {result ? '重新生成建议' : '生成整理建议'}
+        </button>}
+      {onReturn && <button type="button" className="note-button secondary" onClick={onReturn}>返回日志</button>}
+    </div>
     {result && <div aria-label="日志整理结果">
       {stale && <p role="status">正文已变化，可在对话中要求重新整理。</p>}
       <p>{result.summary}</p>
+      {canManage && <details className="log-review-manage" open={managing}
+        onToggle={(event) => setManaging(event.currentTarget.open)}>
+        <summary>管理建议</summary>
+        <label className="log-review-choice log-review-select-all">
+          <input type="checkbox" checked={allChecked} disabled={Boolean(phase) || (canOnlyClear && !drafts.length)}
+            ref={(input) => { if (input) input.indeterminate = drafts.length > 0 && (canOnlyClear || drafts.length !== available.length); }}
+            onChange={() => updateRows(rows.map((row) => available.includes(row) || canOnlyClear ? { ...row, checked: !canOnlyClear && !allChecked } : row))} />
+          {canOnlyClear ? '取消全部选择' : '全选建议'}
+        </label>
+        {onSelection && drafts.length > 0 && <p className="knowledge-muted">已选 {drafts.length} 项，随日志保存</p>}
+        {(drafts.length > 0 || undo.length > 0) && <div className="code-actions">
+          {drafts.length > 0 && <button type="button" className="note-button" disabled={Boolean(phase) || stale}
+            onClick={() => saveDrafts(rows.flatMap((row, index) => row.checked && !row.saved ? [index + 1] : []))}>保存所选建议</button>}
+          {undo.length > 0 && <button type="button" className="note-button secondary" disabled={Boolean(phase) || stale}
+            onClick={() => setStatus(undoLast())}>撤销上次修订</button>}
+        </div>}
+      </details>}
+      <p className="knowledge-muted">检索词 {result.queries.join('、') || '无'} · 命中 {result.matches} 个词条</p>
       <ul className="log-review-items">
         {rows.map((row, index) => {
           const item = row.suggestion;
           const open = expanded.has(index);
           const detailId = panelId + '-detail-' + index;
           const entry = item.kind === 'link' ? entries.find(({ id }) => id === item.entryId) : undefined;
-          const editable = manual && !stale && !row.saved;
+          const editable = managing && canManage && !stale && !row.saved;
           return <li key={index}>
             <div className="log-review-row">
-              {manual && <input type="checkbox" checked={row.checked} disabled={Boolean(phase) || row.saved || (!row.checked && (stale || (item.kind === 'link' && !entry)))}
+              {managing && canManage && <input type="checkbox" checked={row.checked} disabled={Boolean(phase) || row.saved || (!row.checked && (stale || (item.kind === 'link' && !entry)))}
                 aria-label={description(item)} onChange={(event) => updateRows(rows.map((other, i) => i === index ? { ...other, checked: event.target.checked } : other))} />}
               <button type="button" className="log-review-card-title" aria-label={`${open ? '收起' : '展开'} · ${description(item)}`}
                 aria-expanded={open} aria-controls={detailId} aria-keyshortcuts="Shift+F10"
@@ -279,26 +307,5 @@ export default function LogReviewPanel({ logId, date, content, formId, onSelecti
           focusAssistantInput();
         }} />}
     </div>}
-    <details className="log-review-search" onToggle={(event) => setManual(event.currentTarget.open)}>
-      <summary>手动操作</summary>
-      <div className="code-actions">
-        <button type="button" className="note-button secondary" disabled={Boolean(phase)} onClick={() => startGeneration()}>
-          {result ? '重新生成建议' : '生成整理建议'}
-        </button>
-        {undo.length > 0 && <button type="button" className="knowledge-text-button" disabled={Boolean(phase) || stale}
-          onClick={() => setStatus(undoLast())}>撤销上次修订</button>}
-        {drafts.length > 0 && <button type="button" className="note-button" disabled={Boolean(phase) || stale}
-          onClick={() => saveDrafts(rows.flatMap((row, index) => row.checked && !row.saved ? [index + 1] : []))}>保存所选建议</button>}
-        {onReturn && <button type="button" className="knowledge-text-button" onClick={onReturn}>返回日志</button>}
-      </div>
-      {available.length > 0 && <label className="log-review-choice log-review-select-all">
-        <input type="checkbox" checked={!stale && available.every(({ checked }) => checked)} disabled={Boolean(phase) || stale && !drafts.length}
-          ref={(input) => { if (input) input.indeterminate = drafts.length > 0 && (stale || drafts.length !== available.length); }}
-          onChange={() => updateRows(rows.map((row) => available.includes(row) || stale ? { ...row, checked: !stale && !available.every(({ checked }) => checked) } : row))} />
-        {stale ? '取消全部选择' : '全选建议'}
-      </label>}
-      {onSelection && drafts.length > 0 && <p className="knowledge-muted">已选 {drafts.length} 项，随日志保存</p>}
-      {result && <p className="knowledge-muted">检索词 {result.queries.join('、') || '无'} · 命中 {result.matches} 个词条</p>}
-    </details>
   </section>;
 }

@@ -1176,6 +1176,11 @@ textarea.markdown-editor-view, .markdown-source-highlight {
 .assistant-practice > :is(p, h3), .assistant-goal-form p { margin: 0; }
 .assistant-practice > :is(button, form) { justify-self: start; }
 .assistant-practice { overflow-wrap: anywhere; }
+.assistant-practice-review, .assistant-practice-finding { display: grid; gap: 6px; }
+.assistant-practice-review { padding: 10px; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-bg); }
+.assistant-practice-review :is(h4, p, blockquote) { margin: 0; }
+.assistant-practice-finding h4 { font-weight: 650; }
+.assistant-practice-finding blockquote { padding-inline-start: 8px; border-inline-start: 2px solid var(--app-border); white-space: pre-wrap; }
 .assistant-code-context { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; align-items: center; }
 .assistant-code-context p { overflow-wrap: anywhere; }
 .assistant-code-context p:last-child { grid-column: 1 / -1; }
@@ -1184,14 +1189,14 @@ textarea.markdown-editor-view, .markdown-source-highlight {
 .assistant-code-button { margin-right: auto; width: 36px; height: 34px; display: grid; place-items: center;
   border: 1px solid var(--app-border); border-radius: 7px; background: var(--app-bg); color: var(--app-text); cursor: pointer; }
 .assistant-guide, .assistant-code-picker { display: grid; gap: 8px; font-size: 14px; min-width: 0; }
-.assistant-guide p, .assistant-code-picker p { margin: 0; }
-.assistant-guide > :is(a, button):not(.knowledge-text-button), .assistant-prompt {
+.assistant-code-picker p { margin: 0; }
+.assistant-guide > button, .assistant-prompt {
   display: grid; gap: 3px; text-align: left; padding: 8px 10px; border: 1px solid var(--app-border); border-radius: 8px;
   background: var(--app-bg); color: var(--app-text); cursor: pointer; text-decoration: none;
 }
-.assistant-guide > :is(a, button):hover, .assistant-prompt:hover { border-color: var(--app-accent); }
-.assistant-guide > :is(a, button) > span { color: var(--app-muted); font-size: 13px; }
-.assistant-guide > .knowledge-text-button, .assistant-code-picker > button { justify-self: start; }
+.assistant-guide > button:hover, .assistant-prompt:hover { border-color: var(--app-accent); }
+.assistant-guide > button > span { color: var(--app-muted); font-size: 13px; }
+.assistant-code-picker > button { justify-self: start; }
 .assistant-code-picker label { display: grid; gap: 4px; min-width: 0; }
 .assistant-code-picker :is(select, input) { width: 100%; min-width: 0; padding: 6px; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-bg); color: var(--app-text); }
 .assistant-code-range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -1212,6 +1217,8 @@ textarea.markdown-editor-view, .markdown-source-highlight {
 .assistant-chat-host, .assistant-chat { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .assistant-tool-panel[hidden], .assistant-composer[hidden] { display: none; }
 .assistant-tool-panel { min-width: 0; }
+.assistant-tool-panel .code-actions { margin: 0; gap: 8px; }
+.assistant-tool-panel .code-actions > .note-button { margin: 0; min-height: var(--app-detail-action-height); }
 .assistant-inline-filter { width: 100%; margin-block-end: 8px; }
 .assistant-turn + div > .assistant-tool-panel { margin-block-start: 10px; }
 .assistant-transcript { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px 14px; }
@@ -1234,6 +1241,7 @@ textarea.markdown-editor-view, .markdown-source-highlight {
 .assistant-reference input { flex-shrink: 0; }
 .assistant-composer-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .assistant-composer-actions .note-button { margin: 0; padding: 5px 10px; }
+.log-review { display: grid; gap: 8px; font-size: 14px; }
 .log-review-items { display: grid; gap: 6px; list-style: none; padding: 0; }
 .log-review-items li {
   min-width: 0; padding: 0 8px; background: var(--app-bg); border-radius: 6px; overflow-wrap: anywhere;
@@ -1243,7 +1251,9 @@ textarea.markdown-editor-view, .markdown-source-highlight {
 .log-review-choice input { flex-shrink: 0; }
 .log-review-select-all { margin-block: 10px; }
 .log-review-category { display: block; font-size: 12px; }
-.log-review-search summary { color: var(--app-muted); cursor: pointer; font-size: 13px; }
+.log-review-manage { margin-block: 8px; }
+.log-review-manage summary { color: var(--app-muted); cursor: pointer; font-size: 13px; }
+.log-review-manage p { margin-block-end: 8px; }
 .log-review-items button { flex-shrink: 0; }
 .log-review-detail { overflow-wrap: anywhere; }
 .log-review-detail blockquote { margin: 5px 0 12px; padding-inline-start: 9px; border-inline-start: 2px solid var(--app-border); color: var(--app-muted); white-space: pre-wrap; }

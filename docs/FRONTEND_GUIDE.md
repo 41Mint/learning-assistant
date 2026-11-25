@@ -38,6 +38,12 @@
 
 并排的次要操作需要横向展开时，将触发按钮放在这一组操作的末尾，展开面板与按钮等高对齐。组内「添加练习」的横向面板以边框划分，悬停展开，移开后收起。点击、轻点和键盘激活可打开同一组选项，空间不足时向下显示。Esc 先关闭选项，焦点回到触发按钮。动效沿用主题设置。[添加练习控件](../src/components/Growth/GrowthExerciseActions.tsx)
 
+智能体工具将生成、采用和确认直接放在操作行。主要操作沿用 `.note-button`，同一行的返回、停止和重新生成沿用 `.note-button.secondary`。已有可用结果时，把使用结果放在前面。操作行复用 `.code-actions` 和统一的按钮高度，窄屏可换行，快捷提示沿用聊天输入区的横向布局。
+
+折叠入口用实际操作命名。日志整理在有草稿可编辑或勾选时显示「管理建议」，默认收起，展开后可编辑卡片字段、选择并保存建议。生成和返回日志在折叠区外。
+
+智能体的初始引导和能力问答共用带简短说明的整行卡片，激活卡片即进入对应工具或编辑表单。[智能体引导](../src/components/Assistant/AssistantGuide.tsx)
+
 ## 下拉列表与关键词筛选
 
 - **固定选项**用原生 `select`。支持 `::picker(select)` 的浏览器用全局主题装饰列表，保留原生键盘和选择行为。其余浏览器与系统强制配色模式使用原生下拉面板。[Chrome 开发文档](https://developer.chrome.com/docs/modern-web-guidance/guides/forms/branded-select-styling)

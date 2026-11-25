@@ -61,13 +61,13 @@ export default function GrowthSuggestions({ domain, focus, groupId, groupName, o
           {domainOptions.map((item) => <option key={item}>{item}</option>)}
         </select>
       </label>
-      <div className="code-actions">
-        <button type="submit" className="note-button" disabled={running || missingGroup}>{currentResult?.suggestions.length ? '换一批' : '生成练习建议'}</button>
-        {running && <button type="button" className="note-button secondary" onClick={() => {
-          controller.current?.abort(); controller.current = null; setRunning(false);
-        }}>停止</button>}
-      </div>
       <small className="growth-muted">生成时会将{groupName && '卡组名称、'}偏好、已有成果标题及选取的资料摘要发送给 DeepSeek。</small>
+      <div className="code-actions">
+        {running ? <button type="button" className="note-button secondary" onClick={() => {
+          controller.current?.abort(); controller.current = null; setRunning(false);
+        }}>停止</button> : <button type="submit" className={currentResult?.suggestions.length ? 'note-button secondary' : 'note-button'}
+          disabled={missingGroup}>{currentResult?.suggestions.length ? '换一批' : '生成练习建议'}</button>}
+      </div>
     </form>
     {running && <p role="status">正在根据学习资料生成建议…</p>}
     {error && <p role="alert">{error}</p>}

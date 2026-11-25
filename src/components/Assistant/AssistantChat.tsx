@@ -263,7 +263,7 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
         <details className="assistant-question-suggestions">
           <summary>试试这样问</summary>
           <div className="assistant-prompts">
-            {toolActive && <button type="button" className="assistant-prompt" onClick={onReturnToChat}>退出当前资料</button>}
+            {toolActive && <button type="button" className="assistant-prompt" onClick={onReturnToChat}>退出当前情境</button>}
             {['整理学习日志', '查找资料', '回看实践', '推荐练习'].map((prompt) => <button key={prompt} type="button" className="assistant-prompt"
               onClick={(event) => {
                 const details = event.currentTarget.closest('details');

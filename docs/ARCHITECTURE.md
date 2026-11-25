@@ -123,12 +123,14 @@ erDiagram
 
 日志整理先由模型提取查询词，再由浏览器检索词条及关系，连同有限的资料摘要生成建议。客户端核验原文引用和词条 ID，保存时仅应用确认采纳的建议。日志写入失败时回退此次知识库写入。练习推荐同样先筛选本地资料，客户端将返回的来源编号还原为原资料链接。
 
+实践复盘由用户选定一次实践后发起。浏览器取该次备注和直接关联的摘录，日志、词条、代码各最多两份。请求携带资料类型、标题和摘录，来源链接由浏览器保留。在服务端和展示前核对模型返回的编号和引文原文。验证情况以实践备注或日志中的证据为依据。复盘结果留在当前会话，下一步可以带入当前目标表单，经编辑确认后用既有的 `practice` 目标格式保存。[复盘契约](../src/types/practiceReview.ts) · [资料选取](../src/utils/practiceReview.ts)
+
 [`vite.config.ts`](../vite.config.ts) 从本机环境文件读取 DeepSeek 配置，向开发服务和构建预览注册中间件。三个接口只接受本机同源的 JSON `POST` 请求，单次请求体上限 256 KiB，共享一个并发槽，模型调用超时 45 秒。
 
 | 接口 | 用途与契约定义 |
 | --- | --- |
 | `/api/log-review` | 提取查询词、生成整理建议和在对话中修改日志草稿。[整理契约](../src/types/logReview.ts) · [整理对话契约](../src/types/reviewConversation.ts) |
-| `/api/assistant-chat` | 自由问答、引用资料、主题任务草稿和卡组分析。[问答契约](../src/types/assistantChat.ts) |
+| `/api/assistant-chat` | 自由问答、引用资料、主题任务草稿和卡组分析。`practice-review` 模式生成单次实践的带来源复盘。[问答契约](../src/types/assistantChat.ts) · [复盘契约](../src/types/practiceReview.ts) |
 | `/api/growth-suggestions` | 根据本地资料摘要推荐练习并返回来源编号。[练习推荐契约](../src/types/growthSuggestions.ts) |
 
 失败返回带 `error` 字段的 JSON。`400` 表示输入无效，`403` 表示来源或内容类型不符，`405` 表示方法不符，`413` 表示请求过大，`429` 表示已有请求在运行，`502` 表示上游调用或结果处理失败，`503` 表示缺少密钥。[中间件实现](../server/logReview.ts) · [本机配置](./SETUP.md#配置-deepseek)

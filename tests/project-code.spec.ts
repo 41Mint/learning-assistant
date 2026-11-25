@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { ProjectCodeData } from '../src/types/projectCode';
 import type { ChatRequest } from '../src/types/assistantChat';
+import type { PracticeReviewRequest } from '../src/types/practiceReview';
 
 const firstDate = '2026-11-02';
 const scriptPath = 'Assets/Scripts/InputManager.cs';
@@ -49,7 +50,21 @@ async function downloadBackup(page: Page) {
   return JSON.parse(await readFile((await download.path())!, 'utf8'));
 }
 
-test('智能体从历史实践定位关联代码，确认目标后沿用番茄钟与备份', async ({ page, browser }) => {
+test('智能体复盘历史实践并引用关联代码，确认目标后沿用番茄钟与备份', async ({ page, browser }) => {
+  const reviews: PracticeReviewRequest[] = [];
+  const nextStep = '验证松开鼠标后停止计分';
+  await page.route('**/api/assistant-chat', async (route) => {
+    reviews.push(route.request().postDataJSON() as PracticeReviewRequest);
+    if (reviews.length === 1) {
+      await route.fulfill({ status: 502, json: { error: '复盘暂时不可用，请重试。' } });
+      return;
+    }
+    await route.fulfill({ json: {
+      approach: { text: '脚本快照用 hits 记录计数。', source: 3, quote: 'private int hits = 2;' },
+      verification: { text: '编造的验证结果', source: 1, quote: '第二次调整判断' },
+      missing: '补一次点击测试的观察结果。', nextStep,
+    } });
+  });
   await seedStudyContext(page);
   await page.goto('/#history/' + firstDate);
   const { form } = await openLogCodeForm(page);
@@ -91,12 +106,53 @@ test('智能体从历史实践定位关联代码，确认目标后沿用番茄�
   await expect(page).toHaveURL(/#code\/.+\?find=hits&source=1$/);
   await expect(page.getByText('命中第 2 行', { exact: true })).toBeVisible();
   await restore.click();
-  await assistant.getByRole('button', { name: '设为当前目标', exact: true }).click();
+  const review = assistant.getByRole('region', { name: '实践复盘' });
+  await review.getByRole('button', { name: '设为当前目标', exact: true }).click();
   await expect(assistant.getByText('确认后将替换当前学习目标「原目标」。')).toBeVisible();
   await assistant.getByRole('button', { name: '取消', exact: true }).click();
-  await assistant.getByRole('button', { name: '设为当前目标', exact: true }).click();
+  expect(reviews).toHaveLength(0);
+  const generate = review.getByRole('button', { name: '复盘这次实践' });
+  await expect(generate).toHaveClass('note-button');
+  await generate.click();
+  await expect(review.getByRole('alert')).toHaveText('复盘暂时不可用，请重试。');
+  await review.getByRole('button', { name: '重试复盘' }).click();
+  await expect(review.getByText('脚本快照用 hits 记录计数。', { exact: true })).toBeVisible();
+  await expect(review.getByText('private int hits = 2;', { exact: true })).toBeVisible();
+  await expect(review.getByText('本次摘录缺少验证动作或实际结果。')).toBeVisible();
+  await expect(review.getByText('编造的验证结果')).toHaveCount(0);
+  expect(reviews).toHaveLength(2);
+  expect(reviews[1]).toEqual(reviews[0]);
+  expect(reviews[1].mode).toBe('practice-review');
+  expect(reviews[1].sources.map(({ kind }) => kind)).toEqual(['practice', 'log', 'code']);
+  expect(reviews[1].sources[0].excerpt).toBe('第一次实现点击');
+  expect(reviews[1].sources[2].excerpt).toContain('private int hits = 2;');
+  expect(JSON.stringify(reviews[1])).not.toMatch(/第二次调整判断|#history\/|#code\//);
+  await review.getByRole('link', { name: /代码 ·.*InputManager\.cs/ }).click();
+  await expect(page).toHaveURL(/#code\/.+\?cite=1&lines=1-3$/);
+  await restore.click();
+  await expect(review.getByText(nextStep, { exact: true })).toBeVisible();
+  const actions = review.getByRole('group', { name: '实践复盘操作' });
+  const useGoal = actions.getByRole('button', { name: '用作当前目标' });
+  const regenerate = actions.getByRole('button', { name: '重新复盘' });
+  await expect(useGoal).toHaveClass('note-button');
+  await expect(regenerate).toHaveClass('note-button secondary');
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    await expect(page.locator(':root')).toHaveAttribute('data-theme', colorScheme);
+    const adopt = (await useGoal.boundingBox())!;
+    const refresh = (await regenerate.boundingBox())!;
+    expect(adopt.y).toBeCloseTo(refresh.y, 1);
+    expect(adopt.height).toBeCloseTo(refresh.height, 1);
+    expect(refresh.x).toBeGreaterThan(adopt.x + adopt.width);
+  }
+  await expect(review.getByRole('button', { name: '设为当前目标', exact: true })).toHaveCount(0);
+  await useGoal.click();
   await expect(assistant.getByText('确认后将替换当前学习目标「原目标」。')).toBeVisible();
-  const goal = '验证松开鼠标后停止计分';
+  await assistant.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(useGoal).toBeFocused();
+  await useGoal.click();
+  await expect(assistant.getByLabel('这次要做什么')).toHaveValue(nextStep);
+  const goal = '分别验证按下和松开鼠标时的计分';
   await assistant.getByLabel('这次要做什么').fill(goal);
   await assistant.getByRole('button', { name: '确认设定', exact: true }).click();
   await expect(assistant.getByRole('status')).toHaveText('已设为当前目标，可在今日学习查看。');

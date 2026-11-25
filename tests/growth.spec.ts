@@ -687,11 +687,15 @@ test('窄屏成长视图独立切换，智能推荐换一批并预填实际引�
   await expect(suggestions.getByLabel('练习领域')).toHaveValue('C#');
   await assistant.getByRole('textbox', { name: '练习偏好（可选）' }).fill('只使用控制台');
   expect(requests).toHaveLength(0);
-  await suggestions.getByRole('button', { name: '生成练习建议' }).click();
+  const generate = suggestions.getByRole('button', { name: '生成练习建议' });
+  await expect(generate).toHaveClass('note-button');
+  await generate.click();
   await expect(suggestions.getByRole('article', { name: '记录方向键的状态' })).toContainText('松开后状态变为 false。');
   expect(requests[0].focus).toBe('C# 只使用控制台');
   await expect(suggestions.getByRole('article', { name: '无依据的推荐' })).toHaveCount(0);
-  await suggestions.getByRole('button', { name: '换一批' }).click();
+  const nextBatch = suggestions.getByRole('button', { name: '换一批' });
+  await expect(nextBatch).toHaveClass('note-button secondary');
+  await nextBatch.click();
   const card = suggestions.getByRole('article', { name: '为输入增加边界检查' });
   await expect(card.getByRole('link', { name: /角色移动笔记/ })).toHaveAttribute('href', '#history/' + oldDate);
   await expect(card.getByRole('link', { name: /输入处理/ })).toHaveAttribute('href', '#knowledge/entry-one');
@@ -1443,7 +1447,7 @@ test('对话快捷问题和手动发送可打开同一练习推荐并保留偏�
   await page.getByRole('button', { name: '恢复学习智能体' }).click();
   await expect(preference).toHaveValue('复习输入事件');
   await assistant.getByText('试试这样问', { exact: true }).click();
-  await assistant.getByRole('button', { name: '退出当前资料' }).click();
+  await assistant.getByRole('button', { name: '退出当前情境', exact: true }).click();
   await assistant.getByRole('textbox', { name: '输入问题' }).fill('帮我推荐几个练习');
   await assistant.getByRole('button', { name: '发送', exact: true }).click();
   await expect(page).toHaveURL(/#history$/);

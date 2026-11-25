@@ -26,7 +26,7 @@ async function seedReview(page: Page, content = text, includeOlder = false) {
   }, { date, content, includeOlder });
 }
 
-async function openReview(page: Page, content = text, manual = true) {
+async function openReview(page: Page, content = text) {
   await seedReview(page, content);
   await page.goto('/#history/' + date);
   await page.getByRole('button', { name: '编辑 / 补充记录', exact: true }).click();
@@ -35,7 +35,6 @@ async function openReview(page: Page, content = text, manual = true) {
   await launcher.click();
   const assistant = page.getByRole('dialog', { name: '学习智能体' });
   await expect(assistant.getByText('当前日志 · ' + date, { exact: true })).toBeVisible();
-  if (manual) await assistant.getByRole('region', { name: '日志整理建议' }).getByText('手动操作', { exact: true }).click();
   return { editor, assistant, launcher, close: assistant.getByRole('button', { name: '关闭学习智能体' }) };
 }
 
@@ -67,13 +66,18 @@ test('只用聊天提炼、询问、按字段编辑、撤销并保存，不需�
     if (input.question === '刚才改的那条留下吧') return reply('准备保存。', { kind: 'save', ids: [1] });
     throw new Error('unexpected question: ' + input.question);
   });
-  const { assistant } = await openReview(page, text, false);
+  const { assistant } = await openReview(page);
   const input = assistant.getByRole('textbox', { name: '输入问题' });
   const type = async (message: string) => { await input.fill(message); await input.press('Enter'); };
   const transcript = assistant.getByRole('log');
-  await expect(assistant.getByRole('button', { name: '生成整理建议', exact: true })).toBeHidden();
+  const generate = assistant.getByRole('button', { name: '生成整理建议', exact: true });
+  await expect(generate).toBeVisible();
+  await expect(generate).toHaveClass('note-button');
+  const manage = assistant.getByText('管理建议', { exact: true });
+  await expect(manage).toHaveCount(0);
   await type('找找这篇里有什么值得记下来的');
   await expect(transcript.getByText(/整理出 2 项草稿/)).toBeVisible();
+  await expect(manage).toBeVisible();
   await expect(assistant.getByRole('checkbox')).toHaveCount(0);
   await type('词条名称为什么这么长');
   await expect(transcript.getByText('这个名称把两个概念和区别写在了一起。')).toBeVisible();
@@ -124,7 +128,7 @@ test('建议菜单只保存当前项，引用建议保留输入并指向准确�
     if (!input.items.length) return route.fulfill({ json: { answer: '准备整理。', operation: { kind: 'generate', focus: '' } } });
     return route.fulfill({ json: { answer: input.referenceId === 2 ? '这条建议是一个词条。' : '这一轮没有引用建议。' } });
   });
-  const { assistant } = await openReview(page, text, false);
+  const { assistant } = await openReview(page);
   const input = assistant.getByRole('textbox', { name: '输入问题' });
   await input.fill('找找这篇里有什么值得记下来的');
   await input.press('Enter');
@@ -217,7 +221,7 @@ test('文本保存词条不会顺带提交编辑中的日志正文', async ({ pa
     const operation = input.question.startsWith('帮我') ? { kind: 'generate', focus: '' } : { kind: 'save', ids: [1] };
     return route.fulfill({ json: { answer: '明白。', operation } });
   });
-  const { editor, assistant, close, launcher } = await openReview(page, text, false);
+  const { editor, assistant, close, launcher } = await openReview(page);
   const dirty = text + '\n\n还没保存的一句。';
   await close.click();
   await editor.getByRole('textbox', { name: '历史学习内容', exact: true }).fill(dirty);
@@ -293,11 +297,20 @@ test('日志整理查询别名和关联，仅保存勾选并核对过的建议',
   });
   const { editor, assistant, launcher, close } = await openReview(page);
   await assistant.getByRole('button', { name: '生成整理建议', exact: true }).click();
+  const manage = assistant.getByText('管理建议', { exact: true });
+  await expect(assistant.getByRole('button', { name: '重新生成建议', exact: true })).toHaveClass('note-button secondary');
+  await expect(assistant.getByRole('checkbox')).toHaveCount(0);
+  await manage.click();
   await expect(assistant.getByRole('checkbox')).toHaveCount(5);
   await expect(assistant.getByRole('checkbox', { checked: true })).toHaveCount(0);
   const selectAll = assistant.getByRole('checkbox', { name: '全选建议', exact: true });
   await selectAll.check();
   await expect(assistant.getByText('已选 4 项，随日志保存')).toBeVisible();
+  await manage.click();
+  await expect(assistant.getByRole('checkbox')).toHaveCount(0);
+  await expect(assistant.getByRole('button', { name: '返回日志', exact: true })).toBeVisible();
+  await manage.click();
+  await expect(selectAll).toBeChecked();
   await selectAll.uncheck();
   await expect(assistant.getByRole('checkbox', { checked: true })).toHaveCount(0);
   await assistant.getByRole('checkbox', { name: '添加标签 · Unity', exact: true }).check();
@@ -386,6 +399,7 @@ test('改变整理范围会重新查询，正文变化后需要重新生成或�
   });
   const { editor, assistant, launcher, close } = await openReview(page);
   await assistant.getByRole('button', { name: '生成整理建议', exact: true }).click();
+  await assistant.getByText('管理建议', { exact: true }).click();
   await assistant.getByRole('checkbox', { name: '添加标签 · PPU', exact: true }).check();
   await assistant.getByRole('textbox', { name: '输入问题' }).fill('只整理 Tilemap');
   await assistant.getByRole('textbox', { name: '输入问题' }).press('Enter');
@@ -416,6 +430,7 @@ test('资料不足和接口失败都有反馈，正文仍可保存', async ({ pa
   const { editor, assistant, close } = await openReview(page, '今天简单看了教程。');
   await assistant.getByRole('button', { name: '生成整理建议', exact: true }).click();
   await expect(assistant.getByText('这篇日志缺少可整理的具体内容。').first()).toBeVisible();
+  await expect(assistant.getByText('管理建议', { exact: true })).toHaveCount(0);
   await expect(assistant.getByRole('checkbox')).toHaveCount(0);
   failed = true;
   await assistant.getByRole('button', { name: '重新生成建议', exact: true }).click();
@@ -522,7 +537,7 @@ test('自由问答保留追问，只有显式勾选时才引用当前日志草�
   });
   const { editor, assistant, launcher, close } = await openReview(page);
   await assistant.getByText('试试这样问', { exact: true }).click();
-  await assistant.getByRole('button', { name: '退出当前资料' }).click();
+  await assistant.getByRole('button', { name: '退出当前情境', exact: true }).click();
   const input = assistant.getByRole('textbox', { name: '输入问题' });
   const reference = assistant.getByRole('checkbox', { name: '引用当前日志 · ' + date + '（草稿）', exact: true });
   await expect(reference).not.toBeChecked();
@@ -624,7 +639,7 @@ test('用对话或快捷问题按日期整理，切换任务后保留各日志�
   await expect(assistant.getByRole('log').getByText('整理学习日志', { exact: true })).toBeVisible();
   await expect(assistant.getByRole('textbox', { name: '按日期找日志' })).toBeVisible();
   await assistant.getByText('试试这样问', { exact: true }).click();
-  await assistant.getByRole('button', { name: '退出当前资料', exact: true }).click();
+  await assistant.getByRole('button', { name: '退出当前情境', exact: true }).click();
   const question = assistant.getByRole('textbox', { name: '输入问题' });
   await question.fill('帮我整理11-5的日志');
   await question.press('Enter');
@@ -683,6 +698,9 @@ test('窄屏最小化后可阅读页面并恢复输入，从问答按别名查�
   const assistant = page.getByRole('dialog', { name: '学习智能体' });
   const restore = page.getByRole('button', { name: '恢复学习智能体' });
   const question = assistant.getByRole('textbox', { name: '输入问题' });
+  await assistant.getByText('看看可以做什么', { exact: true }).click();
+  await assistant.getByRole('region', { name: '开始使用学习智能体' }).getByRole('button', { name: /^查找资料/ }).click();
+  await expect(assistant.getByRole('region', { name: '查找资料' })).toBeVisible();
   await question.fill('帮我打开 PPU 词条');
   await assistant.getByRole('button', { name: '最小化学习智能体' }).click();
   await expect(assistant).toBeHidden();
@@ -723,10 +741,21 @@ test('空工作区提供可操作的入门引导，能力问题在本地回答',
   const assistant = page.getByRole('dialog', { name: '学习智能体' });
   const guide = assistant.getByRole('region', { name: '开始使用学习智能体' });
   await assistant.getByText('看看可以做什么', { exact: true }).click();
-  await expect(guide.getByRole('button', { name: /记录第一次实践/ })).toBeVisible();
+  const practice = guide.getByRole('button', { name: /记录第一次实践/ });
+  const search = guide.getByRole('button', { name: /^查找资料/ });
+  await expect(practice).toBeVisible();
+  await expect(guide.getByText('你想先做什么？', { exact: true })).toHaveCount(0);
+  await expect(guide.getByRole('button')).toHaveCount(4);
+  for (const property of ['background-color', 'border-radius', 'border-top-width']) {
+    await expect(search).toHaveCSS(property, await practice.evaluate((button, name) => getComputedStyle(button).getPropertyValue(name), property));
+  }
+  await search.press('Enter');
+  await expect(assistant.getByRole('region', { name: '查找资料' })).toBeVisible();
+  await expect(page).toHaveURL(/#path$/);
   const question = assistant.getByRole('textbox', { name: '输入问题' });
   await question.fill('你能做什么');
   await question.press('Enter');
+  await expect(search).toBeVisible();
   await expect(guide.getByRole('button', { name: /保存一个脚本/ })).toBeVisible();
   await guide.getByRole('button', { name: /保存一个脚本/ }).click();
   await expect(page).toHaveURL(/#path$/);
