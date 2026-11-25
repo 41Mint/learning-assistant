@@ -3,6 +3,8 @@ import type { Page } from '@playwright/test';
 import type { LogReviewRequest } from '../src/types/logReview';
 import type { ChatRequest } from '../src/types/assistantChat';
 import type { ReviewConversationRequest, ReviewOperation } from '../src/types/reviewConversation';
+import type { ResourceAnswerRequest } from '../src/types/resourceAnswer';
+import type { GrowthSuggestionRequest } from '../src/types/growthSuggestions';
 
 const date = '2026-11-05';
 const text = '## Unity 素材实践\n\n我用 PPU 调整了素材导入比例。\n用 Tilemap 拼出地面。';
@@ -668,6 +670,9 @@ test('用对话或快捷问题按日期整理，切换任务后保留各日志�
   await focus.fill('查找 PPU 的相关资料');
   await focus.press('Enter');
   await expect(assistant.getByRole('textbox', { name: '检索关键词' })).toHaveValue('PPU');
+  const exitSearch = assistant.getByRole('button', { name: '退出当前情境', exact: true });
+  if (!(await exitSearch.isVisible())) await assistant.getByText('试试这样问', { exact: true }).click();
+  await exitSearch.click();
   await focus.fill('继续看上次那篇的整理结果');
   await focus.press('Enter');
   await expect(assistant.getByText('整理日志 · ' + date, { exact: true })).toBeVisible();
@@ -740,10 +745,16 @@ test('空工作区提供可操作的入门引导，能力问题在本地回答',
   await page.getByRole('button', { name: '打开学习智能体' }).click();
   const assistant = page.getByRole('dialog', { name: '学习智能体' });
   const guide = assistant.getByRole('region', { name: '开始使用学习智能体' });
-  await assistant.getByText('看看可以做什么', { exact: true }).click();
+  const guideToggle = assistant.getByText('看看可以做什么', { exact: true });
+  await guideToggle.click();
   const practice = guide.getByRole('button', { name: /记录第一次实践/ });
   const search = guide.getByRole('button', { name: /^查找资料/ });
   await expect(practice).toBeVisible();
+  await expect.poll(async () => {
+    const toggle = await guideToggle.boundingBox();
+    const card = await guide.getByRole('button').first().boundingBox();
+    return toggle && card ? card.y - toggle.y - toggle.height : 0;
+  }).toBeGreaterThanOrEqual(8);
   await expect(guide.getByText('你想先做什么？', { exact: true })).toHaveCount(0);
   await expect(guide.getByRole('button')).toHaveCount(4);
   for (const property of ['background-color', 'border-radius', 'border-top-width']) {
@@ -762,4 +773,206 @@ test('空工作区提供可操作的入门引导，能力问题在本地回答',
   await assistant.getByRole('button', { name: '保存脚本', exact: true }).click();
   await expect(assistant.getByRole('form', { name: '保存代码版本' })).toBeVisible();
   expect(requests).toBe(0);
+});
+
+test('资料问答按自然语言找已保存资料，引用代码可定位到原版本', async ({ page }) => {
+  const requests: ResourceAnswerRequest[] = [];
+  const quotations = [
+    { kind: 'log', quote: '两个场景各放一个 PickupSpawner，引用同一个资源。', text: '两个场景都使用指向同一资源的生成器。' },
+    { kind: 'practice', quote: '修改了第二个生成点的位置，并确认拾取物跟着生成点移动。', text: '移动第二个生成点后，确认拾取物一起移动。' },
+    { kind: 'code', quote: 'Instantiate(pickupPrefab, transform.position, Quaternion.identity);', text: '代码把生成器的当前位置传给了 Instantiate。' },
+    { kind: 'entry', quote: '预制体把对象和组件保存为可复用资源。', text: '复用的对象和组件保存在预制体资源中。' },
+  ];
+  await page.route('**/api/assistant-chat', async (route) => {
+    const input = route.request().postDataJSON() as ResourceAnswerRequest;
+    requests.push(input);
+    if (input.stage === 'plan') return route.fulfill({ json: { queries: ['预制体', 'PickupSpawner', '生成点'] } });
+    const findings = quotations.map(({ kind, quote, text }) => ({
+      text, quote, source: input.sources.findIndex((source) => source.kind === kind && source.excerpt.includes(quote)) + 1,
+    }));
+    await route.fulfill({ json: { findings, missing: '' } });
+  });
+  await page.goto('/?workspace=knowledge-demo#path');
+  await page.getByRole('button', { name: '打开学习智能体' }).click();
+  const assistant = page.getByRole('dialog', { name: '学习智能体' });
+  await assistant.getByText('看看可以做什么', { exact: true }).click();
+  await expect(assistant.getByRole('button', { name: /^回看实践/ })).toHaveCount(0);
+  await assistant.getByRole('button', { name: /^查找资料/ }).click();
+  const question = '预制体源资源和场景实例是什么关系？代码里的生成位置由什么决定？';
+  await assistant.getByRole('textbox', { name: '输入问题' }).fill(question);
+  await assistant.getByRole('button', { name: '用资料回答', exact: true }).click();
+  const answer = assistant.getByRole('region', { name: '资料回答' });
+  await expect(answer.getByRole('link')).toHaveCount(4);
+  for (const { quote, text } of quotations) {
+    await expect(answer.getByText(text, { exact: true })).toBeVisible();
+    await expect(answer.getByText(quote, { exact: true })).toBeVisible();
+  }
+  expect(requests.map(({ stage }) => stage)).toEqual(['plan', 'answer']);
+  expect(requests[0]).toEqual({ mode: 'resource-answer', stage: 'plan', question });
+  const submitted = requests[1];
+  if (submitted.stage !== 'answer') throw new Error('Expected a resource answer request');
+  expect(submitted.sources.length).toBeLessThanOrEqual(6);
+  for (const source of submitted.sources) {
+    expect(Object.keys(source).sort()).toEqual(['excerpt', 'kind', 'title']);
+    expect(source.excerpt.length).toBeLessThanOrEqual(1200);
+  }
+  expect(JSON.stringify(submitted.sources)).not.toMatch(/demo-prefab-check|拾取物原型草稿|DemoExample/);
+  await answer.getByRole('link', { name: /代码 · .*PickupSpawner\.cs/ }).click();
+  await expect(page).toHaveURL(/#code\/demo-code-1-1\?cite=1&lines=\d+-\d+$/);
+  await expect(assistant).toBeHidden();
+  await page.getByRole('button', { name: '恢复学习智能体' }).click();
+  await expect(answer.getByText(quotations[0].text, { exact: true })).toBeInViewport();
+});
+
+test('资料问答用当前筛选结果回答概括问题，筛选为空时留在本地', async ({ page }) => {
+  await seedReview(page, text, true);
+  const requests: ResourceAnswerRequest[] = [];
+  const quote = '我用 PPU 调整了素材导入比例。';
+  await page.route('**/api/assistant-chat', async (route) => {
+    const request = route.request().postDataJSON() as ResourceAnswerRequest;
+    requests.push(request);
+    await route.fulfill({ json: { findings: [{ source: 1, quote, text: '当前结果涉及 2D 素材导入比例。' }], missing: '' } });
+  });
+  await page.goto('/#path');
+  await page.getByRole('button', { name: '打开学习智能体' }).click();
+  const assistant = page.getByRole('dialog', { name: '学习智能体' });
+  await assistant.getByText('看看可以做什么', { exact: true }).click();
+  await assistant.getByRole('button', { name: /^查找资料/ }).click();
+  const keywords = assistant.getByRole('textbox', { name: '检索关键词' });
+  const question = assistant.getByRole('textbox', { name: '输入问题' });
+  const results = assistant.getByRole('region', { name: '查找资料' });
+  await results.getByRole('combobox', { name: '资料类型' }).selectOption('history');
+  await keywords.fill('PPU');
+  const displayed = results.getByRole('link', { name: /Unity 素材实践/ });
+  await expect(displayed).toBeVisible();
+  await question.fill('搜索结果涵盖哪些内容');
+  await assistant.getByRole('button', { name: '按结果回答', exact: true }).click();
+  const answers = assistant.getByRole('region', { name: '资料回答' });
+  await expect(answers.first().getByText('参考「PPU」的 1 条结果中的 1 条摘录')).toBeVisible();
+  await expect(answers.first().getByText('当前结果涉及 2D 素材导入比例。')).toBeVisible();
+  await expect(answers.first().getByRole('link')).toHaveAttribute('href', `#history/${date}`);
+  expect(requests.map(({ stage }) => stage)).toEqual(['answer']);
+  const request = requests[0];
+  if (request.stage !== 'answer') throw new Error('Expected a resource answer request');
+  expect(request.sources).toEqual([{ kind: 'log', title: `${date} · Unity 素材实践`, excerpt: text }]);
+
+  await keywords.fill('轨道偏心率');
+  await expect(results.getByRole('status')).toHaveText('没有匹配的资料。');
+  await question.fill('这些结果涵盖哪些内容？');
+  await question.press('Enter');
+  await expect(answers.last().getByText(/「轨道偏心率」的筛选结果中没有可引用的摘录/)).toBeVisible();
+  await expect(answers.first().getByText('参考「PPU」的 1 条结果中的 1 条摘录')).toBeVisible();
+  expect(requests).toHaveLength(1);
+});
+
+test('资料问答说明证据缺口，未匹配时跳过生成，并拒绝无法核对的引文', async ({ page }) => {
+  await seedReview(page, text, true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const stages: ResourceAnswerRequest['stage'][] = [];
+  const query = '我是怎么用 PPU 调整素材的？当时设成了多少？';
+  const unknown = '我记录过轨道偏心率吗？';
+  const invalid = '当时是怎样确认 PPU 设置生效的？';
+  await page.route('**/api/assistant-chat', async (route) => {
+    const input = route.request().postDataJSON() as ResourceAnswerRequest;
+    stages.push(input.stage);
+    if (input.stage === 'plan') {
+      return route.fulfill({ json: { queries: [input.question === unknown ? '轨道偏心率' : 'PPU'] } });
+    }
+    expect(input.sources.map(({ kind }) => kind)).toEqual(['log']);
+    await route.fulfill({ json: { findings: [{ text: '用 PPU 调整了导入比例。', source: 1,
+      quote: input.question === invalid ? '这条引文没有保存过。' : '我用 PPU 调整了素材导入比例。' }], missing: '日志中未记下 PPU 的具体数值。' } });
+  });
+  await page.goto('/#path');
+  await page.getByRole('button', { name: '打开学习智能体' }).click();
+  const assistant = page.getByRole('dialog', { name: '学习智能体' });
+  await assistant.getByText('看看可以做什么', { exact: true }).click();
+  await assistant.getByRole('button', { name: /^查找资料/ }).click();
+  await assistant.getByRole('combobox', { name: '资料类型' }).selectOption('history');
+  const question = assistant.getByRole('textbox', { name: '输入问题' });
+  await question.fill(query);
+  await question.press('Enter');
+  const answers = assistant.getByRole('region', { name: '资料回答' });
+  await expect(answers.first().getByText('日志中未记下 PPU 的具体数值。', { exact: false })).toBeVisible();
+  await expect(answers.first().getByRole('link', { name: /日志 · .*Unity 素材实践/ })).toHaveAttribute('href', '#history/' + date);
+  await question.fill(unknown);
+  await question.press('Enter');
+  await expect(answers.last().getByText(/^没有找到与问题匹配的本地资料/)).toBeVisible();
+  expect(stages).toEqual(['plan', 'answer', 'plan']);
+  await question.fill(invalid);
+  await question.press('Enter');
+  await expect(assistant.getByRole('alert')).toHaveText('模型没有返回可核对的资料回答，请重试。');
+  await expect(answers).toHaveCount(2);
+  await expect(question).toHaveValue(invalid);
+  await assistant.getByRole('textbox', { name: '检索关键词' }).fill('PPU');
+  await expect(assistant.getByRole('link', { name: `${date} · Unity 素材实践`, exact: true })).toBeVisible();
+  expect(stages).toEqual(['plan', 'answer', 'plan', 'plan', 'answer']);
+});
+
+test('近期请求在日志整理中也能打开实践，并按最近有正文的日期总结和推荐', async ({ page }) => {
+  const first = '2025-05-21';
+  const dates = [first, '2025-05-16', '2025-05-02'];
+  await page.addInitScript(({ dates }) => {
+    const log = (date: string, content: string, updatedAt = 1) => ({ id: date, date, content, updatedAt, createdAt: 1,
+      duration: 20, tags: [], knowledgePoints: [] });
+    localStorage.setItem('learning-assistant:study-logs', JSON.stringify([
+      log('2025-05-23', '### 2025-05-23'),
+      log(dates[1], '调试了两个场景的预制体引用。'),
+      log('2025-05-22', '### 2025-05-22\n\n![截图](local-image)'),
+      log(dates[0], '记录了碰撞检测与生成点的位置。 ![截图](ignored-media)'),
+      log(dates[2], '把拾取物保存为预制体。'),
+      log('2025-04-29', '较早的日志，最近补过文字。', 99999999),
+    ]));
+    localStorage.setItem('learning-assistant:growth', JSON.stringify({ version: 1, outcomes: [
+      { id: 'prefab-practice', title: '复用拾取物', domains: ['Unity'], practices: dates.slice(0, 2).reverse()
+        .map((date) => ({ id: date, date, note: `在 ${date} 验证生成位置。`, logIds: [], entryIds: [] })) },
+    ], exercises: [], groups: [], hiddenPresetIds: [] }));
+  }, { dates });
+  const summaries: ResourceAnswerRequest[] = [];
+  const recommendations: GrowthSuggestionRequest[] = [];
+  let reviewCalls = 0;
+  await page.route('**/api/log-review', (route) => { reviewCalls += 1; return route.abort(); });
+  await page.route('**/api/assistant-chat', (route) => {
+    const input = route.request().postDataJSON() as ResourceAnswerRequest;
+    summaries.push(input);
+    return route.fulfill({ json: { findings: [{ source: 1, text: '回顾了生成位置。', quote: '记录了碰撞检测与生成点的位置。' }], missing: '' } });
+  });
+  await page.route('**/api/growth-suggestions', (route) => {
+    recommendations.push(route.request().postDataJSON() as GrowthSuggestionRequest);
+    return route.fulfill({ json: { suggestions: [{ title: '验证生成点和碰撞范围', action: '分别调整两个生成点。',
+      done: '能够复述碰撞范围的变化。', sources: [1, 2] }] } });
+  });
+  await page.goto('/#history/' + first);
+  await page.getByRole('button', { name: '编辑 / 补充记录', exact: true }).click();
+  await page.getByRole('button', { name: '打开学习智能体' }).click();
+  const assistant = page.getByRole('dialog', { name: '学习智能体' });
+  const question = assistant.getByRole('textbox', { name: '输入问题' });
+  const ask = async (message: string) => { await question.fill(message); await question.press('Enter'); };
+  await expect(assistant.getByText('当前日志 · ' + first, { exact: true })).toBeVisible();
+
+  await ask('我最近的实践记录有哪些');
+  const practices = assistant.getByRole('region', { name: '实践记录', exact: true });
+  await expect(practices.getByRole('link')).toHaveText(dates.slice(0, 2).map((date) => `复用拾取物 · ${date}`));
+  await expect(assistant.getByRole('combobox', { name: '资料类型' })).toHaveValue('path');
+  await expect(assistant.getByRole('textbox', { name: '检索关键词' })).toHaveValue('');
+  expect(summaries).toHaveLength(0);
+
+  await ask('总结一下近几天的学习内容');
+  const summary = assistant.getByRole('region', { name: '最近学习总结' });
+  await expect(summary.last().getByText(`总结依据 ${dates.join('、')}`, { exact: true })).toBeVisible();
+  await expect(summary.last().getByRole('link')).toHaveAttribute('href', `#history/${first}`);
+  await ask('整理最近两天的学习记录');
+  await expect(summary.last().getByText(`总结依据 ${dates.slice(0, 2).join('、')}`, { exact: true })).toBeVisible();
+  expect(summaries.map((input) => input.stage === 'answer' ? input.sources.map(({ title }) => title) : undefined))
+    .toEqual([dates, dates.slice(0, 2)]);
+  expect(JSON.stringify(summaries)).not.toMatch(/ignored-media|2025-05-22|2025-05-23|较早的日志/);
+
+  await ask('结合最近的学习内容给出今天的练习建议');
+  const suggestion = assistant.getByRole('article', { name: '验证生成点和碰撞范围' });
+  await expect(suggestion).toBeVisible();
+  await expect(suggestion.getByRole('list', { name: '推荐依据' }).getByRole('link').first()).toHaveAttribute('href', `#history/${first}`);
+  expect(recommendations).toHaveLength(1);
+  expect(recommendations[0].sources.map(({ kind, title }) => ({ kind, title }))).toEqual(dates.map((title) => ({ kind: 'log', title })));
+  expect(reviewCalls).toBe(0);
+  await expect(assistant.getByText('当前日志 · ' + first, { exact: true })).toBeHidden();
+  await expect(page).toHaveURL(new RegExp(`#history/${first}$`));
 });

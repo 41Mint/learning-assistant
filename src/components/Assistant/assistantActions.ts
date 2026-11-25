@@ -1,5 +1,7 @@
 import { normalizedName } from '../../utils/knowledge';
 import { formatDate, getTodayDate, isCalendarDate } from '../../utils/storage';
+import { RECENT_STUDY_LOG_COUNT } from '../../utils/assistantEvidence';
+import { RESOURCE_ANSWER_SOURCE_LIMIT } from '../../types/resourceAnswer';
 
 export type { ConversationAction as AssistantAction } from '../../types/assistantChat';
 import type { ConversationAction as AssistantAction } from '../../types/assistantChat';
@@ -13,14 +15,34 @@ const datedReview = new RegExp(`^(?:整理|梳理)\\s*(${datePhrase})\\s*(?:的\
 const reviewFirst = new RegExp(`^(?:整理|梳理)\\s*(?:学习)?(?:日志|记录)(?:\\s*[：:]?\\s*(${datePhrase}))?$`);
 const naturalDate = new RegExp(datePhrase, 'u');
 
-export function assistantAction(text: string): AssistantAction | undefined {
+type RecentSummary = { kind: 'summarizeRecent'; count: number };
+
+function recentStudyAction(request: string, original: string): AssistantAction | RecentSummary | undefined {
+  const recent = request.match(/(?:最近|近|这|过去)\s*(\d{1,2}|[几一二两三四五六七八九十])\s*(?:天|日|篇|次|条)|最近|近期/u);
+  if (!recent || /^(?:不要|不用|先不|别|为什么|如何|怎么)/u.test(request)) return;
+  if (/(?:推荐|生成|给出|安排|有什么).{0,20}(?:练习|实践建议)/u.test(request)) {
+    return { kind: 'recommend', focus: original.slice(0, 180), recentLogs: true, generate: true };
+  }
+  if (/(?:实践|练习记录)/u.test(request) && /(?:哪些|什么|哪几|列出|查找|查看|回看|看看)/u.test(request)) {
+    return { kind: 'findPractice', query: '' };
+  }
+  if (/(?:总结|整理|梳理|归纳|回顾)/u.test(request) && /(?:日志|学习(?:内容|记录|笔记|进展|情况|收获)?)/u.test(request)) {
+    const label = recent[1];
+    const number = label ? Number(label) || '一二三四五六七八九十'.indexOf(label.replace('两', '二')) + 1 : 0;
+    return { kind: 'summarizeRecent', count: Math.min(number || RECENT_STUDY_LOG_COUNT, RESOURCE_ANSWER_SOURCE_LIMIT) };
+  }
+}
+
+export function assistantAction(text: string, inferTool = true): AssistantAction | RecentSummary | undefined {
   const request = normalizedName(text).replace(/[。！？!?]+$/, '').replace(/^(?:请(?:你)?\s*)?(?:(?:帮我|为我)\s*)?/, '');
+  const recent = recentStudyAction(request, text);
+  if (recent) return recent;
   if (/^(?:推荐|生成)\s*(?:一个|一些|几个|一批)?\s*(?:练习|实践)(?:建议|候选)?$/.test(request)) return { kind: 'recommend' };
   if (/^(?:解释|看一下|问一下|分析)\s*(?:一段|这段)?\s*代码$/.test(request)) return { kind: 'code' };
   const review = request.match(datedReview) ?? request.match(reviewFirst);
   if (review) return { kind: 'review', date: review[1] ?? '' };
   if (/^(?:整理|梳理)\s*(?:这篇|当前)(?:的)?(?:学习)?(?:日志|记录)$/.test(request)) return { kind: 'review', date: '' };
-  if (/(?:整理|梳理|总结|归纳|提炼).*(?:日志|学习笔记|学习记录)|(?:日志|学习记录|学习笔记).*(?:整理|梳理|总结|归纳|提炼)/u.test(request)
+  if (inferTool && /(?:整理|梳理|总结|归纳|提炼).*(?:日志|学习笔记|学习记录)|(?:日志|学习记录|学习笔记).*(?:整理|梳理|总结|归纳|提炼)/u.test(request)
     && !/^(?:怎么|如何|为什么|什么是)|适合吗[？?]?$/u.test(request)) {
     return { kind: 'review', date: request.match(naturalDate)?.[0] ?? '', focus: text };
   }
@@ -28,7 +50,7 @@ export function assistantAction(text: string): AssistantAction | undefined {
   const query = (entry?.[1] ?? entry?.[2])?.replace(/^[「“"']+|[」”"']+$/g, '').trim();
   if (query) return { kind: 'findEntry', query };
   const practice = request.match(/^(?:查找|找一下|找|搜索|回看|打开)\s*(?:实践\s*[:：]?\s*(.*?)|(.+?)\s*(?:的\s*)?实践)$/)
-    ?? request.match(/^(?:上次|之前)\s*(?:我\s*)?(?:是\s*)?(?:怎么|如何)\s*(?:实现|做出)?\s*(.+?)\s*(?:的)?$/);
+    ?? (inferTool ? request.match(/^(?:上次|之前)\s*(?:我\s*)?(?:是\s*)?(?:怎么|如何)\s*(?:实现|做出)?\s*(.+?)\s*(?:的)?$/) : null);
   if (practice) return { kind: 'findPractice', query: (practice[1] ?? practice[2] ?? '').trim() };
   const resources = request.match(/^(?:查找|找一下|查一下|搜索|找回)\s*(.*?)(?:的)?(?:相关)?(?:本地)?(?:资料|代码版本|学习日志)$/u);
   if (resources) return { kind: 'findResources', query: resources[1].trim() };

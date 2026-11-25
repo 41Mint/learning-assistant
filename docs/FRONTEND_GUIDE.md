@@ -44,6 +44,8 @@
 
 智能体的初始引导和能力问答共用带简短说明的整行卡片，激活卡片即进入对应工具或编辑表单。[智能体引导](../src/components/Assistant/AssistantGuide.tsx)
 
+资料问答使用当前筛选时，主按钮显示「按结果回答」，回复带上提交时的筛选和引用数量。「复盘」用 `InlineReveal` 在对应实践结果下方展开。再次点按钮或在该结果内按 Esc 可收起，焦点回到原位。[查找资料](../src/components/Assistant/AssistantSearch.tsx)
+
 ## 下拉列表与关键词筛选
 
 - **固定选项**用原生 `select`。支持 `::picker(select)` 的浏览器用全局主题装饰列表，保留原生键盘和选择行为。其余浏览器与系统强制配色模式使用原生下拉面板。[Chrome 开发文档](https://developer.chrome.com/docs/modern-web-guidance/guides/forms/branded-select-styling)

@@ -11,10 +11,13 @@ import type { AssistantCodeExcerpt, AssistantCodeReference, AssistantGrowthRefer
 import type { ReviewConversation, ReviewReference } from './assistantSlots';
 import AssistantGuide from './AssistantGuide';
 import type { AssistantStart } from './AssistantGuide';
+import { AssistantSearchAnswer } from './AssistantSearch';
 import { useProjectCodeStore } from '../../store/projectCodeStore';
 import { useSkillTreeStore } from '../../store/skillTreeStore';
 import { useTaskStore } from '../../store/taskStore';
 import { describeScript, lineLabel, surroundingCode } from '../../utils/assistantCode';
+import { answerFromResources, summarizeRecentLogs } from '../../utils/resourceAnswer';
+import type { ResourceAnswer, ResourceQuestionContext } from '../../utils/resourceAnswer';
 import GrowthGroupingPlan from './GrowthGroupingPlan';
 import type { ProposedGrowthGroup } from './GrowthGroupingPlan';
 import TopicTaskPlan from './TopicTaskPlan';
@@ -29,6 +32,7 @@ interface Turn {
   groups?: ProposedGrowthGroup[];
   taskPlan?: { topicId: string; suggestions: ChatTaskSuggestion[] };
   options?: string[];
+  resourceAnswer?: ResourceAnswer;
 }
 const excerptLabel = (excerpt: AssistantCodeExcerpt) => `${excerpt.path} · ${lineLabel(excerpt)}`;
 
@@ -54,7 +58,7 @@ async function askAssistant(input: ChatRequest, signal: AbortSignal) {
 }
 
 export default function AssistantChat({ source, active, onAction, codeExcerpt, onRemoveCode, onPickCode, growthReference, onRemoveGrowthReference, page, onTool, onStart,
-  onContextMessage, tools, toolKey, onReturnToChat, review }: {
+  onContextMessage, tools, toolKey, onReturnToChat, review, resourceQuestion, onOpenResource }: {
   source?: AssistantChatSource;
   active: boolean;
   onAction: (action: AssistantAction) => void;
@@ -64,20 +68,22 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
   growthReference?: AssistantGrowthReference;
   onRemoveGrowthReference: () => void;
   page: string;
-  onTool: (tool: 'review' | 'search' | 'practice' | 'code') => void;
+  onTool: (tool: 'code') => void;
   onStart: (page: AssistantStart) => void;
   onContextMessage?: (message: string) => string | undefined;
   tools: ReactNode;
   toolKey?: string;
   onReturnToChat: () => void;
   review?: { id: string; date: string; reference?: ReviewReference; onRemoveReference: () => void; respond: ReviewConversation['respond'] };
+  resourceQuestion?: ResourceQuestionContext;
+  onOpenResource: () => void;
 }) {
   const toolActive = Boolean(toolKey);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [question, setQuestion] = useState('');
   const [reference, setReference] = useState<string | null>(null);
   const [sourceId, setSourceId] = useState(codeExcerpt ? undefined : source?.id);
-  const [pending, setPending] = useState<Pick<Turn, 'question' | 'source'>>();
+  const [pending, setPending] = useState<Pick<Turn, 'question' | 'source'> & { resource?: boolean }>();
   const [error, setError] = useState('');
   const [contextFor, setContextFor] = useState<AssistantCodeExcerpt>();
   const version = useProjectCodeStore((state) => state.data.versions.find((item) => item.id === codeExcerpt?.versionId));
@@ -92,6 +98,7 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
   const controller = useRef<AbortController | null>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
   const transcript = useRef<HTMLDivElement>(null);
+  const resourceTurn = useRef<HTMLDivElement>(null);
   const growthCard = growthReference?.kind === 'card' ? growthReference.card : undefined;
   const growthGroup = growthReference?.kind === 'group' ? growthReference.group : undefined;
   const growthSelection = growthReference?.kind === 'selection' ? growthReference.selection : undefined;
@@ -123,9 +130,14 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
 
   useEffect(() => () => controller.current?.abort(), []);
   useEffect(() => {
-    if (active && transcript.current) transcript.current.scrollTop = transcript.current.scrollHeight;
+    const area = transcript.current;
+    if (!active || !area) return;
+    const message = resourceTurn.current;
+    if (message) area.scrollTop += message.getBoundingClientRect().top - area.getBoundingClientRect().top;
+    else area.scrollTop = area.scrollHeight;
   }, [turns, pending, active]);
   useEffect(() => {
+    if (toolKey === 'search' && resourceTurn.current) return;
     const area = transcript.current;
     const panel = area?.querySelector<HTMLElement>('.assistant-tool-panel:not([hidden])');
     if (active && toolKey && area && panel) {
@@ -143,8 +155,13 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
       setError('');
       return;
     }
-    const action = (!review || shortcut) ? assistantAction(text) : undefined;
-    if (action && (shortcut || toolActive || (!codeExcerpt && !growthReference) || (action.kind === 'recommend' && !topicId))) {
+    const askResources = shortcut ? undefined : resourceQuestion;
+    const localAction = assistantAction(text, !askResources && (!review || shortcut));
+    const recentSummary = localAction?.kind === 'summarizeRecent' ? localAction : undefined;
+    const action = localAction?.kind === 'summarizeRecent' ? undefined : localAction;
+    const switchToRecent = (action?.kind === 'findPractice' && !action.query) || (action?.kind === 'recommend' && action.recentLogs);
+    if (action && (shortcut || !review || switchToRecent)
+      && (shortcut || switchToRecent || toolActive || (!codeExcerpt && !growthReference) || (action.kind === 'recommend' && !topicId))) {
       setTurns((previous) => [...previous, { question: text, answer: action.kind === 'review'
         ? '我来整理日志。若不确定是哪篇，可以告诉我日期。' : '', action }]);
       setError('');
@@ -153,30 +170,32 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
         : action.kind === 'recommend' && !shortcut ? { ...action, generate: true } : action);
       return;
     }
-    const contextualAnswer = !shortcut && onContextMessage?.(text);
+    const contextualAnswer = !shortcut && !recentSummary && onContextMessage?.(text);
     if (contextualAnswer) {
       setTurns((previous) => [...previous, { question: text, answer: contextualAnswer }]);
       setQuestion('');
       setError('');
       return;
     }
-    if (!review && wholeScript && !script) {
+    const usesLocalSources = Boolean(recentSummary || askResources);
+    if (!review && !usesLocalSources && wholeScript && !script) {
       setError('脚本快照已不可用，请重新选择。');
       return;
     }
-    if (!review && topicId && !topic) {
+    if (!review && !usesLocalSources && topicId && !topic) {
       setError('原主题已不可用，请重新选择或移除引用。');
       return;
     }
     const current = new AbortController();
     controller.current = current;
     setError('');
-    const sourceInfo = review ? { id: 'review:' + review.id, label: review.reference
+    if (recentSummary && toolActive) onReturnToChat();
+    const sourceInfo = usesLocalSources ? undefined : review ? { id: 'review:' + review.id, label: review.reference
       ? `${review.date} · 建议 ${review.reference.id}「${review.reference.label}」` : review.date }
       : codeExcerpt && codeLabel ? { id: 'code:' + codeExcerpt.id, label: codeLabel }
       : growthReference && growthLabel ? { id: `growth:${growthReference.kind}:${growthReference.id}`, label: growthLabel }
       : attached ? { id: 'log:' + attached.id, label: attached.date + (attached.draft ? ' · 草稿' : '') } : undefined;
-    setPending({ question: text, source: sourceInfo });
+    setPending({ question: text, source: sourceInfo, resource: usesLocalSources });
     const history = turns.filter((turn) => !turn.guide && !turn.action && turn.answer && turn.source?.id === sourceInfo?.id)
       .slice(-(CHAT_HISTORY_LIMIT / 2))
       .flatMap(({ question, answer }) => [
@@ -186,6 +205,16 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
     const log = attached && { date: attached.date, text: attached.text.slice(0, LOG_REVIEW_MAX_TEXT) };
     const code = fragment && { path: fragment.path, text: fragment.text, startLine: fragment.startLine, endLine: fragment.endLine, context: includedContext };
     try {
+      const resourceRequest = recentSummary ? summarizeRecentLogs(text, recentSummary.count, current.signal)
+        : askResources ? answerFromResources(text, askResources, current.signal) : undefined;
+      if (resourceRequest) {
+        const resourceAnswer = await resourceRequest;
+        if (!current.signal.aborted) {
+          setTurns((previous) => [...previous, { question: text, answer: '', resourceAnswer }]);
+          setQuestion('');
+        }
+        return;
+      }
       if (review) {
         const reply = await review.respond(text, history, current.signal);
         if (current.signal.aborted) return;
@@ -218,9 +247,9 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
     event.preventDefault();
     void sendText(question);
   };
-  const chooseGuide = (tool: 'review' | 'search' | 'practice' | 'code') => {
+  const chooseGuide = (tool: 'review' | 'search' | 'code') => {
     if (tool === 'code') { onTool(tool); return; }
-    void sendText({ review: '整理学习日志', search: '查找资料', practice: '回看实践' }[tool], true);
+    void sendText({ review: '整理学习日志', search: '查找资料' }[tool], true);
   };
   const cancel = () => {
     controller.current?.abort();
@@ -241,12 +270,14 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
           <AssistantGuide page={page} onAction={chooseGuide} onStart={onStart} />
         </details>
       </div>}
-      {turns.map((turn, index) => <div key={index} className="assistant-turn">
+      {turns.map((turn, index) => <div key={index} className="assistant-turn"
+        ref={turn.resourceAnswer && !pending && index === turns.length - 1 ? resourceTurn : undefined}>
         {renderQuestion(turn)}
         {turn.guide && !toolActive ? <AssistantGuide page={page} onAction={chooseGuide} onStart={onStart} />
           : !turn.guide && turn.answer && <div className="assistant-answer markdown-preview">
           <ReactMarkdown skipHtml disallowedElements={['img', 'a']} unwrapDisallowed>{turn.answer}</ReactMarkdown>
         </div>}
+        {turn.resourceAnswer && <AssistantSearchAnswer answer={turn.resourceAnswer} onNavigate={onOpenResource} />}
         {turn.groups && turn.groups.length > 0 && <GrowthGroupingPlan suggestions={turn.groups} />}
         {turn.taskPlan && <TopicTaskPlan {...turn.taskPlan} />}
         {Boolean(turn.options?.length) && <div className="assistant-prompts" role="group" aria-label="可选的下一步">
@@ -254,7 +285,9 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
             onClick={() => void sendText(option, true)}>{option}</button>)}
         </div>}
       </div>)}
-      {pending && <div className="assistant-turn">{renderQuestion(pending)}<p role="status">正在生成回复…</p></div>}
+      {pending && <div className="assistant-turn" ref={pending.resource ? resourceTurn : undefined}>
+        {renderQuestion(pending)}<p role="status">{pending.resource ? '正在根据资料生成回答…' : '正在生成回复…'}</p>
+      </div>}
       <div aria-live="off">{tools}</div>
     </div>
     <form className="assistant-composer" aria-label="发送问题"
@@ -264,7 +297,7 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
           <summary>试试这样问</summary>
           <div className="assistant-prompts">
             {toolActive && <button type="button" className="assistant-prompt" onClick={onReturnToChat}>退出当前情境</button>}
-            {['整理学习日志', '查找资料', '回看实践', '推荐练习'].map((prompt) => <button key={prompt} type="button" className="assistant-prompt"
+            {['整理学习日志', '总结近期学习', '查找资料', '推荐练习'].map((prompt) => <button key={prompt} type="button" className="assistant-prompt"
               onClick={(event) => {
                 const details = event.currentTarget.closest('details');
                 if (details) details.open = false;
@@ -317,7 +350,8 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
         }}>{prompt}</button>
       ))}</div>}
       <textarea id="assistant-input" ref={composer} aria-label="输入问题" rows={3}
-        maxLength={CHAT_QUESTION_LIMIT} placeholder="随时提问，或说想做什么…"
+        maxLength={CHAT_QUESTION_LIMIT} placeholder={resourceQuestion?.filterLabel ? '例如：这些结果涵盖哪些内容？'
+          : resourceQuestion ? '例如：源预制体和实例覆盖值有什么关系？' : '随时提问，或说想做什么…'}
         value={question} readOnly={Boolean(pending)} onChange={(event) => { setQuestion(event.target.value); setError(''); }}
         onKeyDown={(event) => {
           if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing || event.keyCode === 229) return;
@@ -327,7 +361,9 @@ export default function AssistantChat({ source, active, onAction, codeExcerpt, o
       {error && <p role="alert">{error}</p>}
       {toolActive ? <div className="assistant-composer-actions">
         {pending ? <button type="button" className="note-button secondary" onClick={cancel}>停止</button>
-          : <button type="submit" className="note-button" disabled={!question.trim()}>发送</button>}
+          : <button type="submit" className="note-button" disabled={!question.trim()}>
+            {resourceQuestion?.filterLabel ? '按结果回答' : resourceQuestion ? '用资料回答' : '发送'}
+          </button>}
       </div> : <div className="assistant-composer-actions">
         <button type="button" className="assistant-code-button" title={codeExcerpt ? '更换代码片段' : '引用代码'}
           aria-label={codeExcerpt ? '更换代码片段' : '引用代码'} disabled={Boolean(pending)} onClick={onPickCode}>

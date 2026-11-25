@@ -125,12 +125,16 @@ erDiagram
 
 实践复盘由用户选定一次实践后发起。浏览器取该次备注和直接关联的摘录，日志、词条、代码各最多两份。请求携带资料类型、标题和摘录，来源链接由浏览器保留。在服务端和展示前核对模型返回的编号和引文原文。验证情况以实践备注或日志中的证据为依据。复盘结果留在当前会话，下一步可以带入当前目标表单，经编辑确认后用既有的 `practice` 目标格式保存。[复盘契约](../src/types/practiceReview.ts) · [资料选取](../src/utils/practiceReview.ts)
 
+「查找资料」的结果和问答共用浏览器中的匹配列表。输入关键词后，问答从提交时的列表中提取最多六份摘录，优先覆盖不同资料类型。直接提问时先由模型生成检索词，再从所选资料类型中匹配和排序。无可用摘录时在本地结束。实践结果按次显示，按实践 ID 加载的关联资料和复盘面板在结果下方展开。资料问答与实践复盘共用摘录和引文校验，原资料链接由浏览器生成。回答和提交时的筛选信息留在当前会话。[本地检索](../src/components/Search/useResourceSearchResults.ts) · [资料问答契约](../src/types/resourceAnswer.ts)
+
+常见的近期学习请求在浏览器分流。查看最近实践会打开资料检索的实践筛选。近期总结和基于近期学习的练习推荐共用按日志日期倒序选取正文的规则，默认最多三篇。日志日期可以不连续，跳过空白和只有图片的记录。总结直接走 `resource-answer` 的 `answer` 阶段，界面展示实际使用的日期和来源。练习推荐使用原有推荐接口和卡片。[意图识别](../src/components/Assistant/assistantActions.ts) · [近期日志摘录](../src/utils/assistantEvidence.ts)
+
 [`vite.config.ts`](../vite.config.ts) 从本机环境文件读取 DeepSeek 配置，向开发服务和构建预览注册中间件。三个接口只接受本机同源的 JSON `POST` 请求，单次请求体上限 256 KiB，共享一个并发槽，模型调用超时 45 秒。
 
 | 接口 | 用途与契约定义 |
 | --- | --- |
 | `/api/log-review` | 提取查询词、生成整理建议和在对话中修改日志草稿。[整理契约](../src/types/logReview.ts) · [整理对话契约](../src/types/reviewConversation.ts) |
-| `/api/assistant-chat` | 自由问答、引用资料、主题任务草稿和卡组分析。`practice-review` 模式生成单次实践的带来源复盘。[问答契约](../src/types/assistantChat.ts) · [复盘契约](../src/types/practiceReview.ts) |
+| `/api/assistant-chat` | 自由问答、引用资料、主题任务草稿和卡组分析。`practice-review` 生成单次实践的带来源复盘。`resource-answer` 的 `plan` 和 `answer` 分别提取检索词和生成带来源的资料回答。[问答契约](../src/types/assistantChat.ts) · [复盘契约](../src/types/practiceReview.ts) · [资料问答契约](../src/types/resourceAnswer.ts) |
 | `/api/growth-suggestions` | 根据本地资料摘要推荐练习并返回来源编号。[练习推荐契约](../src/types/growthSuggestions.ts) |
 
 失败返回带 `error` 字段的 JSON。`400` 表示输入无效，`403` 表示来源或内容类型不符，`405` 表示方法不符，`413` 表示请求过大，`429` 表示已有请求在运行，`502` 表示上游调用或结果处理失败，`503` 表示缺少密钥。[中间件实现](../server/logReview.ts) · [本机配置](./SETUP.md#配置-deepseek)

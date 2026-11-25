@@ -20,7 +20,7 @@ export interface ChatMessage {
 export type ConversationAction =
   | { kind: 'review'; date: string; focus?: string; generate?: boolean }
   | { kind: 'findEntry' | 'findPractice' | 'findResources'; query: string }
-  | { kind: 'recommend'; focus?: string; generate?: boolean }
+  | { kind: 'recommend'; focus?: string; generate?: boolean; recentLogs?: boolean }
   | { kind: 'code' };
 
 export function readConversationAction(value: unknown): ConversationAction | undefined {
@@ -29,7 +29,8 @@ export function readConversationAction(value: unknown): ConversationAction | und
   if (value.kind === 'findEntry' || value.kind === 'findPractice' || value.kind === 'findResources') {
     return { kind: value.kind, query: reviewText(value.query, 160) };
   }
-  if (value.kind === 'recommend') return { kind: 'recommend', focus: reviewText(value.focus, 180), generate: true };
+  if (value.kind === 'recommend') return { kind: 'recommend', focus: reviewText(value.focus, 180), generate: true,
+    recentLogs: value.recentLogs === true || undefined };
   if (value.kind === 'code') return { kind: 'code' };
 }
 

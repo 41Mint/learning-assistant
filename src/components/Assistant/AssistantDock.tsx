@@ -11,14 +11,14 @@ import { STORAGE_PREFIX } from '../../utils/workspaceMode';
 import AssistantChat from './AssistantChat';
 import AssistantReviewPicker from './AssistantReviewPicker';
 import AssistantSearch from './AssistantSearch';
-import AssistantPractice from './AssistantPractice';
+import { useResourceSearchResults } from '../Search/useResourceSearchResults';
 import AssistantCodePicker from './AssistantCodePicker';
 import GrowthSuggestions from './GrowthSuggestions';
 import LogReviewPanel from '../StudyLog/LogReviewPanel';
 import type { AssistantStart } from './AssistantGuide';
 import type { AssistantAction } from './assistantActions';
 import { reviewDateFilter } from './assistantActions';
-import type { SearchScope } from '../Search/ResourceSearch';
+import type { SearchScope } from '../../utils/resourceSearch';
 import { AssistantSlots } from './assistantSlots';
 import type { AssistantCodeReference, AssistantGrowthReference, AssistantLogDraft, AssistantLogKind, ReviewConversation, ReviewReference } from './assistantSlots';
 import { assistantViewport, boundFrame, boundPosition, defaultFrame, resizeFrame, windowGap } from './assistantGeometry';
@@ -29,7 +29,7 @@ const frameKey = STORAGE_PREFIX + 'assistant-window';
 type DragKind = 'launcher' | 'move' | 'resize';
 interface Gesture { kind: DragKind; pointer: number; start: Point; origin: Frame; moved: boolean }
 interface Menu extends Point { trigger: HTMLElement; launcher: boolean }
-type AssistantMode = 'chat' | 'review' | 'search' | 'practice' | 'recommend';
+type AssistantMode = 'chat' | 'review' | 'search' | 'recommend';
 
 export default function AssistantDock({ activePage, activeLog, onStart, onRecordRecommendation, editingGrowth, children }: {
   activePage: string;
@@ -54,11 +54,10 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
   const reviewPanels = useRef(new Map<string, ReviewConversation>());
   const [searchQuery, setSearchQuery] = useState('');
   const [searchScope, setSearchScope] = useState<SearchScope>('all');
-  const [practiceQuery, setPracticeQuery] = useState('');
-  const [practiceRequest, setPracticeRequest] = useState(0);
   const [recommendationDomain, setRecommendationDomain] = useState<GrowthDomain | ''>('');
   const [recommendationGroupId, setRecommendationGroupId] = useState<string>();
   const [recommendationFocus, setRecommendationFocus] = useState('');
+  const [recommendationRecentLogs, setRecommendationRecentLogs] = useState(false);
   const [recommendationStart, setRecommendationStart] = useState(false);
   const logs = useStudyLogStore((state) => state.logs);
   const growthLoaded = useGrowthStore((state) => state.isLoaded);
@@ -89,6 +88,10 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
 
   const editingLog = activeLog?.editing ? activeLog : undefined;
   const tab = mode ?? (editingLog ? 'review' : 'chat');
+  const searchResults = useResourceSearchResults({ query: searchQuery, scope: searchScope, includeSource: true,
+    active: tab === 'search', individualPractices: true });
+  const filterLabel = searchResults.words.length ? searchQuery.trim() : searchScope === 'path' ? '最近的实践' : undefined;
+  const resourceQuestion = { results: searchResults, filterLabel };
   const reviewTargetId = reviewId ?? editingLog?.log.id;
   const reviewKind = (['today', 'history'] as const).find((kind) => reviewTargetId && drafts[kind]?.id === reviewTargetId);
   const savedReview = logs.find(({ id }) => id === reviewTargetId);
@@ -124,6 +127,7 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
   const openGrowthRecommendations = useCallback((domain?: GrowthDomain, groupId?: string) => {
     if (domain !== undefined) setRecommendationDomain(domain);
     setRecommendationGroupId(groupId);
+    setRecommendationRecentLogs(false);
     setMode('recommend');
     setMenu(undefined);
     setMinimized(false);
@@ -263,9 +267,10 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
   const runAction = (action: AssistantAction) => {
     setReviewStart(undefined);
     if (action.kind === 'recommend') {
-      if (action.focus) setRecommendationFocus(action.focus);
-      if (action.generate) setRecommendationStart(true);
       openGrowthRecommendations(undefined, overGroup ? recommendationGroupId : undefined);
+      if (action.focus) setRecommendationFocus(action.focus);
+      setRecommendationRecentLogs(action.recentLogs === true);
+      setRecommendationStart(Boolean(action.generate));
     } else if (action.kind === 'review') {
       setMode('review');
       if (action.generate) setReviewStart({ focus: action.focus ?? '' });
@@ -277,14 +282,10 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
       if (target) setRecentReviews((recent) => [...recent.filter((id) => id !== target), target].slice(-4));
       setDateQuery(action.date);
       setChoosingLog(!target);
-    } else if (action.kind === 'findEntry' || action.kind === 'findResources') {
+    } else if (action.kind === 'findEntry' || action.kind === 'findResources' || action.kind === 'findPractice') {
       setMode('search');
       setSearchQuery(action.query);
-      setSearchScope(action.kind === 'findEntry' ? 'knowledge' : 'all');
-    } else if (action.kind === 'findPractice') {
-      setMode('practice');
-      setPracticeQuery(action.query);
-      setPracticeRequest((request) => request + 1);
+      setSearchScope(action.kind === 'findEntry' ? 'knowledge' : action.kind === 'findPractice' ? 'path' : 'all');
     } else {
       setMode('chat');
       setPickingCode(true);
@@ -413,6 +414,7 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
         </header>
         <div className="assistant-chat-host">
           <AssistantChat source={source} active={open} onAction={runAction}
+            resourceQuestion={tab === 'search' ? resourceQuestion : undefined} onOpenResource={minimize}
             review={tab === 'review' && !showPicker && reviewForm && reviewTarget ? {
               id: reviewTarget.id, date: reviewTarget.date,
               reference: reviewReference?.formId === reviewForm && reviewReference.logId === reviewTarget.id ? reviewReference : undefined,
@@ -458,19 +460,13 @@ export default function AssistantDock({ activePage, activeLog, onStart, onRecord
           </div>)}
         </div>
         {tab === 'search' && <div className="assistant-tool-panel">
-          <input className="workspace-input assistant-inline-filter" autoComplete="off" aria-label="检索关键词" placeholder="也可以直接筛选结果"
-            value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
-          <AssistantSearch query={searchQuery} scope={searchScope} onScope={setSearchScope} onNavigate={minimize} />
+          <AssistantSearch query={searchQuery} scope={searchScope} context={resourceQuestion} onQuery={setSearchQuery}
+            onScope={setSearchScope} onNavigate={minimize} />
         </div>}
-        <div className="assistant-tool-panel" hidden={tab !== 'practice'}>
-          <input className="workspace-input assistant-inline-filter" autoComplete="off" aria-label="查找实践" placeholder="也可以直接筛选实践"
-            value={practiceQuery} onChange={(event) => setPracticeQuery(event.target.value)} />
-          <AssistantPractice key={practiceRequest} query={practiceQuery} onNavigate={minimize} active={open && tab === 'practice'} />
-        </div>
         <div className="assistant-tool-panel" hidden={tab !== 'recommend'}>
           <input className="workspace-input assistant-inline-filter" aria-label="练习偏好（可选）" placeholder="练习偏好（可选）"
             value={recommendationFocus} onChange={(event) => setRecommendationFocus(event.target.value)} maxLength={180} />
-          <GrowthSuggestions domain={recommendationDomain} focus={recommendationFocus} onDomain={setRecommendationDomain}
+          <GrowthSuggestions domain={recommendationDomain} focus={recommendationFocus} recentLogs={recommendationRecentLogs} onDomain={setRecommendationDomain}
             groupId={recommendationGroupId} groupName={recommendationGroup?.name}
             onNavigate={minimize} recordDisabledReason={editingGrowth ? '请先保存或取消正在编辑的卡片或实践。' : growthError || (!growthLoaded ? '正在加载成长记录…' : undefined)}
             onRecord={(item) => { minimize(); onRecordRecommendation(item, recommendationGroupId); }} />

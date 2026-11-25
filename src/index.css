@@ -329,8 +329,10 @@ button, a, input, textarea, summary { -webkit-tap-highlight-color: transparent; 
 .search-results { min-height: 0; overflow-y: auto; padding: 4px; }
 .search-results h3 { margin: 10px 0 4px; font-size: 14px; }
 .search-results ul { list-style: none; padding: 0; margin: 0; }
-.search-results li { padding: 8px 0; border-bottom: 1px solid var(--app-border); overflow-wrap: anywhere; }
+.search-results > section > ul > li { padding: 8px 0; border-bottom: 1px solid var(--app-border); overflow-wrap: anywhere; }
 .search-results a { color: var(--app-accent); font-weight: 600; }
+.search-practice-result { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.search-practice-review { margin-top: 8px; padding: 10px; border: 1px solid var(--app-border); border-radius: 8px; }
 .search-muted, .search-excerpt { margin: 4px 0; font-size: 13px; line-height: 1.55; }
 .search-muted { color: var(--app-muted); }
 .search-match { background: var(--app-search-match-bg); color: inherit; border-radius: 2px; }
@@ -1153,6 +1155,7 @@ textarea.markdown-editor-view, .markdown-source-highlight {
 .assistant-question-suggestions > summary { cursor: pointer; }
 .assistant-question-suggestions[open] { flex: 1 1 100%; }
 .assistant-question-suggestions .assistant-prompts { margin-block-start: 4px; }
+.assistant-question-suggestions > .assistant-guide { margin-block-start: 8px; }
 .assistant-window-menu button {
   padding: 6px 9px; border: 0; border-radius: 6px; color: var(--app-text); background: transparent; cursor: pointer; font-size: 13px;
 }
@@ -1176,11 +1179,12 @@ textarea.markdown-editor-view, .markdown-source-highlight {
 .assistant-practice > :is(p, h3), .assistant-goal-form p { margin: 0; }
 .assistant-practice > :is(button, form) { justify-self: start; }
 .assistant-practice { overflow-wrap: anywhere; }
-.assistant-practice-review, .assistant-practice-finding { display: grid; gap: 6px; }
-.assistant-practice-review { padding: 10px; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-bg); }
-.assistant-practice-review :is(h4, p, blockquote) { margin: 0; }
-.assistant-practice-finding h4 { font-weight: 650; }
-.assistant-practice-finding blockquote { padding-inline-start: 8px; border-inline-start: 2px solid var(--app-border); white-space: pre-wrap; }
+.assistant-evidence-panel, .assistant-evidence-finding { display: grid; gap: 6px; }
+.assistant-evidence-panel { padding: 10px; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-bg); }
+.assistant-evidence-panel :is(h4, p, blockquote) { margin: 0; }
+.assistant-evidence-finding h4 { font-weight: 650; }
+.assistant-evidence-finding blockquote { padding-inline-start: 8px; border-inline-start: 2px solid var(--app-border); white-space: pre-wrap; }
+.assistant-evidence-finding + .assistant-evidence-finding { margin-block-start: 4px; }
 .assistant-code-context { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; align-items: center; }
 .assistant-code-context p { overflow-wrap: anywhere; }
 .assistant-code-context p:last-child { grid-column: 1 / -1; }
@@ -1213,6 +1217,7 @@ textarea.markdown-editor-view, .markdown-source-highlight {
 .assistant-review-logs button { width: 100%; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
 .assistant-review-logs button:hover { background: var(--app-active); }
 .assistant-search-scope { display: flex; align-items: center; gap: 8px; }
+.assistant-search > p { margin: 0; }
 .assistant-search .search-results { overflow: visible; }
 .assistant-chat-host, .assistant-chat { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .assistant-tool-panel[hidden], .assistant-composer[hidden] { display: none; }

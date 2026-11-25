@@ -4,15 +4,21 @@ import { useProjectCodeStore } from '../store/projectCodeStore';
 import { useStudyLogStore } from '../store/studyLogStore';
 import { GROWTH_SUGGESTIONS_ENDPOINT, readGrowthSuggestions } from '../types/growthSuggestions';
 import type { GrowthSuggestionRequest, GrowthSourceKind } from '../types/growthSuggestions';
+import type { StudyLog } from '../types';
 import { reviewRecord, reviewText } from '../types/logReview';
 import { logLabel } from './growth';
 import { codeVersionHref } from './projectCode';
 import { normalizedName } from './knowledge';
 import { searchWords } from './resourceSearch';
+import { evidenceExcerpt, RECENT_STUDY_LOG_COUNT, recentLogExcerpts } from './assistantEvidence';
+import { isEmptyLogContent } from './studyLogs';
 
 interface Source { id: string; kind: GrowthSourceKind; title: string; excerpt: string; href: string; updated: number }
+const logSource = (log: StudyLog, excerpt: string): Source => ({
+  id: log.id, kind: 'log', title: logLabel(log), excerpt, href: '#history/' + encodeURIComponent(log.date), updated: log.updatedAt,
+});
 
-export async function suggestGrowth(focus: string, previous: string[], signal: AbortSignal) {
+async function matchingGrowthSources(focus: string, signal: AbortSignal) {
   await useProjectCodeStore.getState().load();
   signal.throwIfAborted();
   const { logs } = useStudyLogStore.getState();
@@ -21,10 +27,7 @@ export async function suggestGrowth(focus: string, previous: string[], signal: A
   const titles = new Map(data.projects.map((item) => [item.id, item.name]));
   const words = searchWords(focus);
   const sources: Source[] = [
-    ...logs.filter((item) => item.content.trim() && item.content.trim() !== `### ${item.date}`).map((item): Source => ({
-      id: item.id, kind: 'log', title: logLabel(item), excerpt: item.content.replace(/!\[[^\]]*\]\([^\n]*?\)/g, '').slice(0, 480),
-      href: '#history/' + item.date, updated: item.updatedAt,
-    })),
+    ...logs.filter((log) => !isEmptyLogContent(log.content, log.date)).map((log) => logSource(log, evidenceExcerpt(log.content, [], 480))),
     ...entries.map((item): Source => ({ id: item.id, kind: 'entry', title: item.title, excerpt: [item.category, ...item.aliases, item.content].join(' · ').slice(0, 480),
       href: '#knowledge/' + encodeURIComponent(item.id), updated: item.updatedAt })),
     ...data.versions.map((item): Source => ({ id: item.id, kind: 'code', title: `${titles.get(item.projectId) ?? ''} · ${item.path}`, excerpt: item.note.slice(0, 480),
@@ -35,12 +38,19 @@ export async function suggestGrowth(focus: string, previous: string[], signal: A
     return { source, score: words.filter((word) => text.includes(word)).length };
   }).sort((a, b) => b.score - a.score || b.source.updated - a.source.updated);
   const limitByKind = new Map<GrowthSourceKind, number>();
-  const selected = ordered.flatMap(({ source }) => {
+  return ordered.flatMap(({ source }) => {
     const count = limitByKind.get(source.kind) ?? 0;
     if (count >= 4) return [];
     limitByKind.set(source.kind, count + 1);
     return [source];
   });
+}
+
+export async function suggestGrowth(focus: string, previous: string[], signal: AbortSignal, recentLogs = false) {
+  const selected = recentLogs
+    ? recentLogExcerpts(useStudyLogStore.getState().logs, RECENT_STUDY_LOG_COUNT, 480).map(({ log, excerpt }) => logSource(log, excerpt))
+    : await matchingGrowthSources(focus, signal);
+  signal.throwIfAborted();
   if (!selected.length) return { suggestions: [], sources: selected, unavailable: true };
   const { outcomes, exercises } = useGrowthStore.getState();
   const request: GrowthSuggestionRequest = {
